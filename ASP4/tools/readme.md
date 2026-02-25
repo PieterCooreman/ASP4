@@ -1,6 +1,6 @@
-# ASP/PY: Access to SQLite Converter
+# Access_To_SQLite: Access to SQLite Converter
 
-ASP/PY is a lightweight, Python-based command-line tool designed to automatically convert Microsoft Access databases (`.mdb` and `.accdb`) into SQLite databases (`.sqlite`). 
+Access_To_SQLite is a lightweight, Python-based command-line tool designed to automatically convert Microsoft Access databases (`.mdb` and `.accdb`) into SQLite databases (`.sqlite`). 
 
 It handles schema extraction, data type translation, record migration, and automatically rebuilds your keys and indexes.
 
