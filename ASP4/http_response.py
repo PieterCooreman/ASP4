@@ -126,6 +126,42 @@ class Response:
             if self._buf_chunks:
                 self._write_raw_bytes(b"".join(self._buf_chunks))
                 self._buf_chunks.clear()
+                
+    def File(self, path: str, inline=False):
+        import os
+        import mimetypes
+        
+        path = str(path)
+        if not os.path.isfile(path):
+            self._res.status_code = 404
+            self._res.status_message = "Not Found"
+            return
+        
+        mime, _ = mimetypes.guess_type(path)
+        if not mime:
+            mime = 'application/octet-stream'
+        
+        filename = os.path.basename(path)
+        self.ContentType = mime
+        disposition = 'inline' if inline else 'attachment'
+        self.AddHeader('Content-Disposition', f'{disposition}; filename="{filename}"')
+        self.AddHeader('Content-Length', str(os.path.getsize(path)))
+        
+        with open(path, 'rb') as f:
+            data = f.read()
+        
+        if self._buffer_enabled:
+            if self._buf_str_parts:
+                txt = "".join(self._buf_str_parts)
+                self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
+                self._buf_str_parts.clear()
+                self._buf_str_count = 0
+            self._buf_chunks.append(data)
+        else:
+            self._write_raw_bytes(data)
+        
+        raise ResponseEndException()
+        
 
     def End(self):
         self.Flush()
@@ -188,6 +224,10 @@ class Response:
             return self.Clear()
         if m == "FLUSH":
             return self.Flush()
+        if m == "FILE":
+            if len(args) not in (1, 2):
+                raise Exception("Response.File expects 1 or 2 arguments")
+            return self.File(args[0], args[1] if len(args) == 2 else False)
         if m == "END":
             return self.End()
         if m == "ISCLIENTCONNECTED":
