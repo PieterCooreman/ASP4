@@ -1147,6 +1147,14 @@ class Parser:
         return left
 
     def _parse_compare(self):
+        # VBScript precedence nuance: when an expression starts with NOT and then
+        # uses a comparison operator, NOT applies to the comparison result
+        # (e.g. "Not var Is Nothing" => Not (var Is Nothing)).
+        leading_not = False
+        if self.tok.kind == "IDENT" and self.tok.value.upper() == "NOT":
+            self._eat("IDENT")
+            leading_not = True
+
         left = self._parse_concat()
         while True:
             # Object identity comparison: a Is b / a Is Not b
@@ -1175,6 +1183,8 @@ class Parser:
                 left = BinaryOp(op, left, right)
                 continue
             break
+        if leading_not:
+            return UnaryOp("NOT", left)
         return left
 
     def _parse_concat(self):
