@@ -520,9 +520,14 @@ class Parser:
 
             if member == "WRITE":
                 if self.tok.kind == "LPAREN":
+                    mark = self._mark()
                     self._eat("LPAREN")
-                    expr = self._parse_expr()
-                    self._eat("RPAREN")
+                    if self.tok.kind == "RPAREN":
+                        self._eat("RPAREN")
+                        expr = StringLit("")
+                    else:
+                        self._reset(mark)
+                        expr = self._parse_expr()
                 else:
                     expr = self._parse_expr()
                 return ResponseWrite(expr)
@@ -639,9 +644,14 @@ class Parser:
 
         if member == "WRITE":
             if self.tok.kind == "LPAREN":
+                mark = self._mark()
                 self._eat("LPAREN")
-                expr = self._parse_expr()
-                self._eat("RPAREN")
+                if self.tok.kind == "RPAREN":
+                    self._eat("RPAREN")
+                    expr = StringLit("")
+                else:
+                    self._reset(mark)
+                    expr = self._parse_expr()
             else:
                 expr = self._parse_expr()
             if self.tok.kind not in ("NEWLINE", "COLON", "EOF", "ELSE", "END"):

@@ -163,8 +163,14 @@ def parse_asp_file_to_nodes(path: str, docroot: str, current_virtual: str) -> Li
                 pre_text = n.text[last_pos:m.start()]
 
                 if pre_text:
-                    parts.append(HtmlNode(pre_text, cur_line, cur_col))
-                    cur_line, cur_col = advance_loc(pre_text, cur_line, cur_col)
+                    # Strip leading whitespace-only content before an IncludeNode
+                    # (to match IIS behavior of stripping whitespace around includes)
+                    stripped_pre = pre_text.lstrip(' \t\r\n')
+                    if stripped_pre:
+                        parts.append(HtmlNode(pre_text, cur_line, cur_col))
+                    # else: whitespace-only, drop it
+
+                # Resolve include
 
                 # Resolve include
                 kind = m.group(1)
@@ -184,7 +190,13 @@ def parse_asp_file_to_nodes(path: str, docroot: str, current_virtual: str) -> Li
             # Add remaining text
             tail = n.text[last_pos:]
             if tail:
-                parts.append(HtmlNode(tail, cur_line, cur_col))
+                # Strip whitespace-only tail that follows an IncludeNode
+                # (to match the IIS behavior of stripping whitespace after includes)
+                if not tail.strip(' \t\r\n'):
+                    # Only whitespace - skip it
+                    pass
+                else:
+                    parts.append(HtmlNode(tail, cur_line, cur_col))
 
             final_nodes.extend(parts)
         elif isinstance(n, ScriptNode):
@@ -198,6 +210,8 @@ def parse_asp_file_to_nodes(path: str, docroot: str, current_virtual: str) -> Li
             final_nodes.append(n)
         else:
             final_nodes.append(n)
+
+
 
     # Attempt Granular Compilation
     # If any block fails to compile, we fallback to Monolithic Compilation (expand includes).
@@ -269,6 +283,7 @@ def parse_asp_page(text: str) -> List[object]:
     col = 1
     prev_was_expr = False
     prev_was_code = False
+    prev_was_directive = False
     while True:
         start = text.find('<%', pos)
         if start == -1:
@@ -306,7 +321,7 @@ def parse_asp_page(text: str) -> List[object]:
         cur_is_directive = bool(code_stripped.startswith('@'))
 
         if html:
-            if prev_was_code and (cur_is_expr or (not cur_is_expr and not cur_is_directive)) and html.strip(' \t\r\n') == '':
+            if (prev_was_code or prev_was_directive) and (cur_is_expr or (not cur_is_expr and not cur_is_directive)) and html.strip(' \t\r\n') == '':
                 # Only whitespace between code blocks: drop any lines entirely.
                 if ('\r' not in html) and ('\n' not in html):
                     # inline spaces: keep
@@ -319,15 +334,18 @@ def parse_asp_page(text: str) -> List[object]:
             # ASP directive like: <%@ Language="VBScript" %>
             prev_was_expr = False
             prev_was_code = False
+            prev_was_directive = True
         elif cur_is_expr:
             expr_src = code_stripped[1:].strip()
             nodes.append(ExprNode(expr_src, block_line, block_col))
             prev_was_expr = True
             prev_was_code = True
+            prev_was_directive = False
         else:
             nodes.append(ScriptNode(code_stripped, block_line, block_col))
             prev_was_expr = False
             prev_was_code = True
+            prev_was_directive = False
 
         # advance line/col over full block including '<%' .. '%>'
         raw_block = text[start:end + 2]

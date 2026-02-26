@@ -130,6 +130,7 @@ def IsNumeric(expression):
 
 def IsObject(expression):
     if expression is VBNothing: return True
+    if expression in (VBEmpty, VBNull): return False
     from .vm.interpreter import VBClassInstance
     from .adodb import ADOConnection, ADORecordset, ADOCommand
     if isinstance(expression, (VBClassInstance, ADOConnection, ADORecordset, ADOCommand)): return True
