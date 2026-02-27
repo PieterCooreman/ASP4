@@ -1,4 +1,4 @@
-# ASP4 - Classic ASP/VBScript to Python Transpiler
+# ASP4 - Classic ASP/VBScript webserver runtime based on Python
 
 ASP4 is a Python-based runtime that executes Classic ASP (VBScript) pages. It provides compatibility with most VBScript built-in functions, the Classic ASP object model (Request, Response, Session, Application, Server), and various COM components commonly used in legacy ASP applications.
 
