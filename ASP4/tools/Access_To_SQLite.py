@@ -93,9 +93,24 @@ def convert_database(access_db_path, sqlite_db_path):
         rows = access_crsr.fetchall()
 
         if rows:
+            # Identify boolean columns (Access BIT type stores True as -1, False as 0)
+            bool_col_indices = {
+                i for i, col in enumerate(columns)
+                if col.type_name and 'BIT' in col.type_name.upper()
+            }
+
             placeholders = ", ".join(["?"] * len(columns))
             insert_sql = f'INSERT INTO "{table}" VALUES ({placeholders})'
-            data = [tuple(row) for row in rows]
+
+            def fix_row(row):
+                if not bool_col_indices:
+                    return tuple(row)
+                return tuple(
+                    (1 if v else 0) if i in bool_col_indices else v
+                    for i, v in enumerate(row)
+                )
+
+            data = [fix_row(row) for row in rows]
             sqlite_crsr.executemany(insert_sql, data)
 
         # 5. Rebuild Secondary Indexes
