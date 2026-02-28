@@ -214,9 +214,12 @@ def AscW(s):
     return ord(t[0])
 
 def AscB(s):
-    t = vbs_cstr(s)
-    if t == "": raise_runtime('INVALID_PROC_CALL')
-    return ord(t[0])
+    if s is VBNull:
+        return VBNull
+    b = bytes(s) if isinstance(s, (bytes, bytearray)) else vbs_cstr(s).encode('utf-16le')
+    if len(b) == 0:
+        raise_runtime('INVALID_PROC_CALL')
+    return b[0]
 
 def Chr(charcode):
     n = int(_to_int(charcode))
@@ -232,7 +235,7 @@ def ChrW(charcode):
 def ChrB(charcode):
     n = int(_to_int(charcode))
     if n < 0 or n > 255: raise_runtime('INVALID_PROC_CALL')
-    return chr(n)
+    return bytes([n])
 
 def CByte(expr):
     n = int(_to_int(expr))
@@ -269,14 +272,13 @@ def LenB(expr):
     if v is VBEmpty or v is VBNothing or v is None: return 0
     if isinstance(v, (bytes, bytearray)): return len(v)
     s = vbs_cstr(v)
-    try: return len(s.encode('latin-1', errors='replace'))
+    try: return len(s.encode('utf-16le'))
     except: return len(s)
 
 def LeftB(string, length):
     if string is VBNull: return VBNull
     s = vbs_cstr(string)
-    # Approximation of BSTR bytes (latin-1)
-    b = s.encode('latin-1', errors='replace')
+    b = s.encode('utf-16le')
     n = int(_to_int(length))
     if n < 0: raise_runtime('INVALID_PROC_CALL')
     if n == 0: return b""
@@ -285,7 +287,7 @@ def LeftB(string, length):
 def RightB(string, length):
     if string is VBNull: return VBNull
     s = vbs_cstr(string)
-    b = s.encode('latin-1', errors='replace')
+    b = s.encode('utf-16le')
     n = int(_to_int(length))
     if n < 0: raise_runtime('INVALID_PROC_CALL')
     if n == 0: return b""
@@ -293,13 +295,14 @@ def RightB(string, length):
 
 def MidB(expr, start, length=None):
     if expr is VBNull: return VBNull
-    b = bytes(expr) if isinstance(expr, (bytes, bytearray)) else vbs_cstr(expr).encode('latin-1', errors='replace')
+    b = bytes(expr) if isinstance(expr, (bytes, bytearray)) else vbs_cstr(expr).encode('utf-16le')
     st = int(_to_int(start))
-    if st <= 0: return b""
+    if st <= 0: raise_runtime('INVALID_PROC_CALL')
     i = st - 1
     if length is None: return b[i:]
     ln = int(_to_int(length))
-    if ln <= 0: return b""
+    if ln < 0: raise_runtime('INVALID_PROC_CALL')
+    if ln == 0: return b""
     return b[i:i + ln]
 
 def InStr(*args):
@@ -352,13 +355,9 @@ def InStrB(*args):
         
     if s1 is VBNull or s2 is VBNull: return VBNull
     
-    # Force byte conversion (latin-1 or utf-8? VBScript uses BSTR bytes)
-    # Since we use Python str, let's treat it as bytes.
-    # VBScript InStrB treats strings as byte arrays.
-    
     def _to_bytes(v):
         if isinstance(v, (bytes, bytearray)): return bytes(v)
-        return vbs_cstr(v).encode('latin-1', errors='replace') # Approximation
+        return vbs_cstr(v).encode('utf-16le')
         
     b1 = _to_bytes(s1)
     b2 = _to_bytes(s2)

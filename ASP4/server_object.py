@@ -1621,7 +1621,7 @@ class Folder:
         parent = os.path.dirname(phys)
         if parent and not os.path.isdir(parent):
             raise Exception("Path not found")
-        f = open(phys, 'w', encoding='utf-8', newline='')
+        f = open(phys, 'w', encoding='latin-1', errors='replace', newline='')
         return TextStream(f)
 
     def Delete(self, force=False):
@@ -2039,8 +2039,7 @@ class FileSystemObject:
         if parent and not os.path.isdir(parent):
             raise Exception("Path not found")
 
-        # Deterministic, cross-platform: use UTF-8 and explicit CRLF in WriteLine.
-        f = open(phys, fmode, encoding='utf-8', newline='')
+        f = open(phys, fmode, encoding='latin-1', errors='replace', newline='')
         return TextStream(f)
 
     def CreateTextFile(self, filename, overwrite=True, unicode=False):
@@ -2050,5 +2049,5 @@ class FileSystemObject:
         parent = os.path.dirname(phys)
         if parent and not os.path.isdir(parent):
             raise Exception("Path not found")
-        f = open(phys, 'w', encoding='utf-8', newline='')
+        f = open(phys, 'w', encoding='latin-1', errors='replace', newline='')
         return TextStream(f)

@@ -304,7 +304,7 @@ class Request:
                 byref.set(len(chunk))
             except Exception:
                 pass
-        return chunk.decode('latin-1')
+        return chunk
 
     @property
     def QueryString(self):
