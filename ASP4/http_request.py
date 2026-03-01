@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
+import os
 
 
 class NameValueCollection:
@@ -174,12 +175,15 @@ class UploadedFilesCollection  :
         return self.Item(key)
         
 class Request:
-    def __init__(self, method: str, path: str, query_string: str, headers: dict, body: bytes, remote_addr: str = ""):
+    def __init__(self, method: str, path: str, query_string: str, headers: dict, body: bytes, remote_addr: str = "", body_file_path: str = "", body_len: int | None = None):
         self._method = method.upper()
         self._path = path
         self._query_string = query_string or ""
         self._headers = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
         self._body = body or b""
+        self._body_file_path = str(body_file_path or "")
+        self._body_stream = None
+        self._body_len = int(body_len) if body_len is not None else len(self._body)
         self._binpos = 0
         self._remote_addr = remote_addr or ""
 
@@ -196,9 +200,15 @@ class Request:
         if self._method != "POST":
             return
         ctype = self._headers.get('content-type', '')
+        if self._body_file_path and ctype.startswith('multipart/form-data'):
+            return
         if ctype.startswith('application/x-www-form-urlencoded'):
             try:
-                txt = self._body.decode('utf-8', errors='replace')
+                if self._body_file_path:
+                    with open(self._body_file_path, 'rb') as f:
+                        txt = f.read().decode('utf-8', errors='replace')
+                else:
+                    txt = self._body.decode('utf-8', errors='replace')
             except Exception:
                 txt = ''
             self._form = NameValueCollection(_parse_qs(txt))
@@ -275,7 +285,15 @@ class Request:
 
     @property
     def TotalBytes(self):
-        return len(self._body)
+        return self._body_len
+
+    def Close(self):
+        try:
+            if self._body_stream is not None:
+                self._body_stream.close()
+        except Exception:
+            pass
+        self._body_stream = None
 
     def BinaryRead(self, count):
         # Classic ASP BinaryRead reads from request body and advances the read cursor.
@@ -294,7 +312,12 @@ class Request:
             n = 0
         if n < 0:
             n = 0
-        if self._binpos >= len(self._body):
+        if self._body_file_path:
+            if self._body_stream is None:
+                self._body_stream = open(self._body_file_path, 'rb')
+            self._body_stream.seek(self._binpos)
+            chunk = self._body_stream.read(n)
+        elif self._binpos >= len(self._body):
             chunk = b""
         else:
             chunk = self._body[self._binpos:self._binpos + n]
@@ -332,6 +355,12 @@ class Request:
 
     @property
     def RawBody(self):
+        if self._body_file_path and os.path.isfile(self._body_file_path):
+            try:
+                with open(self._body_file_path, 'rb') as f:
+                    return f.read()
+            except Exception:
+                return b""
         return self._body
 
     def Item(self, key):
