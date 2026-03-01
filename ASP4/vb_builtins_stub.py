@@ -34,8 +34,8 @@ def Tan(number):
 
 # Stub remaining builtins to satisfy import
 def ScriptEngine(): return "VBScript"
-def ScriptEngineBuildVersion(): return 1337
-def ScriptEngineMajorVersion(): return 5
+def ScriptEngineBuildVersion(): return 16384
+def ScriptEngineMajorVersion(): return 10
 def ScriptEngineMinorVersion(): return 8
 def GetObject(*args): raise_runtime('OBJECT_NOT_SUPPORT', "GetObject is not implemented")
 
