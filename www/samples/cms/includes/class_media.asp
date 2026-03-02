@@ -33,12 +33,25 @@ Class cls_media
 
     Private Function IsAllowedExt(ext)
         Dim allowed
-        allowed = "|jpg|jpeg|png|gif|webp|svg|pdf|doc|docx|xls|xlsx|zip|txt|"
+        allowed = "|jpg|jpeg|jpe|jfif|png|gif|webp|bmp|tif|tiff|avif|heic|heif|svg|pdf|doc|docx|xls|xlsx|zip|txt|"
         IsAllowedExt = (InStr(allowed, "|" & LCase(ext) & "|") > 0)
+    End Function
+
+    Private Function BaseNameOnly(fileName)
+        Dim s, p
+        s = "" & fileName
+        p = InStrRev(s, ".")
+        If p > 1 Then
+            BaseNameOnly = Left(s, p - 1)
+        Else
+            BaseNameOnly = s
+        End If
     End Function
 
     Public Sub SaveUpload(db, upload, userId)
         Dim ext, maxBytes, finalName, relPath, absPath, r, w, h, img, mime
+        Dim curW, curH, newW, newH, finalSize, fso, fileObj
+        Dim baseName
         maxBytes = 5 * 1024 * 1024
 
         If upload Is Nothing Then
@@ -55,31 +68,65 @@ Class cls_media
 
         Randomize
         r = CStr(Int((Rnd() * 900000) + 100000))
-        finalName = Replace(CStr(Timer()), ".", "") & "_" & r & "_" & SafeFileName(upload.FileName)
+        baseName = SafeFileName(BaseNameOnly(upload.FileName))
+        If Len(baseName) > 80 Then baseName = Left(baseName, 80)
+        finalName = Replace(CStr(Timer()), ".", "") & "_" & r & "_" & baseName & "." & ext
         relPath = "uploads/" & finalName
         EnsureUploadsFolder
         absPath = AppMap(relPath)
 
+        On Error Resume Next
         upload.SaveAs absPath
+        If Err.Number <> 0 Then
+            Dim saveErr
+            saveErr = Err.Description
+            Err.Clear
+            On Error GoTo 0
+            Err.Raise vbObjectError + 1303, "media", "Could not save upload: " & saveErr
+        End If
+        On Error GoTo 0
 
         w = "NULL"
         h = "NULL"
         On Error Resume Next
-        If ext = "jpg" Or ext = "jpeg" Or ext = "png" Or ext = "gif" Or ext = "webp" Then
-            Set img = ASP4.Image.open(absPath)
+        If ext = "jpg" Or ext = "jpeg" Or ext = "jpe" Or ext = "jfif" Or ext = "png" Or ext = "gif" Or ext = "webp" Or ext = "bmp" Or ext = "tif" Or ext = "tiff" Then
+            Set img = ASP4.image.Image.open(absPath)
             If Err.Number = 0 Then
-                If CLng(img.width) > 1920 Then
-                    Set img = img.resize(Array(1920, CLng((CLng(img.height) * 1920) / CLng(img.width))))
+                curW = ToInt(img.width, 0)
+                curH = ToInt(img.height, 0)
+                If curW > 1920 And curH > 0 Then
+                    newW = 1920
+                    newH = ToInt((curH * 1920) / curW, curH)
+                    If newH < 1 Then newH = 1
+                    Set img = img.resize(Array(newW, newH))
                     img.save absPath
+                    If Err.Number = 0 Then
+                        curW = ToInt(img.width, newW)
+                        curH = ToInt(img.height, newH)
+                    Else
+                        Err.Clear
+                    End If
                 End If
-                w = CLng(img.width)
-                h = CLng(img.height)
+                w = curW
+                h = curH
+            Else
+                Err.Clear
             End If
         End If
+        Err.Clear
         On Error GoTo 0
 
+        finalSize = CLng(upload.Size)
+        Set fso = Server.CreateObject("Scripting.FileSystemObject")
+        If fso.FileExists(absPath) Then
+            Set fileObj = fso.GetFile(absPath)
+            finalSize = CLng(fileObj.Size)
+            Set fileObj = Nothing
+        End If
+        Set fso = Nothing
+
         mime = "" & upload.ContentType
-        db.Execute "INSERT INTO media(file_name,original_name,rel_path,mime_type,ext,size_bytes,width,height,uploaded_by,created_at) VALUES ('" & Q(finalName) & "','" & Q(upload.FileName) & "','" & Q(relPath) & "','" & Q(mime) & "','" & Q(ext) & "'," & CLng(upload.Size) & "," & w & "," & h & "," & CLng(userId) & ",datetime('now'))"
+        db.Execute "INSERT INTO media(file_name,original_name,rel_path,mime_type,ext,size_bytes,width,height,uploaded_by,created_at) VALUES ('" & Q(finalName) & "','" & Q(upload.FileName) & "','" & Q(relPath) & "','" & Q(mime) & "','" & Q(ext) & "'," & finalSize & "," & w & "," & h & "," & CLng(userId) & ",datetime('now'))"
     End Sub
 
     Public Sub DeleteById(db, id)
