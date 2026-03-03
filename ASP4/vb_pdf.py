@@ -136,6 +136,13 @@ class PdfDoc:
         )
         return self
 
+    def write_html(self, html):
+        try:
+            self._pdf.write_html(vbs_cstr(html))
+        except Exception as e:
+            raise VBScriptRuntimeError(f"Pdf.write_html failed: {e}")
+        return self
+
     def set_xy(self, x, y):
         self._pdf.set_xy(_to_float(x, "x"), _to_float(y, "y"))
         return self

@@ -11,7 +11,7 @@ from __future__ import annotations
 import email
 import imaplib
 
-from .pop3 import _decode_header_value, _extract_body_text
+from .pop3 import _decode_header_value, _extract_attachment_names, _extract_attachments, _extract_body_text
 from .vb_runtime import vbs_cstr
 from .vm.values import VBArray
 
@@ -97,6 +97,32 @@ class IMAPMessage:
         self.Date = _decode_header_value(parsed.get("Date")) if parsed else ""
         self.MessageID = _decode_header_value(parsed.get("Message-ID")) if parsed else ""
         self.Body = _extract_body_text(parsed)
+        self.AttachmentNames = _extract_attachment_names(parsed)
+        self.AttachmentCount = len(self.AttachmentNames)
+        self.AttachmentNamesText = ", ".join(self.AttachmentNames)
+        self._attachments = _extract_attachments(parsed)
+
+    def _att_at(self, index):
+        try:
+            i = int(float(vbs_cstr(index).strip()))
+        except Exception:
+            i = 0
+        if i < 1 or i > len(self._attachments):
+            raise Exception("Attachment index out of range")
+        return self._attachments[i - 1]
+
+    def AttachmentName(self, index):
+        return self._att_at(index).get("name", "attachment.bin")
+
+    def AttachmentContentType(self, index):
+        return self._att_at(index).get("content_type", "application/octet-stream")
+
+    def AttachmentSize(self, index):
+        data = self._att_at(index).get("data", b"")
+        return len(data)
+
+    def AttachmentBytes(self, index):
+        return self._att_at(index).get("data", b"")
 
     def Header(self, name):
         nm = vbs_cstr(name)

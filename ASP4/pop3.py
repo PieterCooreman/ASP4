@@ -93,6 +93,66 @@ def _extract_body_text(msg) -> str:
     return ""
 
 
+def _extract_attachment_names(msg) -> list[str]:
+    names: list[str] = []
+    if msg is None:
+        return names
+    try:
+        if msg.is_multipart():
+            for part in msg.walk():
+                disp = (part.get("Content-Disposition") or "").lower()
+                fn = part.get_filename()
+                if "attachment" not in disp and not fn:
+                    continue
+                dec = _decode_header_value(fn)
+                if dec:
+                    names.append(dec)
+        else:
+            fn = msg.get_filename()
+            if fn:
+                dec = _decode_header_value(fn)
+                if dec:
+                    names.append(dec)
+    except Exception:
+        return names
+    return names
+
+
+def _extract_attachments(msg) -> list[dict]:
+    items: list[dict] = []
+    if msg is None:
+        return items
+    try:
+        seq = 0
+        if msg.is_multipart():
+            for part in msg.walk():
+                disp = (part.get("Content-Disposition") or "").lower()
+                fn = part.get_filename()
+                if "attachment" not in disp and not fn:
+                    continue
+                seq += 1
+                name = _decode_header_value(fn)
+                if not name:
+                    name = f"attachment_{seq}.bin"
+                ctype = (part.get_content_type() or "application/octet-stream").strip() or "application/octet-stream"
+                data = part.get_payload(decode=True)
+                if data is None:
+                    data = b""
+                items.append({"name": name, "content_type": ctype, "data": bytes(data)})
+        else:
+            fn = msg.get_filename()
+            if fn:
+                name = _decode_header_value(fn) or "attachment_1.bin"
+                ctype = (msg.get_content_type() or "application/octet-stream").strip() or "application/octet-stream"
+                data = msg.get_payload(decode=True)
+                if data is None:
+                    data = b""
+                items.append({"name": name, "content_type": ctype, "data": bytes(data)})
+    except Exception:
+        return items
+    return items
+
+
 class POP3Message:
     def __init__(self, raw_bytes: bytes):
         self.Raw = bytes(raw_bytes or b"")
@@ -111,6 +171,32 @@ class POP3Message:
         self.Date = _decode_header_value(parsed.get("Date")) if parsed else ""
         self.MessageID = _decode_header_value(parsed.get("Message-ID")) if parsed else ""
         self.Body = _extract_body_text(parsed)
+        self.AttachmentNames = _extract_attachment_names(parsed)
+        self.AttachmentCount = len(self.AttachmentNames)
+        self.AttachmentNamesText = ", ".join(self.AttachmentNames)
+        self._attachments = _extract_attachments(parsed)
+
+    def _att_at(self, index):
+        try:
+            i = int(float(vbs_cstr(index).strip()))
+        except Exception:
+            i = 0
+        if i < 1 or i > len(self._attachments):
+            raise Exception("Attachment index out of range")
+        return self._attachments[i - 1]
+
+    def AttachmentName(self, index):
+        return self._att_at(index).get("name", "attachment.bin")
+
+    def AttachmentContentType(self, index):
+        return self._att_at(index).get("content_type", "application/octet-stream")
+
+    def AttachmentSize(self, index):
+        data = self._att_at(index).get("data", b"")
+        return len(data)
+
+    def AttachmentBytes(self, index):
+        return self._att_at(index).get("data", b"")
 
     def Header(self, name):
         nm = vbs_cstr(name)

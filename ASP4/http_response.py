@@ -165,6 +165,51 @@ class Response:
 
         raise ResponseEndException()
 
+    def BinaryFile(self, path: str, inline=False, delete_after=False):
+        import os
+        import mimetypes
+
+        path = str(path)
+        if not os.path.isfile(path):
+            self._res.status_code = 404
+            self._res.status_message = "Not Found"
+            return
+
+        mime, _ = mimetypes.guess_type(path)
+        if not mime:
+            mime = "application/octet-stream"
+
+        filename = os.path.basename(path)
+        self._is_file_response = True
+        self.ContentType = mime
+        disposition = "inline" if inline else "attachment"
+        self.AddHeader("Content-Disposition", f'{disposition}; filename="{filename}"')
+
+        data = b""
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        finally:
+            if bool(delete_after):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+        self.AddHeader("Content-Length", str(len(data)))
+
+        if self._buffer_enabled:
+            if self._buf_str_parts:
+                txt = "".join(self._buf_str_parts)
+                self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
+                self._buf_str_parts.clear()
+                self._buf_str_count = 0
+            self._buf_chunks.append(data)
+        else:
+            self._write_raw_bytes(data)
+
+        raise ResponseEndException()
+
     def FileBytes(self, data, content_type="application/octet-stream", filename="download.bin", inline=False):
         import mimetypes
         import os
@@ -256,6 +301,14 @@ class Response:
             if len(args) != 1:
                 raise Exception("Response.BinaryWrite expects 1 argument")
             return self.BinaryWrite(args[0])
+        if m == "BINARYFILE":
+            if len(args) < 1 or len(args) > 3:
+                raise Exception("Response.BinaryFile expects 1 to 3 arguments")
+            return self.BinaryFile(
+                args[0],
+                args[1] if len(args) >= 2 else False,
+                args[2] if len(args) == 3 else False,
+            )
         if m == "REDIRECT":
             if len(args) != 1:
                 raise Exception("Response.Redirect expects 1 argument")
