@@ -49,6 +49,7 @@ class Response:
         self._cookies = {}  # name -> ResponseCookie
         self._current_path = ""
         self._lcid = 0
+        self._is_file_response = False
 
     @property
     def LCID(self):
@@ -143,6 +144,7 @@ class Response:
             mime = 'application/octet-stream'
         
         filename = os.path.basename(path)
+        self._is_file_response = True
         self.ContentType = mime
         disposition = 'inline' if inline else 'attachment'
         self.AddHeader('Content-Disposition', f'{disposition}; filename="{filename}"')
@@ -160,7 +162,50 @@ class Response:
             self._buf_chunks.append(data)
         else:
             self._write_raw_bytes(data)
-        
+
+        raise ResponseEndException()
+
+    def FileBytes(self, data, content_type="application/octet-stream", filename="download.bin", inline=False):
+        import mimetypes
+        import os
+
+        if isinstance(data, (bytes, bytearray)):
+            b = bytes(data)
+        else:
+            t = vbs_cstr(data)
+            try:
+                b = t.encode("latin-1")
+            except Exception:
+                b = t.encode(self._charset or "utf-8", errors="replace")
+
+        ct = vbs_cstr(content_type).strip()
+        if not ct:
+            ct = "application/octet-stream"
+
+        fn = vbs_cstr(filename).strip()
+        if not fn:
+            fn = "download.bin"
+        fn = os.path.basename(fn)
+        if not fn:
+            ext = mimetypes.guess_extension(ct) or ".bin"
+            fn = "download" + ext
+
+        self._is_file_response = True
+        self.ContentType = ct
+        disposition = "inline" if inline else "attachment"
+        self.AddHeader("Content-Disposition", f'{disposition}; filename="{fn}"')
+        self.AddHeader("Content-Length", str(len(b)))
+
+        if self._buffer_enabled:
+            if self._buf_str_parts:
+                txt = "".join(self._buf_str_parts)
+                self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
+                self._buf_str_parts.clear()
+                self._buf_str_count = 0
+            self._buf_chunks.append(b)
+        else:
+            self._write_raw_bytes(b)
+
         raise ResponseEndException()
         
 
@@ -227,6 +272,15 @@ class Response:
             if len(args) not in (1, 2):
                 raise Exception("Response.File expects 1 or 2 arguments")
             return self.File(args[0], args[1] if len(args) == 2 else False)
+        if m == "FILEBYTES":
+            if len(args) < 1 or len(args) > 4:
+                raise Exception("Response.FileBytes expects 1 to 4 arguments")
+            return self.FileBytes(
+                args[0],
+                args[1] if len(args) >= 2 else "application/octet-stream",
+                args[2] if len(args) >= 3 else "download.bin",
+                args[3] if len(args) == 4 else False,
+            )
         if m == "END":
             return self.End()
         if m == "ISCLIENTCONNECTED":
@@ -344,9 +398,9 @@ class Response:
         ct = self._content_type or "text/html"
         cs = self._charset or "utf-8"
         ct_lower = ct.lower()
-        if "charset=" not in ct_lower:
+        if (not self._is_file_response) and ("charset=" not in ct_lower):
             ct = f"{ct}; charset={cs}"
-        self._res.charset = cs
+        self._res.charset = "" if self._is_file_response else cs
         self._res.headers.append(("Content-Type", ct))
 
         # Prevent browsers from caching HTML by default.

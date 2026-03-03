@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import io
 
 try:
     from PIL import Image as _PILImage
@@ -121,6 +122,22 @@ class ImageInstance:
             raise VBScriptRuntimeError("Image.save: path is required")
         self._img.save(p)
         return p
+
+    def savebytes(self, fmt="", quality=90):
+        f = vbs_cstr(fmt).strip().upper()
+        if f == "":
+            f = (self._img.format or "JPEG").upper()
+        q = _to_int(quality, "quality")
+        out = io.BytesIO()
+        img = self._img
+        kwargs: dict[str, Any] = {}
+        if f in ("JPG", "JPEG"):
+            f = "JPEG"
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            kwargs["quality"] = max(1, min(100, q))
+        img.save(out, format=f, **kwargs)
+        return out.getvalue()
 
     def resize(self, size):
         sz = _to_tuple2(size, "size")
