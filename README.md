@@ -27,6 +27,14 @@ The following Python libraries are required:
 
 # VBScript Built-in Functions
 
+Compatibility notes for built-ins:
+
+- ASP4 targets practical Classic ASP/VBScript compatibility, but does not guarantee byte-for-byte parity with IIS VBScript for every edge case.
+- The function lists below describe the exposed runtime surface; behavior can still differ in locale, coercion, error wording, and edge conditions.
+- Functions implemented through compatibility shims/stubs (for example formatting/script-engine helpers) are intended for app portability, not strict engine emulation.
+- SQL/dialect translation is intentionally out of scope; database commands are executed as provided by the script and underlying provider/driver.
+- If exact behavior matters for a critical path, validate with your app-specific regression tests.
+
 ## String Functions
 
 | Function | Description |
@@ -165,6 +173,8 @@ The following Python libraries are required:
 
 ## Format Functions
 
+Note: formatting functions are compatibility-focused and may differ from IIS under some locale/regional settings.
+
 | Function | Description |
 |----------|-------------|
 | `FormatNumber(expression[, numdigitsafterdecimal[, includeleadingdigit[, useparensfornegativenumbers[, groupdigits]]]])` | Formats a number |
@@ -174,6 +184,8 @@ The following Python libraries are required:
 ---
 
 ## Information Functions
+
+Note: type/coercion semantics generally follow VBScript, but may differ in edge cases involving Empty/Null/Nothing and host objects.
 
 | Function | Description |
 |----------|-------------|
@@ -854,6 +866,29 @@ Set imap = Server.CreateObject("ASP4.IMAP")
 | `ASP_PY_XML_ALLOW_LOCAL` | Allows DOMDocument local file loading |
 | `ASP_PY_CDO_DISABLE_SEND` | Disables SMTP send in `CDO.Message` |
 | `ASP_PY_CDO_ALLOW_OUTSIDE_DOCROOT` | Allows CDO attachments outside docroot |
+
+## VBScript Compatibility Notes
+
+- `UBound/LBound`: follow VBScript-like array allocation rules; uninitialized/invalid-array usage raises runtime errors.
+- `VBScript.RegExp.Replace`: supports VB-style replacement tokens (`$1`, `$&`, ``$` ``, `$'`, `$$`).
+- `Request.Form`: parsed for `POST` only; non-POST bodies are available via `Request.BinaryRead`.
+- Date/number formatting and script-engine metadata helpers are implemented for compatibility and may differ from IIS in edge locale cases.
+
+## Compatibility Matrix
+
+| Subsystem | Level | Notes |
+|-----------|-------|-------|
+| Core VBScript built-ins | Near | Broad coverage for common Classic ASP apps; edge coercion/locale behaviors can differ |
+| Date/time and numeric formatting | Partial | Compatibility-oriented; locale-specific IIS parity not guaranteed |
+| Request/Response/Server/Application/Session | Near | Classic object model implemented; some operational semantics differ from IIS hosting internals |
+| `VBScript.RegExp` | Near | Common API and VB-style replacement tokens supported |
+| `Scripting.Dictionary` | Near | Core collection behavior supported; COM-level quirks may differ |
+| `Scripting.FileSystemObject` / `ADODB.Stream` | Partial | Supported in sandboxed model (docroot/root-constrained) |
+| `ADODB.Connection/Recordset/Command` | Partial | Provider support is runtime-dependent; ADO surface is compatibility-oriented |
+| Database providers | Partial | SQLite, Access, Excel(read-only), generic ODBC, PostgreSQL via ODBC |
+| MSXML HTTP/DOM shims | Partial | Security-guarded and stdlib-focused; not full MSXML COM parity |
+| `CDO.Message` | Partial | Practical SMTP/pickup subset; not complete CDOSYS feature parity |
+| POP3/IMAP shims | Partial | Legacy-friendly subset for mailbox workflows |
 
 ---
 
