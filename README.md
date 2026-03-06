@@ -66,3 +66,15 @@ If you're migrating a critical application, run your own regression tests agains
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+---
+
+## Legal Disclaimer
+
+**Disclaimer of Affiliation**
+
+ASPPY is an independent software project developed by Pieter Cooreman. 
+
+ASPPY is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Microsoft Corporation, or any of its subsidiaries or its affiliates. The official Microsoft website can be found at https://www.microsoft.com.
+
+The names "Microsoft," "Active Server Pages," "ASP," and "VBScript," as well as related names, marks, emblems, and images, are registered trademarks of Microsoft Corporation. The use of these trademarks within this project is purely for descriptive, identification, and reference purposes to indicate technical compatibility, and does not imply any association with, or endorsement by, the trademark holder.
