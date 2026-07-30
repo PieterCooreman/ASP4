@@ -66,6 +66,7 @@ from ..ast_nodes import (
 from ..vb_runtime import vbs_cstr, VBScriptCOMError
 from .. import vb_datetime
 import datetime as _dt
+from decimal import Decimal as _Decimal
 import math
 import struct
 import time
@@ -2843,6 +2844,11 @@ def _try_number(v):
         return -1 if v else 0
     if isinstance(v, (int, float)):
         return v
+    if isinstance(v, _Decimal):
+        # Currency (from CCur): treat numerically as Double so arithmetic and
+        # comparisons work (Python's exact Decimal==float would wrongly report
+        # CCur(123.45) <> 123.45, and `+` would fall back to concatenation).
+        return float(v)
     if isinstance(v, str):
         s = v.strip()
         if s == "":

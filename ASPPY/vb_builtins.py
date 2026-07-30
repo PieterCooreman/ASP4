@@ -7,7 +7,7 @@ import random as _random
 from decimal import Decimal, ROUND_HALF_EVEN
 
 from .vb_errors import raise_runtime
-from .vb_runtime import vbs_cbool, vbs_cstr
+from .vb_runtime import vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
 from .vm.values import VBEmpty, VBNull, VBNothing
 
 # Re-implement core functions to guarantee they exist in this module scope
@@ -298,10 +298,16 @@ def CByte(expr):
     if n < 0 or n > 255: raise_runtime('OVERFLOW')
     return n
 
+# VBScript Currency range: +/- 922,337,203,685,477.5807 (64-bit scaled int).
+_CUR_MAX = Decimal('922337203685477.5807')
+
+
 def CCur(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
-    d = _to_decimal(expr)
-    return d.quantize(Decimal('0.0000'), rounding=ROUND_HALF_EVEN)
+    if isinstance(expr, bool): return Decimal('-1.0000') if expr else Decimal('0.0000')
+    d = _to_decimal(expr).quantize(Decimal('0.0000'), rounding=ROUND_HALF_EVEN)
+    if d < -_CUR_MAX or d > _CUR_MAX: raise_runtime('OVERFLOW')
+    return d
 
 def CDbl(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
@@ -657,3 +663,99 @@ def FormatPercent(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, 
         val = 0.0
     s = FormatNumber(val, numdigitsafterdecimal, includeleadingdigit, useparensfornegativenumbers, groupdigits)
     return s + "%"
+
+
+# -----------------------------------------------------------------------------
+# Locale functions: GetLocale / SetLocale
+#
+# VBScript stores the current locale per script engine (per thread in IIS).
+# ASPPY already keeps a thread-local LCID in vb_runtime (used by Response.LCID
+# and locale-aware formatting via vbs_get_lcid_info), so these builtins simply
+# read/write that same state.
+# -----------------------------------------------------------------------------
+
+# Default LCID when nothing was set. The runtime treats LCID 0 as "system
+# default" and formats as en-US (see vb_runtime.vbs_get_lcid_info), so the
+# deterministic default reported to scripts is 1033 (en-US), matching typical
+# IIS installs.
+_DEFAULT_LCID = 1033
+
+# Common VBScript locale short-name -> LCID map (SetLocale accepts either a
+# numeric LCID or a short string like "en-gb", "de", "zh-cn").
+_LOCALE_NAME_TO_LCID = {
+    'ar': 1025, 'ar-sa': 1025,
+    'cs': 1029, 'cs-cz': 1029,
+    'da': 1030, 'da-dk': 1030,
+    'de': 1031, 'de-de': 1031, 'de-ch': 2055, 'de-at': 3079,
+    'el': 1032, 'el-gr': 1032,
+    'en': 1033, 'en-us': 1033, 'en-gb': 2057, 'en-au': 3081,
+    'en-ca': 4105, 'en-nz': 5129, 'en-ie': 6153, 'en-za': 7177,
+    'es': 1034, 'es-es': 1034, 'es-mx': 2058,
+    'fi': 1035, 'fi-fi': 1035,
+    'fr': 1036, 'fr-fr': 1036, 'fr-be': 2060, 'fr-ca': 3084, 'fr-ch': 4108,
+    'he': 1037, 'he-il': 1037,
+    'hi': 1081, 'hi-in': 1081,
+    'hu': 1038, 'hu-hu': 1038,
+    'id': 1057, 'id-id': 1057,
+    'it': 1040, 'it-it': 1040, 'it-ch': 2064,
+    'ja': 1041, 'ja-jp': 1041,
+    'ko': 1042, 'ko-kr': 1042,
+    'nb': 1044, 'nb-no': 1044, 'nn-no': 2068, 'no': 1044,
+    'nl': 1043, 'nl-nl': 1043, 'nl-be': 2067,
+    'pl': 1045, 'pl-pl': 1045,
+    'pt': 2070, 'pt-pt': 2070, 'pt-br': 1046,
+    'ru': 1049, 'ru-ru': 1049,
+    'sv': 1053, 'sv-se': 1053,
+    'th': 1054, 'th-th': 1054,
+    'tr': 1055, 'tr-tr': 1055,
+    'uk': 1058, 'uk-ua': 1058,
+    'vi': 1066, 'vi-vn': 1066,
+    'zh': 2052, 'zh-cn': 2052, 'zh-tw': 1028, 'zh-hk': 3076, 'zh-sg': 4100,
+}
+
+
+def GetLocale():
+    """VBScript GetLocale(): return the current locale ID (LCID) as a Long."""
+    lcid = vbs_get_lcid()
+    return int(lcid) if lcid else _DEFAULT_LCID
+
+
+def SetLocale(lcid=0):
+    """VBScript SetLocale(lcid): set the current locale, return previous LCID.
+
+    Accepts a numeric LCID (e.g. 1033), a short locale string (e.g. "en-gb",
+    "de", "zh-cn"), or 0 / "" / 1024 / 2048 for the system default locale.
+    """
+    prev = GetLocale()
+
+    if lcid is VBNull:
+        raise_runtime('INVALID_USE_OF_NULL')
+    if lcid is VBEmpty or lcid is None:
+        lcid = 0
+
+    if isinstance(lcid, str):
+        name = lcid.strip().lower().replace('_', '-')
+        if name == '':
+            new_lcid = 0  # system default
+        elif name in _LOCALE_NAME_TO_LCID:
+            new_lcid = _LOCALE_NAME_TO_LCID[name]
+        else:
+            # Allow numeric LCIDs passed as strings ("1033").
+            try:
+                new_lcid = int(name)
+            except Exception:
+                raise_runtime('INVALID_PROC_CALL', 'SetLocale')
+    else:
+        try:
+            new_lcid = int(_to_int(lcid))
+        except Exception:
+            raise_runtime('TYPE_MISMATCH', 'SetLocale')
+
+    # LOCALE_USER_DEFAULT (1024) / LOCALE_SYSTEM_DEFAULT (2048) -> default.
+    if new_lcid in (1024, 2048):
+        new_lcid = 0
+    if new_lcid < 0:
+        raise_runtime('INVALID_PROC_CALL', 'SetLocale')
+
+    vbs_set_lcid(new_lcid)
+    return prev

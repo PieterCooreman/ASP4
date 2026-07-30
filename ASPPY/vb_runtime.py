@@ -7,6 +7,7 @@ import locale as _locale
 import math as _math
 import re as _re
 import threading as _threading
+from decimal import Decimal as _Decimal
 
 try:
     _locale.setlocale(_locale.LC_NUMERIC, '')
@@ -98,6 +99,16 @@ def vbs_cstr(value) -> str:
         return "True" if value else "False"
     if isinstance(value, int):
         return str(value)
+    if isinstance(value, _Decimal):
+        # Decimal is ASPPY's Currency subtype (VarType 6). VBScript renders
+        # Currency in plain fixed-point (never scientific), trimming trailing
+        # zeros: CStr(CCur(123.45)) => "123.45", CStr(CCur(123)) => "123".
+        s = format(value, 'f')
+        if '.' in s:
+            s = s.rstrip('0').rstrip('.')
+        if s in ('', '-', '-0'):
+            s = '0'
+        return s
     if isinstance(value, float):
         # VBScript numeric string formatting is locale-dependent.
         # Approximate Single formatting: 7 significant digits, and IIS/VBScript
@@ -206,6 +217,11 @@ def _vbs_try_number(v):
         return -1 if v else 0
     if isinstance(v, (int, float)):
         return v
+    if isinstance(v, _Decimal):
+        # Currency: convert to float so mixed Currency/Double arithmetic and
+        # comparisons behave numerically (Decimal==float is exact in Python
+        # and would wrongly report CCur(123.45) <> 123.45).
+        return float(v)
     if isinstance(v, str):
         s = v.strip()
         if s == "":
