@@ -114,6 +114,20 @@ _STATIC_ENV_TEMPLATE.setdefault('VBUSEDEFAULT', -2)
 _STATIC_ENV_TEMPLATE.setdefault('VBTRUE', -1)
 _STATIC_ENV_TEMPLATE.setdefault('VBFALSE', 0)
 
+# Re-assert VBScript language constants LAST. The dir()-based module scans
+# above also pick up each module's own Python-level imports (e.g. the
+# VBNull/VBEmpty/VBNothing sentinels imported by vb_builtins/vb_builtins_stub,
+# or the VBArray class from vb_array_funcs). Those leaked names would
+# otherwise shadow the real VBScript constants vbNull (=1), vbEmpty (=0) and
+# vbArray (=8192). The Null/Empty/Nothing *keywords* are unaffected (they map
+# to the NULL/EMPTY/NOTHING env entries above).
+for _name in dir(vb_constants):
+    if _name.startswith('_'):
+        continue
+    _cval = getattr(vb_constants, _name)
+    _STATIC_ENV_TEMPLATE[_name] = _cval
+    _STATIC_ENV_TEMPLATE[_name.upper()] = _cval
+
 def _build_globals_env(ctx: ExecutionContext):
     # Start with static template copy
     env = _STATIC_ENV_TEMPLATE.copy()

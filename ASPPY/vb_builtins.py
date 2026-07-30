@@ -503,6 +503,11 @@ def _to_decimal(v) -> Decimal:
     if isinstance(v, (_dt.datetime, _dt.date)): return Decimal(str(_date_to_oaserial(v)))
     s = vbs_cstr(v).strip()
     if s == "": return Decimal(0)
+    if len(s) >= 2 and s[0] == '&' and s[1] in ('H', 'h', 'O', 'o'):
+        # VBScript hex/octal strings ("&HFF", "&O77") are valid input to
+        # CLng/CInt/CCur etc. Keep behavior identical to _to_number.
+        try: return Decimal(int(s.replace('&H','0x').replace('&h','0x').replace('&O','0o').replace('&o','0o'), 0))
+        except: raise_runtime('TYPE_MISMATCH')
     try: return Decimal(s)
     except: raise_runtime('TYPE_MISMATCH')
 
