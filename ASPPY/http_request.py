@@ -192,7 +192,7 @@ class UploadedFilesCollection  :
         return self.Item(key)
         
 class Request:
-    def __init__(self, method: str, path: str, query_string: str, headers: dict, body: bytes, remote_addr: str = "", body_file_path: str = "", body_len: int | None = None, script_path: str | None = None):
+    def __init__(self, method: str, path: str, query_string: str, headers: dict, body: bytes, remote_addr: str = "", body_file_path: str = "", body_len: int | None = None, script_path: str | None = None, docroot: str = ""):
         self._method = method.upper()
         self._path = path
         self._script_path = str(script_path or path or "/")
@@ -204,6 +204,10 @@ class Request:
         self._body_len = int(body_len) if body_len is not None else len(self._body)
         self._binpos = 0
         self._remote_addr = remote_addr or ""
+        # Physical application root (used for APPL_PHYSICAL_PATH /
+        # PATH_TRANSLATED). Must be absolute: relative paths (e.g. "www" from
+        # the command line) would later be joined onto other absolute paths.
+        self._docroot = os.path.abspath(str(docroot)) if docroot else ""
 
         self._query = NameValueCollection(_parse_qs(self._query_string))
         self._form = NameValueCollection({})
@@ -612,6 +616,18 @@ def _build_server_vars(req: Request) -> dict:
     all_http = '\r\n'.join(all_http_parts)
     all_raw = '\r\n'.join(f'{k}: {v}' for k, v in h.items())
 
+    # IIS: APPL_PHYSICAL_PATH is the physical application root, WITH a
+    # trailing separator (e.g. "C:\inetpub\wwwroot\"). PATH_TRANSLATED is the
+    # physical path of the requested script (docroot + PATH_INFO). Both stay
+    # empty when the Request was constructed without a docroot (back-compat).
+    docroot = getattr(req, '_docroot', '') or ''
+    appl_physical = ''
+    path_translated = ''
+    if docroot:
+        appl_physical = docroot if docroot.endswith(os.sep) else docroot + os.sep
+        rel = (req._script_path or req._path or '/').split('?', 1)[0]
+        path_translated = os.path.normpath(os.path.join(docroot, rel.lstrip('/\\')))
+
     vars = {
         'ALL_HTTP': [all_http],
         'ALL_RAW': [all_raw],
@@ -633,8 +649,8 @@ def _build_server_vars(req: Request) -> dict:
         'INSTANCE_META_PATH': ['/LM/W3SVC/1/ROOT'],
         'LOCAL_ADDR': [server_name],
         'APPL_MD_PATH': ['/LM/W3SVC/1/ROOT'],
-        'APPL_PHYSICAL_PATH': [''],
-        'PATH_TRANSLATED': [''],
+        'APPL_PHYSICAL_PATH': [appl_physical],
+        'PATH_TRANSLATED': [path_translated],
         'URL': [req._path],
         'ASPPY_ORIGINAL_PATH': [req._path],
         'ASPPY_SCRIPT_PATH': [req._script_path],

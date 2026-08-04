@@ -289,7 +289,7 @@ class VBClassInstance:
             if procs is None and self._can_access_private(interp):
                 procs = self._cls.private_props.get(up)
             if procs is None:
-                raise VBScriptRuntimeError(f"Unknown member: {name}")
+                raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
             getp = procs.get('GET')
             if getp is None:
                 raise VBScriptRuntimeError("Property get not defined")
@@ -311,7 +311,7 @@ class VBClassInstance:
                 raise VBScriptRuntimeError("Object doesn't support this property or method")
             return self._fields.get(up, VBEmpty)
 
-        raise VBScriptRuntimeError(f"Unknown member: {name}")
+        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
 
     def vbs_get_member(self, interp: Any, name: str):
         """Get a member value.
@@ -333,7 +333,7 @@ class VBClassInstance:
             if procs is None and self._can_access_private(interp):
                 procs = self._cls.private_props.get(up)
             if procs is None:
-                raise VBScriptRuntimeError(f"Unknown member: {name}")
+                raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
 
             k = 'SET' if is_set else 'LET'
             p = procs.get(k)
@@ -352,7 +352,7 @@ class VBClassInstance:
             self._fields[up] = value
             return
 
-        raise VBScriptRuntimeError(f"Unknown member: {name}")
+        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
 
 
 class _BoundMethod:
@@ -569,7 +569,7 @@ class VBInterpreter:
                         try:
                             callee = self._this_stack[-1]._vbs_get_member_raw(self, name_up)
                         except VBScriptRuntimeError as e:
-                            if str(e).startswith('Unknown member:'):
+                            if 'Unknown member:' in str(e):
                                 callee = None
                             else:
                                 raise
@@ -1014,7 +1014,7 @@ class VBInterpreter:
                     try:
                         callee = self._this_stack[-1]._vbs_get_member_raw(self, name_up)
                     except VBScriptRuntimeError as e:
-                        if str(e).startswith('Unknown member:'):
+                        if 'Unknown member:' in str(e):
                             callee = None
                         else:
                             raise
@@ -1373,7 +1373,9 @@ class VBInterpreter:
         _icase_val = _icase_getattr(obj, expr.name)
         if _icase_val is not _ICASE_MISSING:
             return _icase_val
-        raise VBScriptRuntimeError(f"Unknown member: {expr.name} on {type(obj).__name__}")
+        # Use error 438 (800A01B6) like IIS, so On Error Resume Next records a
+        # meaningful Err.Number instead of 0.
+        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {expr.name} on {type(obj).__name__}")
 
     def exec_stmt(self, stmt):
         # Error suppression wrapper (On Error Resume Next)
@@ -2078,7 +2080,7 @@ class VBInterpreter:
             except VBScriptRuntimeError as e:
                 # Only fall back to globals if the name truly isn't a member.
                 # Do not hide exceptions thrown *by* member execution.
-                if str(e).startswith('Unknown member:'):
+                if 'Unknown member:' in str(e):
                     pass
                 else:
                     raise
@@ -2116,7 +2118,7 @@ class VBInterpreter:
                 inst = self._this_stack[-1]
                 return inst._vbs_get_member_raw(self, up)
             except VBScriptRuntimeError as e:
-                if str(e).startswith('Unknown member:'):
+                if 'Unknown member:' in str(e):
                     pass
                 else:
                     raise

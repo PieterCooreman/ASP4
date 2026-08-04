@@ -235,7 +235,8 @@ class Parser:
             return args
 
         # Without parentheses: if next token starts an expression, parse it and any comma-separated extras.
-        if self.tok.kind in ("STRING", "NUMBER", "IDENT", "DEFAULT"):
+        # NEW/ME/DATE are keyword token kinds that can also start an argument.
+        if self.tok.kind in ("STRING", "NUMBER", "IDENT", "DEFAULT", "NEW", "ME", "DATE"):
             args.append(self._parse_expr())
             while self.tok.kind == "COMMA":
                 self._eat("COMMA")
@@ -780,7 +781,9 @@ class Parser:
         #   obj.Method arg1, arg2
         # Only if the callee is a simple identifier/member/index and the next
         # token begins an expression on the same statement.
-        if self.tok.kind in ("STRING", "NUMBER", "IDENT", "DEFAULT", "LPAREN"):
+        # NEW/ME/DATE are keyword token kinds that can also start an argument:
+        #   b.Init New Foo   |   b.Init Me   |   b.Init #1/1/2000#
+        if self.tok.kind in ("STRING", "NUMBER", "IDENT", "DEFAULT", "LPAREN", "NEW", "ME", "DATE"):
             if isinstance(expr, (Ident, Member, Index)):
                 args = [self._parse_expr()]
                 while self.tok.kind == "COMMA":

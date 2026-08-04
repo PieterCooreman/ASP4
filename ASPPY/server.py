@@ -659,6 +659,7 @@ class ASPRequestHandler(BaseHTTPRequestHandler):
             body_file_path=body_file_path,
             body_len=body_len,
             script_path=exec_path,
+            docroot=docroot,
         )
 
         # Optional request tracing (disabled by default).

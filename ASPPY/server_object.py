@@ -141,6 +141,25 @@ class ASPError:
         self.Source = source
 
 
+class _DictKeyProxy:
+    """Indexable proxy backing Scripting.Dictionary's Key property.
+
+    Enables `d.Key("old") = "new"` (rename). Reads return the stored
+    (original-case) key when present (permissive; IIS treats Key as
+    write-only).
+    """
+
+    def __init__(self, owner: 'ScriptingDictionary'):
+        self._owner = owner
+
+    def __vbs_index_get__(self, key):
+        ent = self._owner._d.get(self._owner._norm(key))
+        return ent[0] if ent is not None else ""
+
+    def __vbs_index_set__(self, key, new_key):
+        self._owner._rename_key(key, new_key)
+
+
 class ScriptingDictionary:
     """Minimal Scripting.Dictionary adapter."""
 
@@ -217,6 +236,36 @@ class ScriptingDictionary:
         # This allows both reads:  d.Item("k")
         # and writes:             d.Item("k") = "v"
         return self
+
+    @property
+    def Key(self):
+        # VBScript: d.Key("old") = "new" renames a key (item and insertion
+        # order are preserved).
+        return _DictKeyProxy(self)
+
+    def _rename_key(self, key, new_key):
+        old_norm = self._norm(key)
+        if old_norm not in self._d:
+            # Scripting.Dictionary raises "Element not found" (32811)
+            raise Exception("Element not found")
+        new_orig = vbs_cstr(new_key)
+        new_norm = self._norm(new_orig)
+        if new_norm == old_norm:
+            # Same key (e.g. casing change under TextCompare): keep item,
+            # update the stored original casing.
+            _old_orig, val = self._d[old_norm]
+            self._d[old_norm] = (new_orig, val)
+            return
+        if new_norm in self._d:
+            raise Exception("Key already exists")
+        # Rebuild to preserve insertion order (rename in place).
+        new_d: dict[str, tuple[str, Any]] = {}
+        for nk, (orig, val) in self._d.items():
+            if nk == old_norm:
+                new_d[new_norm] = (new_orig, val)
+            else:
+                new_d[nk] = (orig, val)
+        self._d = new_d
 
     @property
     def Keys(self):
@@ -537,7 +586,7 @@ class Server:
                     remote = str(getattr(parent_req, '_remote_addr'))
                 except Exception:
                     remote = ""
-            req = Request('GET', target_v, '', headers, b'', remote_addr=remote)
+            req = Request('GET', target_v, '', headers, b'', remote_addr=remote, docroot=self._docroot)
 
             ctx = ExecutionContext(response=resp, request=req, session=sess, application=app, server=child_srv, err=VBErr())
             child_box['ctx'] = ctx
@@ -1269,6 +1318,9 @@ class ADODBStream:
 class TextStream:
     def __init__(self, f):
         self._f = f
+        # Line/Column tracking (Scripting TextStream is 1-based for both).
+        self._line = 1
+        self._col = 1
 
     def Close(self):
         if self._f is None:
@@ -1277,6 +1329,19 @@ class TextStream:
             self._f.close()
         finally:
             self._f = None
+
+    def _track(self, s: str):
+        """Advance Line/Column counters over text that was read or written."""
+        if not s:
+            return
+        nl = s.count("\r\n") + s.replace("\r\n", "").count("\n") + s.replace("\r\n", "").count("\r")
+        if nl:
+            self._line += nl
+            # Column = chars after the last line break, 1-based
+            tail = s.replace("\r\n", "\n").replace("\r", "\n").rsplit("\n", 1)[-1]
+            self._col = len(tail) + 1
+        else:
+            self._col += len(s)
 
     @property
     def AtEndOfStream(self):
@@ -1287,35 +1352,221 @@ class TextStream:
         self._f.seek(pos)
         return ch == ""
 
+    @property
+    def AtEndOfLine(self):
+        if self._f is None:
+            return True
+        pos = self._f.tell()
+        ch = self._f.read(1)
+        self._f.seek(pos)
+        return ch == "" or ch in ("\r", "\n")
+
+    @property
+    def Line(self):
+        return self._line
+
+    @property
+    def Column(self):
+        return self._col
+
+    def Read(self, characters):
+        if self._f is None:
+            return ""
+        n = int(characters)
+        if n <= 0:
+            return ""
+        s = self._f.read(n)
+        self._track(s)
+        return s
+
     def ReadAll(self):
         if self._f is None:
             return ""
-        return self._f.read()
+        s = self._f.read()
+        self._track(s)
+        return s
 
     def ReadLine(self):
         if self._f is None:
             return ""
         s = self._f.readline()
+        self._track(s)
         if s.endswith("\r\n"):
             return s[:-2]
         if s.endswith("\n"):
             return s[:-1]
+        if s.endswith("\r"):
+            return s[:-1]
         return s
+
+    def Skip(self, characters):
+        if self._f is None:
+            return
+        n = int(characters)
+        if n > 0:
+            self._track(self._f.read(n))
+
+    def SkipLine(self):
+        if self._f is None:
+            return
+        self._track(self._f.readline())
 
     def Write(self, s):
         if self._f is None:
             return
-        self._f.write(vbs_cstr(s))
+        t = vbs_cstr(s)
+        self._f.write(t)
+        self._track(t)
 
     def WriteLine(self, s=""):
         if self._f is None:
             return
-        self._f.write(vbs_cstr(s) + "\r\n")
+        t = vbs_cstr(s) + "\r\n"
+        self._f.write(t)
+        self._track(t)
+
+    def WriteBlankLines(self, lines):
+        if self._f is None:
+            return
+        n = int(lines)
+        if n > 0:
+            self._f.write("\r\n" * n)
+            self._line += n
+            self._col = 1
 
 
 class Drive:
+    """Scripting.Drive adapter (Script 5.6 exposes 12 properties).
+
+    Windows-specific values (FileSystem, SerialNumber, VolumeName, DriveType)
+    come from Win32 APIs via ctypes; non-Windows platforms return sensible
+    fallbacks so coverage code keeps working cross-platform.
+    """
+
     def __init__(self, path: str):
         self.Path = path
+
+    def _root(self) -> str:
+        p = str(self.Path)
+        if os.name == 'nt' and len(p) >= 2 and p[1] == ':':
+            return p[:2] + '\\'
+        return p if p.endswith(os.sep) else p + os.sep
+
+    def _volume_info(self):
+        """Returns (volume_name, serial_number, filesystem) best-effort."""
+        if os.name == 'nt':
+            try:
+                import ctypes
+                vol_buf = ctypes.create_unicode_buffer(261)
+                fs_buf = ctypes.create_unicode_buffer(261)
+                serial = ctypes.c_uint32(0)
+                max_len = ctypes.c_uint32(0)
+                flags = ctypes.c_uint32(0)
+                ok = ctypes.windll.kernel32.GetVolumeInformationW(
+                    ctypes.c_wchar_p(self._root()),
+                    vol_buf, 261,
+                    ctypes.byref(serial),
+                    ctypes.byref(max_len),
+                    ctypes.byref(flags),
+                    fs_buf, 261,
+                )
+                if ok:
+                    # FSO SerialNumber is a signed 32-bit Long.
+                    sn = serial.value
+                    if sn & 0x80000000:
+                        sn -= 0x100000000
+                    return vol_buf.value, sn, fs_buf.value
+            except Exception:
+                pass
+            return "", 0, ""
+        # POSIX fallback
+        return "", 0, ""
+
+    @property
+    def DriveLetter(self):
+        p = str(self.Path)
+        if len(p) >= 2 and p[1] == ':':
+            return p[0].upper()
+        return ""
+
+    @property
+    def DriveType(self):
+        # FSO: 0=Unknown, 1=Removable, 2=Fixed, 3=Network, 4=CD-ROM, 5=RAM disk
+        if os.name == 'nt':
+            try:
+                import ctypes
+                t = ctypes.windll.kernel32.GetDriveTypeW(ctypes.c_wchar_p(self._root()))
+                return {2: 1, 3: 2, 4: 3, 5: 4, 6: 5}.get(int(t), 0)
+            except Exception:
+                return 0
+        return 2  # treat POSIX root as a fixed drive
+
+    @property
+    def IsReady(self):
+        try:
+            return os.path.exists(self._root())
+        except Exception:
+            return False
+
+    @property
+    def FileSystem(self):
+        return self._volume_info()[2]
+
+    @property
+    def SerialNumber(self):
+        return self._volume_info()[1]
+
+    @property
+    def ShareName(self):
+        # Only meaningful for mapped network drives; empty otherwise.
+        if os.name == 'nt' and self.DriveType == 3:
+            try:
+                import ctypes
+                buf = ctypes.create_unicode_buffer(1024)
+                length = ctypes.c_uint32(1024)
+                dev = (self.DriveLetter + ':')
+                if ctypes.windll.mpr.WNetGetConnectionW(
+                        ctypes.c_wchar_p(dev), buf, ctypes.byref(length)) == 0:
+                    return buf.value
+            except Exception:
+                pass
+        return ""
+
+    @property
+    def VolumeName(self):
+        return self._volume_info()[0]
+
+    @VolumeName.setter
+    def VolumeName(self, value):
+        if os.name == 'nt':
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetVolumeLabelW(
+                    ctypes.c_wchar_p(self._root()), ctypes.c_wchar_p(vbs_cstr(value)))
+            except Exception:
+                pass
+
+    @property
+    def TotalSize(self):
+        try:
+            return shutil.disk_usage(self._root()).total
+        except Exception:
+            return 0
+
+    @property
+    def FreeSpace(self):
+        try:
+            return shutil.disk_usage(self._root()).free
+        except Exception:
+            return 0
+
+    @property
+    def AvailableSpace(self):
+        return self.FreeSpace
+
+    @property
+    def RootFolder(self):
+        return Folder(self._root())
 
 
 class DrivesCollection:
@@ -2101,13 +2352,15 @@ class FileSystemObject:
 
     def GetSpecialFolder(self, folder_spec):
         # 0=WindowsFolder, 1=SystemFolder, 2=TemporaryFolder
+        # Real FSO returns a Folder object (Folder stringifies to its Path,
+        # so string concatenation keeps working).
         n = int(folder_spec)
         if n == 2:
             p = os.path.join(self._root, '_tmp')
             p = self._ensure_in_root(p)
             os.makedirs(p, exist_ok=True)
-            return p
-        return self._root
+            return Folder(p)
+        return Folder(self._root)
 
     def GetFile(self, path):
         phys = self._resolve(path)
