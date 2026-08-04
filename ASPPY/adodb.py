@@ -435,7 +435,11 @@ class _AccessProviderAdapter(_ADOProviderAdapter):
             driver = driver + '}'
 
         uid = _pick_attr(info.attrs, 'user id', 'uid', 'user')
-        pwd = _pick_attr(info.attrs, 'password', 'pwd')
+        # Classic ASP writes Access database passwords as the Jet OLE DB
+        # property "Jet OLEDB:Database Password". The Access ODBC driver
+        # expects it as PWD=. Prefer the Jet-specific attribute, then the
+        # generic Password/Pwd forms.
+        pwd = _pick_attr(info.attrs, 'jet oledb:database password', 'password', 'pwd')
         parts = [f"Driver={driver}", f"DBQ={phys}"]
         if uid:
             parts.append(f"Uid={uid}")
@@ -1715,6 +1719,16 @@ class ADOConnection:
             self._auto_escape = auto_escape_match.group(1).lower() in ('1', 'true', 'yes', 'on')
 
         info = parse_connection_string(cs)
+
+        # ADO: explicit UserID/Password arguments to Open() override any
+        # credentials in the connection string.
+        uid_arg = vbs_cstr(user_id).strip() if user_id else ''
+        pwd_arg = vbs_cstr(password) if password else ''
+        if uid_arg:
+            info.attrs['user id'] = uid_arg
+        if pwd_arg:
+            info.attrs['password'] = pwd_arg
+
         self.Provider = info.attrs.get('provider', info.provider_kind or 'unknown')
         self._provider_kind = info.provider_kind or 'unknown'
         adapter_kind = 'odbc' if _should_route_to_odbc(info) else self._provider_kind
