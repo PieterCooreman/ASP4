@@ -49,6 +49,11 @@ class Response:
         self._cookies = {}  # name -> ResponseCookie
         self._current_path = ""
         self._lcid = 0
+        # IIS: Response.CodePage defaults from Session.CodePage / @CODEPAGE.
+        # ASPPY always emits UTF-8 (codepage 65001) unless Charset is changed,
+        # so 65001 is the honest default (matches Session.CodePage).
+        self._codepage = 65001
+        self._pics = None
         self._is_file_response = False
 
     @property
@@ -58,6 +63,24 @@ class Response:
     @LCID.setter
     def LCID(self, value):
         self.SetProperty("LCID", value)
+
+    @property
+    def CodePage(self):
+        return self._codepage
+
+    @CodePage.setter
+    def CodePage(self, value):
+        self.SetProperty("CODEPAGE", value)
+
+    @property
+    def PICS(self):
+        # IIS treats PICS as write-only; we are permissive and return the
+        # stored label (or empty string) instead of raising.
+        return self._pics or ""
+
+    @PICS.setter
+    def PICS(self, value):
+        self.SetProperty("PICS", value)
 
     @property
     def Cookies(self):
@@ -349,6 +372,13 @@ class Response:
             self._charset = vbs_cstr(value) or "utf-8"
             return
         if n == "CODEPAGE":
+            # Store the value so scripts can read it back (IIS semantics).
+            # Output byte-encoding remains driven by Charset for backwards
+            # compatibility (ASPPY has always emitted per _charset).
+            try:
+                self._codepage = int(value)
+            except Exception:
+                pass
             return
         if n == "CONTENTTYPE":
             self._content_type = vbs_cstr(value) or "text/html"
@@ -365,6 +395,15 @@ class Response:
             except Exception:
                 self._lcid = 0
             vbs_set_lcid(self._lcid)
+            return
+        if n == "PICS":
+            # IIS: Response.PICS adds a PICS-Label header (replace any prior).
+            self._pics = vbs_cstr(value)
+            self._extra_headers = [
+                (hn, hv) for (hn, hv) in self._extra_headers
+                if str(hn).lower() != "pics-label"
+            ]
+            self._extra_headers.append(("PICS-Label", self._pics))
             return
         if n == "STATUS":
             self.Status = value
