@@ -66,6 +66,7 @@ from ..ast_nodes import (
 from ..vb_runtime import vbs_cstr, VBScriptCOMError
 from .. import vb_datetime
 import datetime as _dt
+import weakref as _weakref
 from decimal import Decimal as _Decimal
 import math
 import struct
@@ -254,6 +255,16 @@ class VBClassDef:
         proc = self.private_methods.get(init_name) or self.public_methods.get(init_name)
         if proc is not None:
             interp._invoke_class_proc(inst, proc, [])
+        # Arm release-time Class_Terminate (issue #9) only for classes that
+        # define a handler, and only after Class_Initialize succeeded (a failed
+        # constructor must not fire Terminate). A weakref avoids creating an
+        # interp<->instance cycle that would defeat refcount-based release.
+        if 'CLASS_TERMINATE' in self.private_methods or 'CLASS_TERMINATE' in self.public_methods:
+            try:
+                inst._interp_ref = _weakref.ref(interp)
+                inst._owner_thread = threading.get_ident()
+            except Exception:
+                pass
         return inst
 
     def terminate_instance(self, interp: Any, inst: 'VBClassInstance'):
@@ -272,10 +283,41 @@ class VBClassDef:
 
 
 class VBClassInstance:
+    # Class-level defaults keep __del__ cheap for classes without a
+    # Class_Terminate handler (new_instance only sets these when one exists).
+    _interp_ref = None
+    _owner_thread = 0
+
     def __init__(self, cls: VBClassDef):
         self._cls = cls
         self._fields: dict[str, Any] = {}
         self._terminated = False
+
+    def __del__(self):
+        # Fire Class_Terminate when the last reference is released
+        # (Set obj = Nothing / reassignment / scope exit) - issue #9.
+        #
+        # Python's reference count is a strict superset of the script's
+        # references, so this can never run while script code can still reach
+        # the instance. Reference cycles (or internally retained refs) merely
+        # delay firing until end_request_cleanup, which remains the backstop.
+        try:
+            ref = self._interp_ref
+            if ref is None or self._terminated:
+                return
+            interp = ref()
+            if interp is None:
+                # Owning request already finished; end_request_cleanup ran.
+                return
+            # Only run script code on the thread that owns the interpreter.
+            # (e.g. a GC pass or another request overwriting a shared slot
+            # must not execute VB code against a foreign, running VM.)
+            if threading.get_ident() != self._owner_thread:
+                return
+            self._cls.terminate_instance(interp, self)
+        except Exception:
+            # Never let finalizer errors escape (VBScript ignores them too).
+            pass
 
     def _can_access_private(self, interp: Any) -> bool:
         return bool(interp._this_stack) and interp._this_stack[-1] is self
