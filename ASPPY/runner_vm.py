@@ -89,12 +89,16 @@ for _name in dir(_adodb):
 
 # Pre-inject builtins from vb_builtins_stub and vb_builtins_instrrev so that
 # _build_globals_env does not need to do per-request hasattr/getattr probes.
+# setdefault: the stub only FILLS GAPS (ScriptEngine, GetObject, Sgn, ...).
+# It must not shadow real implementations - many stub entries are lazy-import
+# wrappers around vb_datetime/vb_builtins (per-call import overhead) and some
+# (Sgn/Sin/Tan) use looser float() coercion than the real VBScript semantics.
 for _name in dir(_vb_builtins_stub):
     if _name.startswith('_'):
         continue
     _v = getattr(_vb_builtins_stub, _name)
     if callable(_v):
-        _STATIC_ENV_TEMPLATE[_name.upper()] = _v
+        _STATIC_ENV_TEMPLATE.setdefault(_name.upper(), _v)
 
 _STATIC_ENV_TEMPLATE['INSTRREV'] = _InStrRev
 _STATIC_ENV_TEMPLATE['CBOOL'] = vbs_cbool

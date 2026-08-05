@@ -632,8 +632,6 @@ class Parser:
             args = self._parse_args()
             return ResponseCall(member, args)
 
-            self._raise_c('SYNTAX_ERROR', "Unsupported Response member inside With")
-
         # Response.<member>
         if not self._match_ident("RESPONSE"):
             return self._parse_generic_stmt()

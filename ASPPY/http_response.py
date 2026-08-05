@@ -36,7 +36,6 @@ class Response:
         self._buffer_enabled = True
         self._buf_chunks: list[bytes] = []
         self._buf_str_parts: list[str] = []
-        self._buf_str_count = 0          # track count to avoid len() on every Write
         self._buf_str_limit = 8192
         self._sent_first_output = False
 
@@ -131,7 +130,6 @@ class Response:
                 txt = "".join(self._buf_str_parts)
                 self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
                 self._buf_str_parts.clear()
-                self._buf_str_count = 0
             self._buf_chunks.append(b)
         else:
             self._write_raw_bytes(b)
@@ -139,7 +137,6 @@ class Response:
     def Clear(self):
         self._buf_chunks.clear()
         self._buf_str_parts.clear()
-        self._buf_str_count = 0
 
     def Flush(self):
         if self._buffer_enabled:
@@ -147,7 +144,6 @@ class Response:
                 txt = "".join(self._buf_str_parts)
                 self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
                 self._buf_str_parts.clear()
-                self._buf_str_count = 0
             if self._buf_chunks:
                 self._write_raw_bytes(b"".join(self._buf_chunks))
                 self._buf_chunks.clear()
@@ -181,7 +177,6 @@ class Response:
                 txt = "".join(self._buf_str_parts)
                 self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
                 self._buf_str_parts.clear()
-                self._buf_str_count = 0
             self._buf_chunks.append(data)
         else:
             self._write_raw_bytes(data)
@@ -226,7 +221,6 @@ class Response:
                 txt = "".join(self._buf_str_parts)
                 self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
                 self._buf_str_parts.clear()
-                self._buf_str_count = 0
             self._buf_chunks.append(data)
         else:
             self._write_raw_bytes(data)
@@ -269,7 +263,6 @@ class Response:
                 txt = "".join(self._buf_str_parts)
                 self._buf_chunks.append(txt.encode(self._charset or "utf-8", errors="replace"))
                 self._buf_str_parts.clear()
-                self._buf_str_count = 0
             self._buf_chunks.append(b)
         else:
             self._write_raw_bytes(b)

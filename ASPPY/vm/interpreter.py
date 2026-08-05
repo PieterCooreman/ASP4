@@ -322,6 +322,23 @@ class VBClassInstance:
     def _can_access_private(self, interp: Any) -> bool:
         return bool(interp._this_stack) and interp._this_stack[-1] is self
 
+    def _vbs_has_member(self, interp: Any, up: str) -> bool:
+        """True iff _vbs_get_member_raw would resolve `up` (i.e. NOT raise
+        "Unknown member"). Used by hot lookup paths to avoid exception-driven
+        fallback to globals (raising/formatting an error per call is costly).
+        """
+        cls = self._cls
+        if up in cls.public_props or up in cls.public_methods:
+            return True
+        if up in self._fields:
+            # Private-field access violations raise a *different* error inside
+            # _vbs_get_member_raw, matching the previous fallback behavior.
+            return True
+        if self._can_access_private(interp) and (
+                up in cls.private_props or up in cls.private_methods):
+            return True
+        return False
+
     def _vbs_get_member_raw(self, interp: Any, name: str):
         up = name # parser ensures upper (or caller does)
 
@@ -608,13 +625,9 @@ class VBInterpreter:
                     # If this is a function return variable (or a non-callable)
                     # and we're in a class context, prefer the class member for recursion.
                     if prefer_proc and self._this_stack:
-                        try:
-                            callee = self._this_stack[-1]._vbs_get_member_raw(self, name_up)
-                        except VBScriptRuntimeError as e:
-                            if 'Unknown member:' in str(e):
-                                callee = None
-                            else:
-                                raise
+                        _inst = self._this_stack[-1]
+                        if isinstance(_inst, VBClassInstance) and _inst._vbs_has_member(self, name_up):
+                            callee = _inst._vbs_get_member_raw(self, name_up)
                     if callee is None:
                         if prefer_proc and name_up in self._procs:
                             callee = self._procs[name_up]
@@ -1053,13 +1066,9 @@ class VBInterpreter:
                 # If this is a function return variable (or a non-callable)
                 # and we're in a class context, prefer the class member for recursion.
                 if prefer_proc and self._this_stack:
-                    try:
-                        callee = self._this_stack[-1]._vbs_get_member_raw(self, name_up)
-                    except VBScriptRuntimeError as e:
-                        if 'Unknown member:' in str(e):
-                            callee = None
-                        else:
-                            raise
+                    _inst = self._this_stack[-1]
+                    if isinstance(_inst, VBClassInstance) and _inst._vbs_has_member(self, name_up):
+                        callee = _inst._vbs_get_member_raw(self, name_up)
                 if callee is None:
                     if prefer_proc and name_up in self._procs:
                         callee = self._procs[name_up]
@@ -2115,17 +2124,13 @@ class VBInterpreter:
         # Inside class procedures, VBScript allows calling members without `Me.`.
         # Prefer class members over global built-ins when names collide (e.g. aspLite's
         # `[isEmpty]` helper vs VBScript IsEmpty()).
+        # Membership is pre-checked instead of try/except so calling a global
+        # function (Sqr, UCase, ...) from a class method does not construct and
+        # unwind an "Unknown member" exception on every call.
         if self._this_stack:
-            try:
-                inst = self._this_stack[-1]
+            inst = self._this_stack[-1]
+            if isinstance(inst, VBClassInstance) and inst._vbs_has_member(self, up):
                 return inst.vbs_get_member(self, up)
-            except VBScriptRuntimeError as e:
-                # Only fall back to globals if the name truly isn't a member.
-                # Do not hide exceptions thrown *by* member execution.
-                if 'Unknown member:' in str(e):
-                    pass
-                else:
-                    raise
 
         # Globals/env
         if up in self.env:
@@ -2156,14 +2161,9 @@ class VBInterpreter:
             return v.get() if isinstance(v, _ByRef) else v
 
         if self._this_stack:
-            try:
-                inst = self._this_stack[-1]
+            inst = self._this_stack[-1]
+            if isinstance(inst, VBClassInstance) and inst._vbs_has_member(self, up):
                 return inst._vbs_get_member_raw(self, up)
-            except VBScriptRuntimeError as e:
-                if 'Unknown member:' in str(e):
-                    pass
-                else:
-                    raise
 
         if up in self.env:
             v = self.env[up]
@@ -2181,15 +2181,9 @@ class VBInterpreter:
             self.env[up] = value
 
 
-    def _terminate_frame_objects(self, frame: dict[str, Any], keep=None):
-        """Best-effort: call Class_Terminate for objects that go out of scope.
-
-        Important: Do not terminate the object that is being returned from a
-        Function/Property Get. In VBScript, returning an object does not
-        destroy it.
-        """
-        pass
-
+    # NOTE: scope-exit Class_Terminate is handled by VBClassInstance.__del__
+    # (refcount-based release) - see issue #9. Returned objects survive because
+    # the caller holds a reference to the return value.
 
     def end_request_cleanup(self, keep: set[int] | None = None):
         # Best-effort cleanup at end of request: terminate remaining class instances
@@ -2631,7 +2625,6 @@ class VBInterpreter:
                 rv = frame.get(fn_name, VBEmpty)
                 rv_value = rv.get() if isinstance(rv, _ByRef) else rv
 
-            self._terminate_frame_objects(frame, keep=rv_value)
             self._this_stack.pop()
             self._locals_stack.pop()
             self._proc_name_stack.pop()
@@ -2834,7 +2827,6 @@ class VBInterpreter:
                 rv = frame.get(fn_name, VBEmpty)
                 rv_value = rv.get() if isinstance(rv, _ByRef) else rv
 
-            self._terminate_frame_objects(frame, keep=rv_value)
             self._locals_stack.pop()
             self.on_error_resume_next = prev_onerr
             self._this_stack = prev_this_stack
