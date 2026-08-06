@@ -13,6 +13,7 @@ Start every new app from `www_starter`.
 - Build inside `www`
 - Do not modify `ASPPY\*.py`
 - Do not modify `www_starter\*.*`
+- Do not modify `www_test\*.*`
 - Use ASPPY only
 - Do not add IIS requirements
 - Run the dev server on port `8080`
