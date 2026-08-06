@@ -235,7 +235,7 @@ function generate(){
         "name": "ASPPY",
         "language": "VBScript (Classic ASP syntax)",
         "database": "SQLite via ADODB",
-        "server_command": "python -m ASPPY.server 0.0.0.0 5000 www",
+        "server_command": "python -m ASPPY.server 0.0.0.0 8080 www",
         "working_directory": "www",
         "starter_template": "Copy www_starter into www before building"
     };
@@ -245,7 +245,7 @@ function generate(){
         "Do not modify ASPPY\\*.py",
         "Do not modify www_starter\\*.*",
         "Use ASPPY only, do not add IIS requirements",
-        "Run dev server on port 5000",
+        "Run dev server on port 8080",
         "After editing any included .asp file, restart the ASPPY server process to clear the in-memory ASP compilation cache"
     ];
 
@@ -349,7 +349,7 @@ function generate(){
         "3. Build models, then controllers, then views",
         "4. Wire all includes in default.asp (models first, then controllers)",
         "5. Add routes to default.asp using nested If blocks for dynamic segments",
-        "6. Start server: python -m ASPPY.server 0.0.0.0 5000 www",
+        "6. Start server: python -m ASPPY.server 0.0.0.0 8080 www",
         "7. Run /setup once to create tables and insert sample data",
         "8. Test all routes including edge cases and 404s",
         "9. Report any issues encountered during development"
