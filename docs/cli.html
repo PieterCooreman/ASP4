@@ -359,8 +359,58 @@ python asppycli.py www_starter/default.asp --docroot www_starter --path /contact
 &lt;p&gt;Response.Write undefinedVar&lt;br&gt;
 -^&lt;/p&gt;</code></pre>
 
+<h2>Batch Checking a Whole Folder (asppycheck.py)</h2>
+<p>To validate every <code>.asp</code> page in a folder <strong>recursively</strong> with one command, use the companion script <code>asppycheck.py</code> (also in the repository root). It renders each page through the same VM pipeline and reports every failure with the file, line number and error description:</p>
+<pre><code class="language-bash"># Check all sample/test pages
+python asppycheck.py www_test
+
+# Check your own app
+python asppycheck.py www
+
+# Also list passing pages / stop at the first failure
+python asppycheck.py www --verbose
+python asppycheck.py www --fail-fast</code></pre>
+<p>Example output with one broken page:</p>
+<pre><code>FAIL  zz-broken.asp  [500] Variable is undefined: 'MISSINGVAR' (/zz-broken.asp, line 2)
+
+checked 28 page(s): 27 ok, 0 warning(s), 1 failure(s)
+
+failures:
+  zz-broken.asp: Variable is undefined: 'MISSINGVAR' (/zz-broken.asp, line 2)</code></pre>
+<table>
+    <thead>
+        <tr>
+            <th>Exit Code</th>
+            <th>Meaning</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>0</code></td>
+            <td>Every page rendered with HTTP status &lt; 500.</td>
+        </tr>
+        <tr>
+            <td><code>1</code></td>
+            <td>At least one page failed (status &gt;= 500 or engine exception).</td>
+        </tr>
+        <tr>
+            <td><code>2</code></td>
+            <td>Folder not found / no <code>.asp</code> files.</td>
+        </tr>
+    </tbody>
+</table>
+<ul>
+    <li>Pages returning <code>4xx</code> are reported as <strong>warnings</strong> only &mdash; MVC routers legitimately return <code>404</code> for unknown routes.</li>
+    <li>Directories named <code>includes</code> and directories starting with <code>_</code> are skipped by default, because include fragments (headers, footers, helper libraries) cannot render standalone. Add more with <code>--exclude DIR</code>, or scan everything with <code>--no-default-excludes</code>.</li>
+    <li>For <strong>MVC apps</strong>, exclude the fragment folder: <code>python asppycheck.py www --exclude asp</code> &mdash; controllers, models and views in <code>www/asp/</code> are include fragments, not standalone pages. The front controller will WARN with <code>404</code> (no route given); verify real routes with <code>asppycli.py --path</code> as shown above.</li>
+    <li>The scanned folder is used as the docroot, so includes and <code>Server.MapPath()</code> resolve exactly as under the HTTP server.</li>
+</ul>
+<div class="alert-box alert-info">
+    <strong>AI agents:</strong> after any change that touches multiple files (shared includes, models, layouts), run <code>python asppycheck.py www</code> once instead of re-testing pages one by one &mdash; it catches regressions across the whole app in a single command.
+</div>
+
 <h2>Automation and CI</h2>
-<p>Because output is deterministic and exit codes are meaningful, the runner slots directly into shell loops and CI pipelines:</p>
+<p>Because output is deterministic and exit codes are meaningful, the runner slots directly into shell loops and CI pipelines. For the common case &mdash; "does every page still render?" &mdash; prefer <code>asppycheck.py</code> above; the loops below show the building blocks for custom assertions:</p>
 <pre><code class="language-bash"># bash: fail the build if any demo page errors
 for f in www_test/*.asp; do
     python asppycli.py "$f" --docroot www_test -o /dev/null || { echo "FAIL: $f"; exit 1; }
@@ -382,6 +432,7 @@ diff baseline.html new.html</code></pre>
         <li>Check the exit code: <code>0</code> means the page rendered without a runtime error.</li>
         <li>Inspect stdout for the expected HTML; on exit code <code>1</code>, read the error page &mdash; it names the file, line and source of the failure.</li>
         <li>For MVC routes, verify each real route: <code>--path /contacts/1</code>, <code>--path /contacts/1/edit</code>, and confirm unknown routes exit <code>1</code> with a 404.</li>
+        <li>After changes that touch shared files (includes, models, layouts), run <code>python asppycheck.py www</code> to batch-verify every page at once.</li>
     </ol>
 </div>
 

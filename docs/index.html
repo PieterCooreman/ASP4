@@ -251,7 +251,8 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <h2>Testing pages from the command line</h2>
 <p>ASPPY ships a CLI runner, <code>asppycli.py</code>, that renders any <code>.asp</code> page offline through the same VM pipeline as the HTTP server &mdash; no server, no port, no browser. It is the recommended verification tool for <strong>AI agents</strong> and CI scripts building ASPPY apps: the exit code tells you instantly whether a page rendered cleanly.</p>
 <pre><code class="language-bash">python asppycli.py www_test/index.asp
-python asppycli.py www_test/01-basics.asp -o out.html</code></pre>
+python asppycli.py www_test/01-basics.asp -o out.html
+python asppycheck.py www_test   # batch-check every page recursively</code></pre>
 <p>See the full guide: <a href="cli.html">CLI Runner (asppycli.py)</a>.</p>
 
 <div class="alert-box alert-info">
