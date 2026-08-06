@@ -214,6 +214,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
   <nav>
     <ul>
       <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
       <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
       <li><a href="database.html">Database (ADODB)</a></li>
       <li><a href="pop3_imap.html">ASPPY Mail</a></li>
@@ -232,7 +233,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 </aside>
 <main id="main-content" class="doc-main">
 <h2>What It Does</h2>
-<p>This <code>web.config</code> makes IIS act as a <strong>reverse proxy</strong>: all incoming HTTP traffic to your IIS website is silently forwarded to <strong>ASPPY</strong>, running as a service on <code>localhost:8080</code>. The client never sees port 8080 — to the outside world, IIS remains the web server, just as it did with Classic ASP.</p>
+<p>This <code>web.config</code> makes IIS act as a <strong>reverse proxy</strong>: all incoming HTTP traffic to your IIS website is silently forwarded to <strong>ASPPY</strong>, running as a service on <code>localhost:8080</code>. The client never sees port 8080 â€” to the outside world, IIS remains the web server, just as it did with Classic ASP.</p>
 <p>This setup is the easiest (no the only) way to run ASPPY as a drop-in replacement for Classic ASP/VBScript pages, without changing any URLs or client-facing behaviour.</p>
 <pre><code class="language-xml">&lt;configuration&gt;
   &lt;system.webServer&gt;
@@ -251,7 +252,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <hr />
 <h2>Line-by-Line Explanation</h2>
 <h3><code>&lt;httpErrors existingResponse="PassThrough" /&gt;</code></h3>
-<p>By default, IIS intercepts HTTP error responses (404, 500, etc.) and replaces them with its own error pages. <code>PassThrough</code> disables this — whatever ASPPY returns is sent directly to the client, errors included. This is important so that ASPPY's own error handling reaches the browser unmodified.</p>
+<p>By default, IIS intercepts HTTP error responses (404, 500, etc.) and replaces them with its own error pages. <code>PassThrough</code> disables this â€” whatever ASPPY returns is sent directly to the client, errors included. This is important so that ASPPY's own error handling reaches the browser unmodified.</p>
 <h3><code>&lt;match url=".*" /&gt;</code></h3>
 <p>A regular expression that matches <strong>every</strong> incoming request URL, without exception. All <code>.asp</code> pages, static assets, and any other requests are captured by this rule.</p>
 <h3><code>stopProcessing="true"</code></h3>
@@ -268,7 +269,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
         <tr><td><code>/shop/order.asp?id=42</code></td><td><code>http://localhost:8080/shop/order.asp?id=42</code></td></tr>
     </tbody>
 </table>
-<p>This is a <strong>rewrite</strong>, not a <strong>redirect</strong> — the URL in the browser does not change.</p>
+<p>This is a <strong>rewrite</strong>, not a <strong>redirect</strong> â€” the URL in the browser does not change.</p>
 <hr />
 <h2>Requirements</h2>
 <h3>1. URL Rewrite Module <em>(required)</em></h3>
@@ -276,14 +277,14 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <ul>
     <li>Download: <a href="https://www.iis.net/downloads/microsoft/url-rewrite">IIS URL Rewrite</a></li>
 </ul>
-<h3>2. Application Request Routing — ARR <em>(required)</em></h3>
+<h3>2. Application Request Routing â€” ARR <em>(required)</em></h3>
 <p>Enables IIS to forward HTTP requests to ASPPY on port 8080. The URL Rewrite module alone can rewrite URLs internally, but cannot proxy requests over HTTP to another process.</p>
 <ul>
     <li>Download: <a href="https://www.iis.net/downloads/microsoft/application-request-routing">IIS Application Request Routing</a></li>
 </ul>
 <div class="alert-box alert-warning">
     <strong>Important:</strong> After installing ARR, you must explicitly enable the proxy at the <strong>server level</strong> in IIS Manager:<br />
-    <em>IIS Manager → Server node → Application Request Routing Cache → Server Proxy Settings → Enable proxy → Apply</em><br />
+    <em>IIS Manager â†’ Server node â†’ Application Request Routing Cache â†’ Server Proxy Settings â†’ Enable proxy â†’ Apply</em><br />
     This is a one-time step per server. Without it, rewrite rules that forward to <code>http://localhost:port</code> will silently fail with a 404.
 </div>
 <h3>3. ASPPY running on port 8080 <em>(required)</em></h3>
@@ -293,10 +294,10 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <p>This <code>web.config</code> only affects the <strong>site it belongs to</strong>. Enabling ARR proxy at the server level is a global capability switch, but the actual forwarding behaviour is controlled entirely by per-site rewrite rules. Other IIS websites on the same server without these rules are completely unaffected.</p>
 <hr />
 <h2>Traffic Flow</h2>
-<pre><code>Browser → IIS :80/:443 → ASPPY on localhost:8080
-                      ← response returned to browser
+<pre><code>Browser â†’ IIS :80/:443 â†’ ASPPY on localhost:8080
+                      â† response returned to browser
 </code></pre>
-<p>IIS handles SSL termination, logging, and connection management. ASPPY receives plain HTTP requests on port 8080 and returns responses exactly as Classic ASP did — the transition is transparent to the client.</p>
+<p>IIS handles SSL termination, logging, and connection management. ASPPY receives plain HTTP requests on port 8080 and returns responses exactly as Classic ASP did â€” the transition is transparent to the client.</p>
 </main>
 </div>
 <footer class="doc-footer">

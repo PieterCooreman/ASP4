@@ -214,6 +214,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
   <nav>
     <ul>
       <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
       <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
       <li><a href="database.html">Database (ADODB)</a></li>
       <li><a href="pop3_imap.html">ASPPY Mail</a></li>
@@ -232,12 +233,12 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 </aside>
 <main id="main-content" class="doc-main">
 <h2>The Problem</h2>
-<p>Classic ASP applications written in VBScript are facing an existential threat — not because ASP itself is broken, but because <strong>Microsoft is removing VBScript from Windows entirely</strong>.</p>
+<p>Classic ASP applications written in VBScript are facing an existential threat â€” not because ASP itself is broken, but because <strong>Microsoft is removing VBScript from Windows entirely</strong>.</p>
 <p>Classic ASP relied on VBScript as its scripting engine. No VBScript means no Classic ASP. For organisations and developers running ASP applications that still work perfectly fine and serve real users, this is a serious problem.</p>
 <p>ASPPY is the answer.</p>
 <hr />
 <h2>Microsoft's VBScript Deprecation Timeline</h2>
-<p>VBScript (Visual Basic Scripting Edition) is a lightweight scripting language first introduced by Microsoft in 1996. It has been available as a system component in Windows and widely used for automating tasks and controlling applications, as well as embedded within HTML pages — commonly in conjunction with Active Server Pages (ASP).</p>
+<p>VBScript (Visual Basic Scripting Edition) is a lightweight scripting language first introduced by Microsoft in 1996. It has been available as a system component in Windows and widely used for automating tasks and controlling applications, as well as embedded within HTML pages â€” commonly in conjunction with Active Server Pages (ASP).</p>
 <p>Microsoft announced a phased deprecation plan in May 2024. The three phases are as follows:</p>
 <ul>
     <li><strong>Phase 1:</strong> VBScript is pre-installed as a Feature on Demand (FOD) by default in Windows 11 24H2 and later, ensuring existing dependencies still work while organisations migrate away.</li>
@@ -248,8 +249,8 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <hr />
 <h2>Why Microsoft Is Removing VBScript</h2>
 <p>This move is part of a broader strategy to remove Windows and Office features that threat actors use as attack vectors to deliver malware. Attackers have used VBScript in campaigns distributing strains like Lokibot, Emotet, Qbot, and DarkGate.</p>
-<p>Microsoft states that technology has advanced over the years, giving rise to more powerful and versatile scripting languages such as JavaScript and PowerShell — languages that offer broader capabilities and are better suited for modern web development and automation tasks.</p>
-<p>In short: VBScript is old, unmaintained, and a security liability. Its last stable release (5.8) dates back to 2010 — over fifteen years ago.</p>
+<p>Microsoft states that technology has advanced over the years, giving rise to more powerful and versatile scripting languages such as JavaScript and PowerShell â€” languages that offer broader capabilities and are better suited for modern web development and automation tasks.</p>
+<p>In short: VBScript is old, unmaintained, and a security liability. Its last stable release (5.8) dates back to 2010 â€” over fifteen years ago.</p>
 <hr />
 <h2>The Impact on Classic ASP</h2>
 <p>Classic ASP applications written in VBScript will stop working once Phase 3 is reached. This affects:</p>
@@ -262,17 +263,17 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 <hr />
 <h2>What ASPPY Is</h2>
 <p>ASPPY is a self-contained Classic ASP execution engine that runs <strong>independently of the Windows VBScript component</strong>. It bundles its own VBScript interpreter, meaning it does not depend on Windows to provide <code>vbscript.dll</code>.</p>
-<p>Crucially, ASPPY is <strong>built entirely in Python</strong>. Python runs on Windows, Linux, and macOS — which means ASPPY does too. This is a fundamental architectural decision that makes ASPPY truly platform-independent. A Classic ASP application can now be hosted on a Linux VPS, a macOS development machine, or a Windows Server, without any changes to the ASP code itself. Linux typically runs Python 10–30% faster than Windows, increasing the performance advantage of ASPPY over Classic ASP/VBScript on IIS.</p>
+<p>Crucially, ASPPY is <strong>built entirely in Python</strong>. Python runs on Windows, Linux, and macOS â€” which means ASPPY does too. This is a fundamental architectural decision that makes ASPPY truly platform-independent. A Classic ASP application can now be hosted on a Linux VPS, a macOS development machine, or a Windows Server, without any changes to the ASP code itself. Linux typically runs Python 10â€“30% faster than Windows, increasing the performance advantage of ASPPY over Classic ASP/VBScript on IIS.</p>
 <p>This means:</p>
 <ul>
     <li>Classic ASP applications continue to run unchanged, even after Microsoft removes VBScript from Windows</li>
     <li>No rewrite of existing ASP code is required</li>
-    <li>ASPPY runs on <strong>Windows, Linux and macOS</strong> — anywhere Python runs</li>
+    <li>ASPPY runs on <strong>Windows, Linux and macOS</strong> â€” anywhere Python runs</li>
     <li>ASPPY runs as a standalone HTTP server (on port 8080 by default), sitting behind a reverse proxy such as IIS, nginx, or Apache</li>
-    <li>The proxy handles everything else — static files, PHP, ASPX — and transparently forwards <code>.asp</code> requests to ASPPY</li>
+    <li>The proxy handles everything else â€” static files, PHP, ASPX â€” and transparently forwards <code>.asp</code> requests to ASPPY</li>
 </ul>
 <hr />
-<h2>Platform Independence — Windows, Linux, Android and macOS</h2>
+<h2>Platform Independence â€” Windows, Linux, Android and macOS</h2>
 <p>Because ASPPY is built on Python, it is not tied to any operating system. This opens up hosting scenarios that were never previously possible for Classic ASP:</p>
 <table>
     <thead>
@@ -285,49 +286,49 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
         <tr><td>Android</td><td>KSWEB, Servers Ultimate, UserLAnd + nginx</td><td>&#9989;</td></tr>
     </tbody>
 </table>
-<p>A Classic ASP application that today runs on a Windows Server with IIS can tomorrow be migrated to a Linux cloud instance at a fraction of the hosting cost — with zero changes to the ASP code. Developers on macOS can run and test Classic ASP applications locally without needing a Windows machine or a VM.</p>
+<p>A Classic ASP application that today runs on a Windows Server with IIS can tomorrow be migrated to a Linux cloud instance at a fraction of the hosting cost â€” with zero changes to the ASP code. Developers on macOS can run and test Classic ASP applications locally without needing a Windows machine or a VM.</p>
 <p>Android support is a particularly striking example of just how platform-independent ASPPY is. Python runs on Android via environments like Termux or UserLAnd, and several web server applications are available for Android:</p>
 <ul>
-    <li><strong>KSWEB</strong> — a full-featured web server app for Android supporting nginx, Apache, and PHP</li>
-    <li><strong>Servers Ultimate</strong> — a flexible server suite for Android supporting Apache, nginx and many other protocols</li>
-    <li><strong>Termux + nginx/Apache</strong> — Termux provides a full Linux-like environment on Android where nginx or Apache can be installed and run alongside ASPPY via Python</li>
-    <li><strong>UserLAnd</strong> — runs a full Linux distribution on Android without root, enabling standard nginx or Apache setups</li>
+    <li><strong>KSWEB</strong> â€” a full-featured web server app for Android supporting nginx, Apache, and PHP</li>
+    <li><strong>Servers Ultimate</strong> â€” a flexible server suite for Android supporting Apache, nginx and many other protocols</li>
+    <li><strong>Termux + nginx/Apache</strong> â€” Termux provides a full Linux-like environment on Android where nginx or Apache can be installed and run alongside ASPPY via Python</li>
+    <li><strong>UserLAnd</strong> â€” runs a full Linux distribution on Android without root, enabling standard nginx or Apache setups</li>
 </ul>
-<p>This means a Classic ASP application can technically be developed, tested, or even served from an Android device — something that was never conceivable with native Classic ASP on Windows.</p>
+<p>This means a Classic ASP application can technically be developed, tested, or even served from an Android device â€” something that was never conceivable with native Classic ASP on Windows.</p>
 <p>This platform independence is a second major reason ASPPY was created, entirely separate from the VBScript deprecation issue. It fundamentally changes where Classic ASP can run.</p>
 <hr />
 <h2>How ASPPY Fits Into the IIS Setup</h2>
-<p>The <code>web.config</code> described in the companion wiki page routes <code>.asp</code> requests to ASPPY via IIS Application Request Routing (ARR). From the browser's perspective, nothing changes — the same URLs, the same responses, the same behaviour. ASPPY is completely invisible.</p>
-<pre><code>Browser → IIS (port 80/443)
-              │
-              ├─ *.php   → PHP via FastCGI
-              ├─ *.aspx  → ASP.NET
-              ├─ static  → IIS StaticFile module
-              └─ *.asp   → ASPPY (port 8080)
+<p>The <code>web.config</code> described in the companion wiki page routes <code>.asp</code> requests to ASPPY via IIS Application Request Routing (ARR). From the browser's perspective, nothing changes â€” the same URLs, the same responses, the same behaviour. ASPPY is completely invisible.</p>
+<pre><code>Browser â†’ IIS (port 80/443)
+              â”‚
+              â”œâ”€ *.php   â†’ PHP via FastCGI
+              â”œâ”€ *.aspx  â†’ ASP.NET
+              â”œâ”€ static  â†’ IIS StaticFile module
+              â””â”€ *.asp   â†’ ASPPY (port 8080)
 </code></pre>
-<p>On Linux or macOS, nginx or Apache fills the same role as IIS — proxying <code>.asp</code> requests to ASPPY on port 8080 while handling everything else natively.</p>
+<p>On Linux or macOS, nginx or Apache fills the same role as IIS â€” proxying <code>.asp</code> requests to ASPPY on port 8080 while handling everything else natively.</p>
 <p>When Microsoft eventually removes VBScript from Windows in Phase 3, IIS-hosted Classic ASP applications protected by this setup will continue running without interruption.</p>
 <hr />
 <h2>ASPPY Picks Up Where Classic ASP Left Off</h2>
-<p>ASPPY is not just a compatibility layer — it also extends Classic ASP with features that developers always wished were there but Microsoft never added.</p>
+<p>ASPPY is not just a compatibility layer â€” it also extends Classic ASP with features that developers always wished were there but Microsoft never added.</p>
 <h3>Extended Request and Response Objects</h3>
 <p>Classic ASP's <code>Request</code> and <code>Response</code> objects were functional but limited, especially around file handling. ASPPY adds two long-missing capabilities:</p>
 <ul>
-    <li><strong><code>Request.Files</code></strong> — a straightforward way to access uploaded files from a multipart form submission. Classic ASP required third-party components or complex workarounds to handle file uploads. In ASPPY this is built in.</li>
-    <li><strong><code>Response.File</code></strong> — a single method to flush any file directly to the browser, handling headers, content type, and binary streaming automatically. Sending a file for download in Classic ASP required cumbersome binary stream workarounds. In ASPPY it is one line.</li>
+    <li><strong><code>Request.Files</code></strong> â€” a straightforward way to access uploaded files from a multipart form submission. Classic ASP required third-party components or complex workarounds to handle file uploads. In ASPPY this is built in.</li>
+    <li><strong><code>Response.File</code></strong> â€” a single method to flush any file directly to the browser, handling headers, content type, and binary streaming automatically. Sending a file for download in Classic ASP required cumbersome binary stream workarounds. In ASPPY it is one line.</li>
 </ul>
 <h3>New Built-in Modules</h3>
 <p>ASPPY ships with a set of native modules that address the gaps Classic ASP developers have always worked around with third-party ActiveX components or external tools:</p>
 <ul>
-    <li><strong><code>ASPPY.zip</code></strong> — create and extract ZIP archives directly from ASP code, with no external dependencies</li>
-    <li><strong><code>ASPPY.pdf</code></strong> — generate PDF documents server-side, a capability Classic ASP never had natively</li>
-    <li><strong><code>ASPPY.image</code></strong> — manipulate images server-side: resize, crop, convert formats and more</li>
-    <li><strong><code>ASPPY.JSON</code></strong> — parse and produce JSON natively, essential for modern web applications and APIs</li>
-    <li><strong><code>ASPPY.pop3</code></strong> — connect and read a pop3-enabled mailbox</li>
-    <li><strong><code>ASPPY.imap</code></strong> — connect and read an imap-enabled mailbox</li>
-    <li><strong><code>ASPPY.ExecutePython</code></strong> — run any Python code or library (<code>numpy</code>, <code>pandas</code>, <code>psutil</code>, etc.) directly from VBScript, bridging legacy ASP to the full Python ecosystem</li>
+    <li><strong><code>ASPPY.zip</code></strong> â€” create and extract ZIP archives directly from ASP code, with no external dependencies</li>
+    <li><strong><code>ASPPY.pdf</code></strong> â€” generate PDF documents server-side, a capability Classic ASP never had natively</li>
+    <li><strong><code>ASPPY.image</code></strong> â€” manipulate images server-side: resize, crop, convert formats and more</li>
+    <li><strong><code>ASPPY.JSON</code></strong> â€” parse and produce JSON natively, essential for modern web applications and APIs</li>
+    <li><strong><code>ASPPY.pop3</code></strong> â€” connect and read a pop3-enabled mailbox</li>
+    <li><strong><code>ASPPY.imap</code></strong> â€” connect and read an imap-enabled mailbox</li>
+    <li><strong><code>ASPPY.ExecutePython</code></strong> â€” run any Python code or library (<code>numpy</code>, <code>pandas</code>, <code>psutil</code>, etc.) directly from VBScript, bridging legacy ASP to the full Python ecosystem</li>
 </ul>
-<p>These modules make ASPPY a genuinely capable modern web platform, not simply a preservation effort. Existing Classic ASP code runs unchanged, and new code can take advantage of these modules immediately — no third-party components, no COM registration, no legacy ActiveX dependencies.</p>
+<p>These modules make ASPPY a genuinely capable modern web platform, not simply a preservation effort. Existing Classic ASP code runs unchanged, and new code can take advantage of these modules immediately â€” no third-party components, no COM registration, no legacy ActiveX dependencies.</p>
 <hr />
 <h2>Summary</h2>
 <table>
@@ -340,7 +341,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
         <tr><td>Runs on Linux and macOS</td><td>&#10060; No</td><td>&#9989; Yes</td></tr>
         <tr><td>Runs on Android</td><td>&#10060; No</td><td>&#9989; Yes</td></tr>
         <tr><td>Built on Python</td><td>&#10060; No</td><td>&#9989; Yes</td></tr>
-        <tr><td>Code changes required</td><td>—</td><td>None</td></tr>
+        <tr><td>Code changes required</td><td>â€”</td><td>None</td></tr>
         <tr><td>Works with existing IIS setup</td><td>&#9989; Yes</td><td>&#9989; Yes (via ARR proxy)</td></tr>
         <tr><td>Works with nginx / Apache</td><td>&#10060; No</td><td>&#9989; Yes</td></tr>
         <tr><td>Handles static files, PHP, ASPX</td><td>&#9989; Yes</td><td>&#9989; Yes (proxy handles these)</td></tr>
@@ -350,7 +351,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
         <tr><td>ExecutePython (run Python from VBScript)</td><td>&#10060; No</td><td>&#9989; Yes</td></tr>
     </tbody>
 </table>
-<p>ASPPY is not a workaround — it is a forward-compatible replacement engine that lets Classic ASP applications outlive the platform they were built on.</p>
+<p>ASPPY is not a workaround â€” it is a forward-compatible replacement engine that lets Classic ASP applications outlive the platform they were built on.</p>
 </main>
 </div>
 <footer class="doc-footer">

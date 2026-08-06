@@ -22,6 +22,64 @@ Start every new app from `www_starter`.
 python -m ASPPY.server 0.0.0.0 8080 www
 ```
 
+## CLI Runner: Test ASP Pages Without the Server (IMPORTANT FOR AI AGENTS)
+
+ASPPY ships a command-line runner, `asppycli.py` (repo root), that renders a
+single `.asp` file directly to stdout **without starting the HTTP server**.
+It uses the exact same VM render pipeline as `ASPPY/server.py` (including
+`global.asa`, Application/Session state, includes, and `Server.Execute`), so
+the output matches the HTTP server byte-for-byte.
+
+**If you are an AI model or automation script working on an ASPPY app, use
+this tool to verify every page you create or edit.** It is much faster than
+starting the server and fetching a URL, and the process exit code tells you
+immediately whether the page rendered cleanly.
+
+```bash
+# Render a demo/test page to stdout (sample pages live in www_test)
+python asppycli.py www_test/index.asp
+
+# Save output to a file (for diffing against a known-good baseline)
+python asppycli.py www_test/01-basics.asp -o out.html
+
+# Simulate a form POST
+python asppycli.py www_test/07-request-form.asp --method POST --body "username=Ann&color=blue"
+
+# Pass a query string (page from your own app in www)
+python asppycli.py www/report.asp --query "id=42&mode=edit"
+
+# Test an MVC front-controller route (Request.Path sees /contacts/1/edit)
+python asppycli.py www/default.asp --docroot www --path /contacts/1/edit
+
+# Show the HTTP status line and response headers (printed to stderr)
+python asppycli.py www_test/index.asp --show-headers
+```
+
+Exit codes (use these in scripts and CI):
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | page rendered with HTTP status < 400 |
+| `1` | page rendered with HTTP status >= 400 (e.g. `500` ASP runtime error, `404` route) |
+| `2` | usage error / `.asp` file not found |
+
+Notes:
+
+- `--docroot` defaults to the directory containing the `.asp` file; pass it
+  explicitly for MVC apps so includes and `Server.MapPath()` resolve the same
+  way as under the HTTP server (e.g. `--docroot www`)
+- A runtime error renders the same IIS-style error page the server would
+  return, with file, line number and source caret - read it from stdout
+- Each invocation is a fresh process: the ASP compilation cache is empty, so
+  there is no need to restart anything after editing includes
+- Verification loop for agents: edit the `.asp` file, run
+  `python asppycli.py <file> --docroot www`, check exit code is `0`, and
+  inspect stdout for the expected HTML
+
+Credit: the CLI runner was contributed by
+[Jeffrey (@jeffreyheping)](https://github.com/jeffreyheping) in
+[issue #10](https://github.com/PieterCooreman/ASPPY/issues/10).
+
 ## Use One App Model Only
 
 Pick one model and stay consistent.
@@ -322,3 +380,4 @@ Before finishing, verify:
 - assets are in `www/assets`
 - uploads are in `www/uploads`
 - pages load without ASPPY runtime errors
+- every new or edited page was verified with the CLI runner: `python asppycli.py <file> --docroot www` exits `0`

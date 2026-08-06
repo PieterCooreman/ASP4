@@ -214,6 +214,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
   <nav>
     <ul>
       <li><a href="index.html" class="active">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
       <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
       <li><a href="database.html">Database (ADODB)</a></li>
       <li><a href="pop3_imap.html">ASPPY Mail</a></li>
@@ -246,6 +247,12 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
     <li><strong>ASPPY.pop3 & ASPPY.imap</strong>: Built-in modern mail clients.</li>
     <li><strong>ASPPY.ExecutePython</strong>: Run any Python code or package (<code>numpy</code>, <code>pandas</code>, <code>psutil</code>, etc.) directly from VBScript, bridging legacy ASP to the full Python ecosystem.</li>
 </ul>
+
+<h2>Testing pages from the command line</h2>
+<p>ASPPY ships a CLI runner, <code>asppycli.py</code>, that renders any <code>.asp</code> page offline through the same VM pipeline as the HTTP server &mdash; no server, no port, no browser. It is the recommended verification tool for <strong>AI agents</strong> and CI scripts building ASPPY apps: the exit code tells you instantly whether a page rendered cleanly.</p>
+<pre><code class="language-bash">python asppycli.py www_test/index.asp
+python asppycli.py www_test/01-basics.asp -o out.html</code></pre>
+<p>See the full guide: <a href="cli.html">CLI Runner (asppycli.py)</a>.</p>
 
 <div class="alert-box alert-info">
     <strong>Start Exploring:</strong> Use the sidebar to navigate to detailed documentation and VBScript sample code for each extension.

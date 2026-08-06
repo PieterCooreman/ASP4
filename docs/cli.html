@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ASPPY.crypto - Secure password hashing with bcrypt in Classic ASP/VBScript.">
-    <title>ASPPY.crypto - ASPPY Framework Documentation</title>
+    <meta name="description" content="asppycli.py - Render a single ASP page from the command line, without the HTTP server. Ideal for AI agents, offline testing and CI automation.">
+    <title>CLI Runner (asppycli.py) - ASPPY Framework Documentation</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
@@ -183,6 +183,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 .alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
 .alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
 .alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+.alert-danger { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: var(--text-primary); }
 @media (max-width: 768px) {
   .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
@@ -202,7 +203,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
     </a>
     <div class="nav-actions">
       <a href="index.html" class="nav-link">Website</a>
-	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="prompt-builder.html" class="nav-link">Prompt builder</a>
       <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
       <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
       <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
@@ -214,14 +215,14 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
   <nav>
     <ul>
       <li><a href="index.html">Overview</a></li>
-      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="cli.html" class="active">CLI Runner</a></li>
       <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
       <li><a href="database.html">Database (ADODB)</a></li>
       <li><a href="pop3_imap.html">ASPPY Mail</a></li>
       <li><a href="zip.html">ASPPY.zip</a></li>
       <li><a href="pdf.html">ASPPY.pdf</a></li>
       <li><a href="image.html">ASPPY.image</a></li>
-      <li><a href="crypto.html" class="active">ASPPY.crypto</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
       <li><a href="json.html">ASPPY.json</a></li>
       <li><a href="python.html">ASPPY.ExecutePython</a></li>
       <li><a href="specifications.html">Specifications</a></li>
@@ -232,55 +233,169 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
   </nav>
 </aside>
 <main id="main-content" class="doc-main">
-<h1>ASPPY.crypto</h1>
-<p>The <code>ASPPY.crypto</code> namespace provides modern, secure cryptography utilizing the Python <code>bcrypt</code> module. This is heavily recommended over legacy MD5 or SHA1 hashing techniques common in older VBScript apps.</p>
 
-<h3>Methods</h3>
+<h1>CLI Runner (asppycli.py)</h1>
+<p><code>asppycli.py</code> (in the repository root) renders a single <code>.asp</code> page from the command line and writes the result to stdout &mdash; <strong>without starting the HTTP server</strong>. It uses the exact same VM render pipeline as <code>ASPPY/server.py</code>, including <code>global.asa</code>, Application/Session state, <code>#include</code> resolution and <code>Server.Execute</code>, so the output matches the HTTP server byte-for-byte.</p>
+
+<div class="alert-box alert-info">
+    <strong>Built for AI agents and automation.</strong> If you are an AI model (or a CI script) building an ASPPY app, this is the fastest way to verify every page you create or edit: no server to start, no port, no browser. Run the page, check the <strong>exit code</strong>, and read the rendered HTML (or the IIS-style error page) straight from stdout.
+</div>
+
+<h2>Quick Start</h2>
+<pre><code class="language-bash"># Render a demo/test page to stdout (sample pages live in www_test)
+python asppycli.py www_test/index.asp
+
+# Save output to a file (for diffing against a known-good baseline)
+python asppycli.py www_test/01-basics.asp -o out.html</code></pre>
+
+<h2>Working Example</h2>
+<p>Run one of the demo pages that ships with ASPPY (in the <code>www_test</code> folder) and show the response headers:</p>
+<pre><code class="language-bash">python asppycli.py www_test/01-basics.asp --show-headers -o out.html</code></pre>
+<p>Output (headers go to <em>stderr</em>, the rendered body goes to <code>out.html</code>):</p>
+<pre><code>HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+Pragma: no-cache
+Expires: 0
+Set-Cookie: ASP_PY_SESSIONID=4ba3049be4de42228f842e494f41e5ce; Path=/</code></pre>
+<p>The process exits with code <code>0</code>, and <code>out.html</code> contains the fully rendered page &mdash; identical to what the HTTP server would send to a browser.</p>
+
+<h2>Command-Line Options</h2>
 <table>
     <thead>
         <tr>
-            <th>Method</th>
+            <th>Option</th>
             <th>Description</th>
         </tr>
     </thead>
     <tbody>
         <tr>
-            <td><code>Hash(password, [rounds=10])</code></td>
-            <td>Hashes a plaintext password using bcrypt. The salt is automatically generated. The result is a safe string intended for database storage. <code>rounds</code> specifies the work factor (default is 10, acceptable range 4..31).</td>
+            <td><code>file</code></td>
+            <td>Path to the <code>.asp</code> file to render (required, positional).</td>
         </tr>
         <tr>
-            <td><code>Verify(password, hashed)</code></td>
-            <td>Safely compares a plaintext password against a previously generated bcrypt hash. Returns <code>True</code> if they match, and <code>False</code> otherwise.</td>
+            <td><code>-o, --output FILE</code></td>
+            <td>Write the rendered body to <code>FILE</code> instead of stdout. Preserves bytes exactly (binary-safe).</td>
+        </tr>
+        <tr>
+            <td><code>--docroot DIR</code></td>
+            <td>Document root. Defaults to the directory containing the <code>.asp</code> file. Pass it explicitly for MVC apps (e.g. <code>--docroot www</code>) so includes and <code>Server.MapPath()</code> resolve exactly as under the HTTP server.</td>
+        </tr>
+        <tr>
+            <td><code>--method VERB</code></td>
+            <td>HTTP method to simulate (default <code>GET</code>).</td>
+        </tr>
+        <tr>
+            <td><code>--query QS</code></td>
+            <td>Query string, e.g. <code>--query "id=42&amp;mode=edit"</code>. Available via <code>Request.QueryString</code>.</td>
+        </tr>
+        <tr>
+            <td><code>--body DATA</code></td>
+            <td>Request body. Implies <code>POST</code> and <code>Content-Type: application/x-www-form-urlencoded</code>, so values arrive in <code>Request.Form</code>.</td>
+        </tr>
+        <tr>
+            <td><code>--header "Name: Value"</code></td>
+            <td>Extra request header (repeatable).</td>
+        </tr>
+        <tr>
+            <td><code>--path URL</code></td>
+            <td>Virtual request path seen by <code>Request.Path</code> &mdash; use this to test MVC front-controller routes, e.g. <code>--path /contacts/1/edit</code>.</td>
+        </tr>
+        <tr>
+            <td><code>--show-headers</code></td>
+            <td>Print the HTTP status line and response headers to stderr (keeps stdout clean for the body).</td>
         </tr>
     </tbody>
 </table>
 
-<h3>Sample Code</h3>
-<pre><code class="language-vbscript">&lt;%
-Dim password, hashedPw, isValid
+<h2>Exit Codes</h2>
+<p>Designed for scripts: check the exit code before parsing any output.</p>
+<table>
+    <thead>
+        <tr>
+            <th>Exit Code</th>
+            <th>Meaning</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>0</code></td>
+            <td>Page rendered with HTTP status &lt; 400.</td>
+        </tr>
+        <tr>
+            <td><code>1</code></td>
+            <td>Page rendered with HTTP status &gt;= 400 (e.g. <code>500</code> ASP runtime error, <code>404</code> unknown route). The error page is still written to stdout.</td>
+        </tr>
+        <tr>
+            <td><code>2</code></td>
+            <td>Usage error or <code>.asp</code> file not found.</td>
+        </tr>
+    </tbody>
+</table>
 
-password = "SuperSecretPassword123!"
+<h2>Simulating Requests</h2>
+<h3>Form POST</h3>
+<pre><code class="language-bash">python asppycli.py www_test/07-request-form.asp --method POST --body "username=Ann&amp;color=blue"</code></pre>
+<p>The page sees <code>Request.Form("username") = "Ann"</code> and <code>Request.ServerVariables("REQUEST_METHOD") = "POST"</code>, exactly as if a browser had submitted the form.</p>
 
-' 1. Hash the password (e.g., during Registration)
-' We'll use a work factor of 12 for strong security
-hashedPw = ASPPY.crypto.Hash(password, 12)
-Response.Write "Secure Bcrypt Hash: " & hashedPw & "&lt;br&gt;"
-' Output Example: $2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW
+<h3>Query strings</h3>
+<pre><code class="language-bash">python asppycli.py www/report.asp --query "id=42&amp;mode=edit"</code></pre>
 
-' 2. Verify the password (e.g., during Login)
-isValid = ASPPY.crypto.Verify(password, hashedPw)
-If isValid Then
-    Response.Write "&lt;strong style='color:green;'&gt;Password verified successfully!&lt;/strong&gt;&lt;br&gt;"
-Else
-    Response.Write "&lt;strong style='color:red;'&gt;Invalid password.&lt;/strong&gt;&lt;br&gt;"
-End If
+<h3>MVC front-controller routes</h3>
+<p>For MVC apps where <code>default.asp</code> routes on <code>Request.Path</code>, point the runner at the front controller and pass the route with <code>--path</code>:</p>
+<pre><code class="language-bash"># Renders the starter app home page (route "/")
+python asppycli.py www_starter/default.asp --docroot www_starter --path /
 
-' 3. Verify a bad attempt
-isValid = ASPPY.crypto.Verify("WrongPass", hashedPw)
-If Not isValid Then
-    Response.Write "Correctly rejected bad password attempt."
-End If
-%&gt;</code></pre>
+# Unknown route: the router's 404 is returned, and the exit code is 1
+python asppycli.py www_starter/default.asp --docroot www_starter --path /contacts/99</code></pre>
+
+<h2>Error Pages</h2>
+<p>A VBScript runtime error produces the same IIS-style error page the HTTP server returns &mdash; with file, line number and a source caret &mdash; plus status <code>500</code> and exit code <code>1</code>:</p>
+<pre><code>HTTP/1.1 500 Internal Server Error
+
+&lt;p&gt;ASPPY runtime error '8000ffff'&lt;/p&gt;
+&lt;p&gt;Variable is undefined: 'UNDEFINEDVAR'&lt;/p&gt;
+&lt;p&gt;/err.asp, line 2&lt;/p&gt;
+&lt;p&gt;Response.Write undefinedVar&lt;br&gt;
+-^&lt;/p&gt;</code></pre>
+
+<h2>Automation and CI</h2>
+<p>Because output is deterministic and exit codes are meaningful, the runner slots directly into shell loops and CI pipelines:</p>
+<pre><code class="language-bash"># bash: fail the build if any demo page errors
+for f in www_test/*.asp; do
+    python asppycli.py "$f" --docroot www_test -o /dev/null || { echo "FAIL: $f"; exit 1; }
+done</code></pre>
+<pre><code class="language-powershell"># PowerShell: render every page and report failures
+Get-ChildItem www_test -Filter *.asp | ForEach-Object {
+    python asppycli.py $_.FullName --docroot www_test > $null 2>&1
+    if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: $($_.Name)" }
+}</code></pre>
+<p>Save a known-good baseline with <code>-o baseline.html</code>, then diff after parser/VM or app changes:</p>
+<pre><code class="language-bash">python asppycli.py www_test/01-basics.asp -o new.html
+diff baseline.html new.html</code></pre>
+
+<h2>Recommended Workflow for AI Agents</h2>
+<div class="alert-box alert-success">
+    <ol style="margin:0.25rem 0 0.25rem 1.1rem">
+        <li>Create or edit a page under <code>www/</code>.</li>
+        <li>Run <code>python asppycli.py www/&lt;page&gt;.asp --docroot www</code>.</li>
+        <li>Check the exit code: <code>0</code> means the page rendered without a runtime error.</li>
+        <li>Inspect stdout for the expected HTML; on exit code <code>1</code>, read the error page &mdash; it names the file, line and source of the failure.</li>
+        <li>For MVC routes, verify each real route: <code>--path /contacts/1</code>, <code>--path /contacts/1/edit</code>, and confirm unknown routes exit <code>1</code> with a 404.</li>
+    </ol>
+</div>
+
+<h2>Notes</h2>
+<ul>
+    <li>Each invocation is a <strong>fresh process</strong>: the ASP compilation cache starts empty, so there is no need to restart anything after editing included files (unlike the long-running HTTP server).</li>
+    <li>Session and Application state live only for the duration of the process. <code>global.asa</code> (<code>Application_OnStart</code>, <code>Session_OnStart</code>) runs exactly as it does under the server.</li>
+    <li>Output is written as raw bytes, so binary responses and non-UTF-8 charsets survive intact.</li>
+    <li>The runner needs no extra dependencies &mdash; it only imports from the <code>ASPPY</code> package already in the repository.</li>
+</ul>
+
+<h2>Credits</h2>
+<p>The CLI runner was contributed by <a href="https://github.com/jeffreyheping" target="_blank" rel="noopener">Jeffrey (@jeffreyheping)</a> &mdash; proposed in <a href="https://github.com/PieterCooreman/ASPPY/issues/10" target="_blank" rel="noopener">issue #10</a>.</p>
+
 </main>
 </div>
 <footer class="doc-footer">
