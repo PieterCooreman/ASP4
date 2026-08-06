@@ -50,7 +50,6 @@ Point your browser at `http://localhost:8080` and your `.asp` pages are live.
 - https://pietercooreman.github.io/ASPPY/ (ASPPY Docs)
 - [MVC Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder.html) - ASPPY prompt builder when using vibe coding tools
 - [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-spa.html) - ASPPY prompt builder when using vibe coding tools
-- https://github.com/PieterCooreman/ASP-VBScript-sample-code (advanced sample ASP/VBScript code to refer coding agents to)
 - https://pietercooreman.github.io/ASPPY/ASPPY_The_Vibe_Coders_Guide.html (ebook for both vibe coding tools and developers)
 - https://learnasppy.quickersite.com/ (learn ASPPY coding - very basic site for beginning developers)
 - https://pietercooreman.github.io/ASP-Runner/ (run ASP/VBScript code in the browser (WebAssembly) - powered by ASPPY)
