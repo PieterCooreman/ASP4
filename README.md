@@ -4,10 +4,6 @@
 
 ASPPY is a Python-based runtime that executes Classic ASP (VBScript) pages on Windows, Linux, and macOS. It implements the full Classic ASP object model (`Request`, `Response`, `Session`, `Application`, `Server`) alongside broad VBScript built-in coverage, so most legacy ASP applications just work.
 
-[Give the ASPPY Prompt-Builder a try!](https://pietercooreman.github.io/ASPPY/prompt_builder.html) (MVC architecture)
-
-[SPA (Single Page Application) - Prompt-Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html) (React SPA)
-
 ---
 
 ## Why ASPPY?
