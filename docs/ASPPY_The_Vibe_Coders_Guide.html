@@ -253,7 +253,7 @@ regression tests against ASPPY alongside IIS before you cut over.
 <div class="callout c-test">
   <span class="ct"><i class="bi bi-shield-check"></i> A Note on How This Book Was Written</span>
   This is not a book of hopeful pseudo-code. Before any sample appeared on these pages, it was saved
-  as a real <code>.asp</code> file, served by ASPPY on <code>http://127.0.0.1:5000</code>, and its
+  as a real <code>.asp</code> file, served by ASPPY on <code>http://127.0.0.1:8080</code>, and its
   output captured. Where the official docs and the running runtime disagreed, the book follows the
   <strong>runtime</strong> and tells you about the difference. You will see these <em>"Tested on
   localhost"</em> notes throughout.
@@ -500,10 +500,10 @@ python -m ASPPY.server 0.0.0.0 8080 www</code></pre>
 <p>
 The server takes three arguments: the bind address, the port, and the document-root folder. Point your
 browser at <code>http://localhost:8080</code> and your <code>.asp</code> pages are live. For local
-development this book uses port <strong>5000</strong> and binds to localhost:
+development this book uses port <strong>8080</strong> and binds to localhost:
 </p>
 <span class="code-label label-asppy">Local development server</span>
-<pre><code>python -m ASPPY.server 127.0.0.1 5000 www</code></pre>
+<pre><code>python -m ASPPY.server 127.0.0.1 8080 www</code></pre>
 
 <div class="callout c-warn">
   <span class="ct"><i class="bi bi-arrow-clockwise"></i> The cache rule you must internalize</span>
@@ -561,7 +561,7 @@ Response.Write "&lt;p&gt;You are " &amp; Request.ServerVariables("REMOTE_ADDR") 
 %&gt;</code></pre>
 <div class="callout c-success">
   <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
-  Served from <code>http://127.0.0.1:5000/hello.asp</code>, this rendered an <code>&lt;h1&gt;</code>, the
+  Served from <code>http://127.0.0.1:8080/hello.asp</code>, this rendered an <code>&lt;h1&gt;</code>, the
   current timestamp via <code>Now()</code>, and the caller's address &mdash; confirming the object model
   and built-ins are live with zero configuration.
 </div>
@@ -1751,7 +1751,7 @@ prompt builder that generates clean, ASPPY-aware prompts to paste in.
   <code>www_starter</code>. It's a contacts manager: list, create, edit, delete contacts stored in a
   SQLite database under <code>data/</code>. Use Bootstrap 5. Route everything through
   <code>default.asp</code> as the front controller, with controllers, models, and views under
-  <code>asp/</code>. Run on port 5000."</em>
+  <code>asp/</code>. Run on port 8080."</em>
 </div>
 
 <h3>15.3 The Rules an Agent Must Respect</h3>

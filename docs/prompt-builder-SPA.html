@@ -545,7 +545,7 @@ function generate() {
     "Build inside the www directory",
     "Do not modify ASPPY/*.py runtime files",
     "Use ASPPY only, do not add IIS requirements",
-    "Run dev server on port 5000",
+    "Run dev server on port 8080",
     "After editing api.asp, restart the ASPPY server to clear the compilation cache",
     "All four project files (index.html, script.js, style.css, api.asp) must be in the same folder",
     "The ASPPY server serves the www directory, place the project folder inside www"
@@ -589,7 +589,7 @@ function generate() {
     "3. Create index.html with React mount point and CDN links (or Vite setup)",
     "4. Create style.css with application styles",
     "5. Create script.js with all React components and fetch() calls",
-    "6. Start server: python -m ASPPY.server 0.0.0.0 5000 www",
+    "6. Start server: python -m ASPPY.server 0.0.0.0 8080 www",
     "7. Call the /setup action once to initialize the database",
     "8. Open the app in browser and test all API endpoints",
     "9. Verify React renders correctly and all fetch calls succeed"
@@ -603,7 +603,7 @@ function generate() {
     "SQLite database is created via a /setup action",
     "All API calls include proper error handling on the React side",
     "No ASPPY runtime files were modified",
-    "App loads and functions in the browser at localhost:5000"
+    "App loads and functions in the browser at localhost:8080"
   ];
 
   var json = JSON.stringify(prompt, null, 2);
