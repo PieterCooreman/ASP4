@@ -35,7 +35,7 @@ pip install fpdf2 bcrypt pillow pyodbc
 
 ## Quick Start
 
-Once Python and the packages above are in place:
+Once Python and the packages above are in place, click **start_www.bat**, or open a new Powershell/CMD terminal:
 
 ```bash
 python -m ASPPY.server 0.0.0.0 8080 www
