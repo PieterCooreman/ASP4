@@ -123,9 +123,8 @@ def main(argv=None):
             n_warn += 1
             print(f"WARN  {rel}  [{status} {res.status_message}]")
         else:
-            n_pass += 1
-            if args.verbose:
-                print(f"ok    {rel}  [{status}]")
+            n_pass += 1 
+            print(f"ok    {rel}  [{status}]")
 
     total = n_pass + n_warn + n_fail
     print(f"\nchecked {total} page(s): "
