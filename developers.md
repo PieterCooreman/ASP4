@@ -13,7 +13,6 @@ Start every new app from `www_starter`.
 - Build inside `www`
 - Do not modify `ASPPY\*.py`
 - Do not modify `www_starter\*.*`
-- Do not modify `www_test\*.*`
 - Use ASPPY only
 - Do not add IIS requirements
 - Run the dev server on port `8080`
@@ -63,6 +62,48 @@ Exit codes (use these in scripts and CI):
 | `0` | page rendered with HTTP status < 400 |
 | `1` | page rendered with HTTP status >= 400 (e.g. `500` ASP runtime error, `404` route) |
 | `2` | usage error / `.asp` file not found |
+
+### Batch check a whole folder: asppycheck.py
+
+To check every `.asp` page in a folder recursively with one command, use
+`asppycheck.py` (repo root). It renders each page through the same pipeline
+and prints a summary plus the file, line and error description for every
+failing page:
+
+```bash
+# Check all sample/test pages
+python asppycheck.py www_test
+
+# Check your own app
+python asppycheck.py www
+
+# Also list passing pages / stop at first failure
+python asppycheck.py www --verbose
+python asppycheck.py www --fail-fast
+```
+
+Example failure output:
+
+```text
+FAIL  zz-broken.asp  [500] Variable is undefined: 'MISSINGVAR' (/zz-broken.asp, line 2)
+
+checked 28 page(s): 27 ok, 0 warning(s), 1 failure(s)
+```
+
+- Exit code `0` = all pages ok, `1` = at least one failure (5xx or engine
+  exception), `2` = folder not found
+- Pages returning `4xx` are reported as warnings only (routers legitimately
+  return `404` for unknown routes)
+- Directories named `includes` and directories starting with `_` are skipped
+  by default (include fragments cannot render standalone); use
+  `--exclude DIR` to skip more, or `--no-default-excludes` to scan everything
+- For MVC apps, exclude the fragment folder: `python asppycheck.py www
+  --exclude asp` - controllers, models and views in `www/asp/` are include
+  fragments, not standalone pages. The front controller will WARN with `404`
+  (no route given); verify real routes with
+  `python asppycli.py www/default.asp --docroot www --path /contacts/1`
+- **AI agents: run `python asppycheck.py www` after any multi-file change**
+  to catch regressions across the whole app in one command
 
 Notes:
 
@@ -382,3 +423,4 @@ Before finishing, verify:
 - uploads are in `www/uploads`
 - pages load without ASPPY runtime errors
 - every new or edited page was verified with the CLI runner: `python asppycli.py <file> --docroot www` exits `0`
+- the whole app passes the batch checker: `python asppycheck.py www` exits `0`
