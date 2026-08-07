@@ -28,7 +28,7 @@
             display: inline-block;
             background: #f97316;
             color: #ffffff;
-            font-size: 12px;
+            font-size: 16px;
             font-weight: 600;
             letter-spacing: 1px;
             text-transform: uppercase;
@@ -44,13 +44,13 @@
         }
 
         p.greeting {
-            font-size: 16px;
+            font-size: 20px;
             color: #475569;
             margin-bottom: 24px;
         }
 
         p.description {
-            font-size: 14px;
+            font-size: 18px;
             color: #64748b;
             line-height: 1.6;
         }
@@ -59,7 +59,7 @@
             margin-top: 28px;
             padding-top: 20px;
             border-top: 1px solid #e2e8f0;
-            font-size: 12px;
+            font-size: 16px;
             color: #94a3b8;
         }
 
