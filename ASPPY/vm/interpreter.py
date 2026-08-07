@@ -140,7 +140,15 @@ def _maybe_invoke_zero_arg(callable_obj):
 
     For host (Python) objects, if a member resolves to a callable and the
     script references it without parentheses, VBScript will typically invoke it.
+
+    Sentinels (VBEmpty/VBNull/VBNothing) define __call__ only so that
+    explicitly *calling* a missing function raises a proper VBScript error.
+    When a member resolves to a sentinel it is a data value (e.g.
+    rs.Fields(x).Value on a NULL column), never a zero-arg method, so it
+    must be passed through untouched instead of being invoked.
     """
+    if isinstance(callable_obj, _Sentinel):
+        return callable_obj
     if not callable(callable_obj):
         return callable_obj
     try:
