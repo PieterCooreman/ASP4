@@ -14,6 +14,33 @@ Classic ASP applications represent decades of business logic. Rewriting them is 
 
 ---
 
+## Radically Simple. By Design.
+
+While other frameworks pile on tooling, ASPPY strips it away. This is what sets it apart:
+
+### 🚫 No build step. Ever.
+No `npm install`. No bundlers. No transpilers. No `.ps1` setup scripts. No dependency hell. You edit an `.asp` file, you hit refresh, it's live. **Deployment is a file copy.**
+
+### 📦 The entire runtime is under 700 KB - and human-readable
+Not 700 MB. **KB.** 39 plain Python files (~150 KB zipped) that you can open, read, and understand. No black box, no vendor magic. If you want to know how something works, you just read the source - all of it fits in your head.
+
+### ⚡ Compiled, not interpreted line-by-line
+ASPPY runs on Python, which **compiles code to bytecode** before execution. Your ASP pages aren't re-scanned as raw text on every hit.
+
+### 🗜️ Compiled ASP pages are cached
+Each `.asp` page is parsed and compiled **once**, then served from an in-memory cache. Subsequent requests skip straight to execution - no re-parsing, no wasted cycles.
+
+### 🏁 Performance comparable to IIS
+Real-world throughput on par with Classic ASP under IIS - and on Linux, where Python typically runs 10–30% faster than on Windows, ASPPY pulls ahead. Without the Windows Server license.
+
+### 🪶 No giant executables to drag around
+No multi-hundred-MB runtime installers, no self-contained EXE blobs, no Docker images you have to babysit. Python + a folder of source files. That's the whole deployment story.
+
+### 🖥️ Runs happily on a nano VPS
+**512 MB RAM, 1 vCPU** is enough to serve production traffic. No JVM warm-up, no node_modules eating your disk, no memory-hungry app server - hosting costs measured in single-digit euros per month.
+
+---
+
 ## Built with ASPPY — Real Websites, Real Users
 
 ASPPY isn't a proof of concept. It runs **production websites in the wild**, from SaaS products to healthcare tooling to e-learning - built, deployed, and used by real people every day. Here are a few of them:
