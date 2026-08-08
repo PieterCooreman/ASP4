@@ -513,7 +513,7 @@ function generate() {
     "Do not modify ASPPY/*.py runtime files",
     "Use ASPPY only, do not add IIS requirements",
     "Run dev server on port 8080",
-    "After editing any .asp file, restart the ASPPY server to clear the compilation cache"
+    "No server restart needed after editing .asp files (including includes): ASPPY detects file changes automatically and recompiles on the next request"
   ];
 
   prompt["mvc_rules"] = {

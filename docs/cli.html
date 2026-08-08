@@ -438,7 +438,7 @@ diff baseline.html new.html</code></pre>
 
 <h2>Notes</h2>
 <ul>
-    <li>Each invocation is a <strong>fresh process</strong>: the ASP compilation cache starts empty, so there is no need to restart anything after editing included files (unlike the long-running HTTP server).</li>
+    <li>Each invocation is a <strong>fresh process</strong>: the ASP compilation cache starts empty. (The long-running HTTP server also picks up file edits automatically - its cache invalidates on file change.)</li>
     <li>Session and Application state live only for the duration of the process. <code>global.asa</code> (<code>Application_OnStart</code>, <code>Session_OnStart</code>) runs exactly as it does under the server.</li>
     <li>Output is written as raw bytes, so binary responses and non-UTF-8 charsets survive intact.</li>
     <li>The runner needs no extra dependencies &mdash; it only imports from the <code>ASPPY</code> package already in the repository.</li>

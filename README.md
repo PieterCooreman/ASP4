@@ -27,8 +27,8 @@ Not 700 MB. **KB.** 39 plain Python files (~150 KB zipped) that you can open, re
 ### ⚡ Compiled, not interpreted line-by-line
 ASPPY runs on Python, which **compiles code to bytecode** before execution. Your ASP pages aren't re-scanned as raw text on every hit.
 
-### 🗜️ Compiled ASP pages are cached
-Each `.asp` page is parsed and compiled **once**, then served from an in-memory cache. Subsequent requests skip straight to execution - no re-parsing, no wasted cycles.
+### 🗜️ Compiled ASP pages are cached - zero config, auto-invalidating
+Each `.asp` page is parsed and compiled **once**, then served from an in-memory cache. Subsequent requests skip straight to execution - no re-parsing, no wasted cycles. And it's **completely automatic**: nothing to enable, nothing to configure. Edit any `.asp` file - includes too - and ASPPY detects the change and recompiles on the next request. No restart, no cache-busting, ever.
 
 ### 🏁 Performance comparable to IIS
 Real-world throughput on par with Classic ASP under IIS - and on Linux, where Python typically runs 10–30% faster than on Windows, ASPPY pulls ahead. Without the Windows Server license.

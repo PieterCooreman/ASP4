@@ -506,10 +506,10 @@ development this book uses port <strong>8080</strong> and binds to localhost:
 <pre><code>python -m ASPPY.server 127.0.0.1 8080 www</code></pre>
 
 <div class="callout c-warn">
-  <span class="ct"><i class="bi bi-arrow-clockwise"></i> The cache rule you must internalize</span>
-  ASPPY caches compiled ASP in memory. After you edit an <strong>included</strong> <code>.asp</code>
-  file, <strong>restart the server process</strong> to clear the compilation cache. Forgetting this is
-  the number-one "why aren't my changes showing up?" trap.
+  <span class="ct"><i class="bi bi-arrow-clockwise"></i> The cache works for you, not against you</span>
+  ASPPY caches compiled ASP in memory for speed, but invalidation is <strong>automatic</strong>: when you
+  edit any <code>.asp</code> file - includes too - ASPPY detects the change and recompiles it on the
+  next request. No server restart, no cache clearing. Just edit and refresh.
 </div>
 
 <h3>3.3 The <code>www</code> Folder Layout</h3>
@@ -1765,7 +1765,7 @@ prompt builder that generates clean, ASPPY-aware prompts to paste in.
   <li>Verify every include path from the perspective of the including file.</li>
   <li>Validate numeric IDs with <code>IsNumeric()</code> + <code>CInt()</code>; HTML-encode output with <code>Server.HTMLEncode()</code>; redirect <em>before</em> writing output.</li>
   <li>Remember the non-short-circuiting <code>And</code> (Chapter 2 / Appendix) when parsing route arrays.</li>
-  <li>After editing an included <code>.asp</code>, restart the server to clear the compile cache.</li>
+  <li>No restart needed after editing <code>.asp</code> files (includes too): the compile cache invalidates automatically on file change.</li>
 </ul>
 
 <h3>15.4 The Human's Job in the Loop</h3>

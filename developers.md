@@ -16,7 +16,7 @@ Start every new app from `www_starter`.
 - Use ASPPY only
 - Do not add IIS requirements
 - Run the dev server on port `8080`
-- After editing any included .asp file, restart the ASPPY server process to clear the in-memory ASP compilation cache
+- No server restart needed after editing `.asp` files (including includes): ASPPY detects file changes automatically (mtime check) and recompiles on the next request
 
 ```bash
 python -m ASPPY.server 0.0.0.0 8080 www
