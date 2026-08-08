@@ -4,11 +4,56 @@
 
 ASPPY is a Python-based runtime that executes Classic ASP (VBScript) pages on Windows, Linux, and macOS. It implements the full Classic ASP object model (`Request`, `Response`, `Session`, `Application`, `Server`) alongside broad VBScript built-in coverage, so most legacy ASP applications just work.
 
+And ASPPY is not just a framework on paper - it powers **real, live websites in production today**, serving real users every day. [See them below.](#built-with-asppy--real-websites-real-users)
+
 ---
 
 ## Why ASPPY?
 
 Classic ASP applications represent decades of business logic. Rewriting them is expensive and risky. ASPPY lets you **keep your existing `.asp` files** and serve them through a lightweight Python HTTP server - no COM, no Windows dependency, no IIS license. Linux typically runs Python 10–30% faster than Windows, increasing the performance advantage of modern frameworks like ASPPY over Classic ASP/VBScript on IIS.
+
+---
+
+## Built with ASPPY — Real Websites, Real Users
+
+ASPPY isn't a proof of concept. It runs **production websites in the wild**, from SaaS products to healthcare tooling to e-learning - built, deployed, and used by real people every day. Here are a few of them:
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://lifeadmin.be">
+        <img src="docs/screenshots/lifeadmin.png" alt="LifeAdmin - team & personal organization SaaS built on ASPPY" />
+      </a>
+      <p align="center"><strong><a href="https://lifeadmin.be">lifeadmin.be</a></strong></p>
+      <p align="center">A multilingual SaaS platform for organizing life and work: shared workspaces, task management, project tracking, and real-time collaboration - all served by ASPPY.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://flowdent.be">
+        <img src="docs/screenshots/flowdent.png" alt="FlowDent - dental practice management built on ASPPY" />
+      </a>
+      <p align="center"><strong><a href="https://flowdent.be">flowdent.be</a></strong></p>
+      <p align="center">A complete, GDPR-compliant management suite for dental practices: waiting lists, inventory, digital signatures, tasks, and more - trilingual, 8+ modules, running on ASPPY.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nomenclatuur.flowdent.be">
+        <img src="docs/screenshots/nomenclatuur-flowdent.png" alt="FlowDent Nomenclature - RIZIV nomenclature browser built on ASPPY" />
+      </a>
+      <p align="center"><strong><a href="https://nomenclatuur.flowdent.be">nomenclatuur.flowdent.be</a></strong></p>
+      <p align="center">A searchable database of 31,000+ Belgian RIZIV/INAMI nomenclature codes with filters, tariffs, and cumulation rules - data-heavy pages served fast by ASPPY.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://learnasppy.quickersite.com">
+        <img src="docs/screenshots/learnasppy.png" alt="Learn ASPPY - e-learning platform built on ASPPY" />
+      </a>
+      <p align="center"><strong><a href="https://learnasppy.quickersite.com">learnasppy.quickersite.com</a></strong></p>
+      <p align="center">A full e-learning platform (courses, lessons, enrollments, user accounts) built with Classic ASP and SQLite on ASPPY - and it teaches you ASPPY itself.</p>
+    </td>
+  </tr>
+</table>
+
+> Running your own site on ASPPY? Open an issue or PR to get it featured here.
 
 ---
 
