@@ -1,4 +1,4 @@
-# ASPPY — Classic ASP/VBScript Runtime for Python
+# ASPPY - Classic ASP/VBScript Runtime for Python
 
 **Run your legacy Classic ASP pages on modern Python infrastructure - no IIS required.**
 
@@ -8,7 +8,7 @@ ASPPY is a Python-based runtime that executes Classic ASP (VBScript) pages on Wi
 
 ## Why ASPPY?
 
-Classic ASP applications represent decades of business logic. Rewriting them is expensive and risky. ASPPY lets you **keep your existing `.asp` files** and serve them through a lightweight Python HTTP server — no COM, no Windows dependency, no IIS license. Linux typically runs Python 10–30% faster than Windows, increasing the performance advantage of modern frameworks like ASPPY over Classic ASP/VBScript on IIS.
+Classic ASP applications represent decades of business logic. Rewriting them is expensive and risky. ASPPY lets you **keep your existing `.asp` files** and serve them through a lightweight Python HTTP server - no COM, no Windows dependency, no IIS license. Linux typically runs Python 10–30% faster than Windows, increasing the performance advantage of modern frameworks like ASPPY over Classic ASP/VBScript on IIS.
 
 ---
 
@@ -19,7 +19,7 @@ Classic ASP applications represent decades of business logic. Rewriting them is 
 **Python 3.8 or higher must be installed on your server** (Windows, Linux, or macOS).  
 Download Python at [https://www.python.org/downloads/](https://www.python.org/downloads/).
 
-> ASPPY is a Python application — Python is required on any machine that runs it, including your production hosting server.
+> ASPPY is a Python application - Python is required on any machine that runs it, including your production hosting server.
 
 ### Python packages
 
@@ -29,7 +29,7 @@ Install the required packages with pip:
 pip install fpdf2 bcrypt pillow pyodbc
 ```
 
-> Not all packages are needed for every use case — install only what your application uses.
+> Not all packages are needed for every use case - install only what your application uses.
 
 ---
 
@@ -82,7 +82,7 @@ The prompt builder comes in two flavours:
 | POP3 / IMAP | Partial |
 | `Global.asa` events | Supported |
 
-ASPPY also ships extended helpers beyond classic ASP — JSON encode/decode, ZIP, PDF generation, image processing, and bcrypt password hashing — all accessible from VBScript via the global `ASPPY` object.
+ASPPY also ships extended helpers beyond classic ASP - JSON encode/decode, ZIP, PDF generation, image processing, and bcrypt password hashing - all accessible from VBScript via the global `ASPPY` object.
 
 ---
 
@@ -94,7 +94,7 @@ Windows · Linux · macOS
 
 ## Compatibility Notes
 
-ASPPY targets practical app-level compatibility, not byte-for-byte IIS parity. Locale-specific formatting, edge-case type coercion, and COM-level quirks may differ. SQL is executed as-is by the underlying driver — no dialect translation is performed.
+ASPPY targets practical app-level compatibility, not byte-for-byte IIS parity. Locale-specific formatting, edge-case type coercion, and COM-level quirks may differ. SQL is executed as-is by the underlying driver - no dialect translation is performed.
 
 If you're migrating a critical application, run your own regression tests against ASPPY alongside IIS before cutting over.
 
