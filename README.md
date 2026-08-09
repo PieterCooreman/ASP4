@@ -41,6 +41,14 @@ No multi-hundred-MB runtime installers, no self-contained EXE blobs, no Docker i
 
 ---
 
+## Built for the AI Era - The Perfect Match for Vibe Coding
+
+ASPPY is a dream partner for AI coding tools like **Claude Code, OpenCode, Codex, Cursor, GitHub Copilot** and all the other important players. Why? Because the entire runtime is a **readable codebase of under 700 KB** - small enough that any modern LLM (even free models, and certainly the well-known cloud models like Opus, Fable, Gemini, GPT, Kimi, GLM, DeepSeek, and friends) can read and understand it **in minutes or less**. No million-line framework to guess about, no hidden magic the AI has to hallucinate around - the model sees the whole picture and gets it right the first time.
+
+For experienced ASP developers, this is a genuinely exciting moment: the skills you've built over decades suddenly pair with the most powerful development tools ever created. Describe the app you want, point your AI agent at ASPPY, and watch it **develop brand-new web apps or re-create existing ASP/VBScript applications in no time - for nearly free**. Legacy modernization, rapid prototyping, full production apps: what used to take weeks of budget and planning now happens in an afternoon. Classic ASP knowledge has never been this valuable - or this much fun to use.
+
+---
+
 ## Built with ASPPY — Real Websites, Real Users
 
 ASPPY isn't a proof of concept. It runs **production websites in the wild**, from SaaS products to healthcare tooling to e-learning - built, deployed, and used by real people every day. Here are a few of them:
