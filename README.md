@@ -148,7 +148,7 @@ Refer AI vibe-coding agents (like OpenCode, Claude Code, Codex agents, Cursor, G
 The prompt builder comes in two flavours:
 
 - [MVC Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder.html) - ASPPY prompt builder when using vibe coding tools
-- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-spa.html) - ASPPY prompt builder when using vibe coding tools
+- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html) - ASPPY prompt builder when using vibe coding tools
 
 ---
 
