@@ -50,7 +50,7 @@ For experienced ASP developers, this is a genuinely exciting moment: the skills 
 To make vibe coding even easier, the ASPPY repo comes with **two prompt builders** that will be a big help in getting the best out of AI LLM models coding ASP/VBScript for you:
 
 - [MVC Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder.html) - generates the perfect prompt for classic MVC-style ASPPY apps
-- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-spa.html) - generates the perfect prompt for single-page apps with a React front-end and an ASPPY back-end
+- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html) - generates the perfect prompt for single-page apps with a React front-end and an ASPPY back-end
 
 ---
 
@@ -134,7 +134,7 @@ Point your browser at `http://localhost:8080` and your `.asp` pages are live.
 
 - https://pietercooreman.github.io/ASPPY/ (ASPPY Docs)
 - [MVC Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder.html) - ASPPY prompt builder (for MVC) when using vibe coding tools
-- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-spa.html) - ASPPY prompt builder (for SPA) when using vibe coding tools
+- [SPA (React + ASPPY) Prompt Builder](https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html) - ASPPY prompt builder (for SPA) when using vibe coding tools
 - https://pietercooreman.github.io/ASPPY/ASPPY_The_Vibe_Coders_Guide.html (ebook for both vibe coding tools and developers)
 - https://learnasppy.quickersite.com/ (learn ASPPY coding - very basic site for beginning developers)
 - https://pietercooreman.github.io/ASP-Runner/ (run ASP/VBScript code in the browser (WebAssembly) - powered by ASPPY)
