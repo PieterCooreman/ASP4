@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-try:
-    import bcrypt as _bcrypt
-except Exception:  # pragma: no cover
-    _bcrypt = None
+# Imported lazily by _require_bcrypt() below, so that importing this module
+# stays cheap for pages that never use Crypto.Hash / Crypto.Verify.
+_bcrypt = None
 
 from .vb_runtime import VBScriptRuntimeError, vbs_cstr
 from .vm.values import VBEmpty, VBNull, VBNothing

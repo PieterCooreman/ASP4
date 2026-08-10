@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-try:
-    from fpdf import FPDF as _FPDF
-except Exception:  # pragma: no cover
-    _FPDF = None
+# Imported lazily by _require_fpdf() below, so that importing this module
+# stays cheap for pages that never generate a PDF.
+_FPDF = None
 
 from .vb_runtime import VBScriptRuntimeError, vbs_cstr
 from .vm.values import VBEmpty, VBNull, VBNothing

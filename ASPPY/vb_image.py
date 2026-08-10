@@ -5,16 +5,14 @@ from __future__ import annotations
 from typing import Any
 import io
 
-try:
-    from PIL import Image as _PILImage
-    from PIL import ImageDraw as _PILImageDraw
-    from PIL import ImageFilter as _PILImageFilter
-    from PIL import ImageEnhance as _PILImageEnhance
-except Exception:  # pragma: no cover
-    _PILImage = None
-    _PILImageDraw = None
-    _PILImageFilter = None
-    _PILImageEnhance = None
+# Imported lazily by _require_pillow() below, so that importing this module
+# stays cheap for pages that never touch the Image namespace. The class-level
+# constants further down use getattr() defaults that match Pillow's actual
+# values, so they are correct whether or not Pillow has been imported yet.
+_PILImage = None
+_PILImageDraw = None
+_PILImageFilter = None
+_PILImageEnhance = None
 
 from .vb_runtime import VBScriptRuntimeError, vbs_cstr
 from .vm.values import VBArray, VBEmpty, VBNull, VBNothing
@@ -289,16 +287,28 @@ class DrawInstance:
 
 
 class ImageFilterShim:
-    BLUR = getattr(_PILImageFilter, "BLUR", None)
-    CONTOUR = getattr(_PILImageFilter, "CONTOUR", None)
-    DETAIL = getattr(_PILImageFilter, "DETAIL", None)
-    EDGE_ENHANCE = getattr(_PILImageFilter, "EDGE_ENHANCE", None)
-    EDGE_ENHANCE_MORE = getattr(_PILImageFilter, "EDGE_ENHANCE_MORE", None)
-    EMBOSS = getattr(_PILImageFilter, "EMBOSS", None)
-    FIND_EDGES = getattr(_PILImageFilter, "FIND_EDGES", None)
-    SHARPEN = getattr(_PILImageFilter, "SHARPEN", None)
-    SMOOTH = getattr(_PILImageFilter, "SMOOTH", None)
-    SMOOTH_MORE = getattr(_PILImageFilter, "SMOOTH_MORE", None)
+    # Pillow's ImageFilter constants (BLUR, SHARPEN, ...) are exposed lazily:
+    # importing Pillow at module load time would slow down every page render.
+    _FILTER_CONSTS = (
+        "BLUR", "CONTOUR", "DETAIL", "EDGE_ENHANCE", "EDGE_ENHANCE_MORE",
+        "EMBOSS", "FIND_EDGES", "SHARPEN", "SMOOTH", "SMOOTH_MORE",
+    )
+
+    def __dir__(self):
+        # Keep the constants visible to dir()-based attribute resolution.
+        return sorted(set(super().__dir__()) | set(self._FILTER_CONSTS))
+
+    def __getattr__(self, name):
+        # Called only when normal attribute lookup fails.
+        if name in ImageFilterShim._FILTER_CONSTS:
+            try:
+                _require_pillow()
+            except VBScriptRuntimeError:
+                # Mirror the old behaviour when Pillow is not installed:
+                # the constants existed with value None.
+                return None
+            return getattr(_PILImageFilter, name, None)
+        raise AttributeError(name)
 
     def GaussianBlur(self, radius):
         _require_pillow()

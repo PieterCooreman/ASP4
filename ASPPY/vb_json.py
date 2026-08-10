@@ -12,12 +12,11 @@ from typing import Any
 from .vm.values import VBArray, VBEmpty, VBNull, VBNothing
 from .vb_runtime import VBScriptRuntimeError
 from .server_object import ScriptingDictionary
-from . import vb_zip
-from . import vb_image
-from . import vb_crypto
-from . import vb_pdf
-from . import pop3 as vb_pop3
-from . import imap as vb_imap
+
+# NOTE: the zip/image/crypto/pdf/pop3/imap shims are intentionally imported
+# lazily inside ASPPYShim below (not at module level), because they pull in
+# optional third-party packages (Pillow, bcrypt, fpdf2) and heavy stdlib
+# modules (email, poplib, imaplib) that most pages never use.
 
 
 class JsonShim:
@@ -39,17 +38,43 @@ class JsonShim:
 
 
 class ASPPYShim:
+    _LAZY_ATTRS = ("zip", "image", "crypto", "pdf")
+
     def __init__(self):
         self.json = JsonShim()
-        self.zip = vb_zip.ZipShim()
-        self.image = vb_image.ASPPY_IMAGE
-        self.crypto = vb_crypto.ASPPY_CRYPTO
-        self.pdf = vb_pdf.ASPPY_PDF
+
+    def __dir__(self):
+        # Keep the lazily-provided shims visible to dir()-based (including
+        # case-insensitive) attribute resolution in the VBScript VM.
+        return sorted(set(super().__dir__()) | set(self._LAZY_ATTRS))
+
+    def __getattr__(self, name):
+        # Called only when normal attribute lookup fails. The result is
+        # cached as a plain instance attribute, so the lazy import runs at
+        # most once per attribute per shim instance.
+        if name == "zip":
+            from . import vb_zip
+            value = vb_zip.ZipShim()
+        elif name == "image":
+            from . import vb_image
+            value = vb_image.ASPPY_IMAGE
+        elif name == "crypto":
+            from . import vb_crypto
+            value = vb_crypto.ASPPY_CRYPTO
+        elif name == "pdf":
+            from . import vb_pdf
+            value = vb_pdf.ASPPY_PDF
+        else:
+            raise AttributeError(name)
+        setattr(self, name, value)
+        return value
 
     def pop3(self):
+        from . import pop3 as vb_pop3
         return vb_pop3.ASPPYPOP3()
 
     def imap(self):
+        from . import imap as vb_imap
         return vb_imap.ASPPYIMAP()
 
 

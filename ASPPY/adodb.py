@@ -18,15 +18,21 @@ import datetime
 import importlib
 import os
 import re
-import sqlite3
 import threading
 from dataclasses import dataclass
 from typing import Any, Optional
 
-try:
-    import pyodbc  # type: ignore
-except Exception:
-    pyodbc = None
+# Database drivers are imported lazily (only when a page actually opens a
+# connection), to keep importing this module cheap for pages without ADO.
+sqlite3 = None
+pyodbc = None
+
+
+def _ensure_sqlite3():
+    global sqlite3
+    if sqlite3 is None:
+        sqlite3 = importlib.import_module('sqlite3')
+    return sqlite3
 
 
 def _ensure_pyodbc():
@@ -350,7 +356,7 @@ class _SQLiteProviderAdapter(_ADOProviderAdapter):
             raise_runtime('ADO_UNSPECIFIED', "Invalid data source")
         assert phys is not None
         try:
-            db = sqlite3.connect(phys, check_same_thread=False)
+            db = _ensure_sqlite3().connect(phys, check_same_thread=False)
             db.isolation_level = None
             db.row_factory = None
             db.execute("PRAGMA journal_mode=WAL")
