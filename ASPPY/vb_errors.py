@@ -57,6 +57,8 @@ RUNTIME_ERRORS = {
     'COMPONENT_CANT_CREATE': ErrorDef(429, '800A01AD', "ActiveX component can't create object"),
     'OBJECT_NOT_SUPPORT': ErrorDef(438, '800A01B6', "Object doesn't support this property or method"),
     'WRONG_NUM_ARGS': ErrorDef(450, '800A01C2', "Wrong number of arguments or invalid property assignment"),
+    'KEY_ALREADY_EXISTS': ErrorDef(457, '800A01C9', "This key is already associated with an element of this collection"),
+    'ELEMENT_NOT_FOUND': ErrorDef(32811, '800A802B', "Element not found"),
     'VAR_UNDEFINED': ErrorDef(500, '800A01F4', "Variable is undefined"), # Needs dynamic message
     
     # ADO / Database specific

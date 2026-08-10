@@ -161,19 +161,50 @@ class _DictKeyProxy:
 
 
 class ScriptingDictionary:
-    """Minimal Scripting.Dictionary adapter."""
+    """Scripting.Dictionary adapter with VBScript Variant key semantics.
+
+    - Keys are Variants: 5 and "5" are DIFFERENT keys; 5, 5.0 and True/-1
+      compare numerically; strings honor CompareMode.
+    - Reading a MISSING key via Item auto-adds the key with an Empty value
+      (documented Scripting.Dictionary behavior on IIS).
+    - Add on an existing key raises error 457; Remove on a missing key
+      raises error 32811 ("Element not found").
+    """
 
     def __init__(self):
-        # normalized_key -> (original_key, value)
-        self._d: dict[str, tuple[str, Any]] = {}
+        # normalized_key -> (original_key_variant, value)
+        self._d: dict[Any, tuple[Any, Any]] = {}
         # 0=BinaryCompare (case-sensitive), 1=TextCompare (case-insensitive), 2=DatabaseCompare
         self._compare_mode = 0
 
-    def _norm(self, key: str) -> str:
-        k = vbs_cstr(key)
-        if self._compare_mode == 0:
-            return k
-        return k.lower()
+    def _norm(self, key):
+        """Normalize a Variant key to a hashable bucket key."""
+        if isinstance(key, str):
+            return ('s', key if self._compare_mode == 0 else key.lower())
+        if isinstance(key, bool):
+            return ('n', -1.0 if key else 0.0)
+        if isinstance(key, (int, float)):
+            return ('n', float(key))
+        if isinstance(key, datetime.datetime):
+            return ('n', (key - datetime.datetime(1899, 12, 30)).total_seconds() / 86400.0)
+        if isinstance(key, datetime.date):
+            return ('n', (datetime.datetime(key.year, key.month, key.day)
+                          - datetime.datetime(1899, 12, 30)).total_seconds() / 86400.0)
+        try:
+            from .vm.values import VBEmpty, VBNull, VBNothing
+            if key is VBEmpty or key is None:
+                return ('e', None)
+            if key is VBNull:
+                return ('u', None)
+            if key is VBNothing:
+                return ('o', id(key))
+        except Exception:
+            pass
+        from decimal import Decimal as _Dec
+        if isinstance(key, _Dec):
+            return ('n', float(key))
+        # Objects: identity-keyed, like VBScript object keys.
+        return ('o', id(key))
 
     @property
     def Count(self):
@@ -200,35 +231,41 @@ class ScriptingDictionary:
             self._compare_mode = v
 
     def Add(self, key, item):
-        orig = vbs_cstr(key)
-        k = self._norm(orig)
+        k = self._norm(key)
         if k in self._d:
-            raise Exception("Key already exists")
-        self._d[k] = (orig, item)
+            from .vb_errors import raise_runtime
+            raise_runtime('KEY_ALREADY_EXISTS')
+        self._d[k] = (key, item)
 
     def Exists(self, key):
         return self._norm(key) in self._d
 
     def Remove(self, key):
         k = self._norm(key)
-        if k in self._d:
-            del self._d[k]
+        if k not in self._d:
+            from .vb_errors import raise_runtime
+            raise_runtime('ELEMENT_NOT_FOUND')
+        del self._d[k]
 
     def RemoveAll(self):
         self._d.clear()
 
     def __vbs_index_get__(self, key):
         ent = self._d.get(self._norm(key))
-        return ent[1] if ent is not None else ""
+        if ent is not None:
+            return ent[1]
+        # VBScript: reading a missing key AUTO-ADDS it with an Empty value.
+        from .vm.values import VBEmpty
+        self._d[self._norm(key)] = (key, VBEmpty)
+        return VBEmpty
 
     def __vbs_index_set__(self, key, value):
-        orig = vbs_cstr(key)
-        nk = self._norm(orig)
+        nk = self._norm(key)
         if nk in self._d:
             old_orig, _old_val = self._d[nk]
             self._d[nk] = (old_orig, value)
         else:
-            self._d[nk] = (orig, value)
+            self._d[nk] = (key, value)
 
     @property
     def Item(self):
@@ -247,22 +284,23 @@ class ScriptingDictionary:
         old_norm = self._norm(key)
         if old_norm not in self._d:
             # Scripting.Dictionary raises "Element not found" (32811)
-            raise Exception("Element not found")
-        new_orig = vbs_cstr(new_key)
-        new_norm = self._norm(new_orig)
+            from .vb_errors import raise_runtime
+            raise_runtime('ELEMENT_NOT_FOUND')
+        new_norm = self._norm(new_key)
         if new_norm == old_norm:
             # Same key (e.g. casing change under TextCompare): keep item,
             # update the stored original casing.
             _old_orig, val = self._d[old_norm]
-            self._d[old_norm] = (new_orig, val)
+            self._d[old_norm] = (new_key, val)
             return
         if new_norm in self._d:
-            raise Exception("Key already exists")
+            from .vb_errors import raise_runtime
+            raise_runtime('KEY_ALREADY_EXISTS')
         # Rebuild to preserve insertion order (rename in place).
-        new_d: dict[str, tuple[str, Any]] = {}
+        new_d: dict[Any, tuple[Any, Any]] = {}
         for nk, (orig, val) in self._d.items():
             if nk == old_norm:
-                new_d[new_norm] = (new_orig, val)
+                new_d[new_norm] = (new_key, val)
             else:
                 new_d[nk] = (orig, val)
         self._d = new_d

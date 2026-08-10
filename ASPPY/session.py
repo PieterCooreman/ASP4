@@ -92,8 +92,11 @@ class Session:
         self._timeout = int(value)
 
     def Abandon(self):
+        # IIS: Abandon only MARKS the session for destruction; its values
+        # remain readable for the remainder of the current request. The
+        # session store drops abandoned sessions before serving the next
+        # request (see SessionStore.get_or_create).
         self._abandoned = True
-        self._backing.clear()
 
     def _set_static_object(self, obj_id: str, obj):
         self._static_objects[str(obj_id)] = obj

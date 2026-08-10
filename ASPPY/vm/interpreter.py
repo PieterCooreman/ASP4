@@ -21,6 +21,7 @@ from ..ast_nodes import (
     Concat,
     UnaryOp,
     BinaryOp,
+    ParenExpr,
     ResponseWrite,
     ResponseEnd,
     ResponseClear,
@@ -500,6 +501,8 @@ class VBInterpreter:
             return expr.value
         if isinstance(expr, NumberLit):
             return expr.value
+        if isinstance(expr, ParenExpr):
+            return self.eval_expr(expr.expr)
 
         if isinstance(expr, DateLit):
             return vb_datetime.CDate(expr.value)
@@ -676,6 +679,11 @@ class VBInterpreter:
                         if a is None: args.append(None)
                         else: args.append(self.eval_expr(a))
                     try:
+                        # Zero args on an indexable object (d.Items(),
+                        # d.Keys()) yields the object itself, so chained
+                        # indexing like d.Items()(0) works.
+                        if not args:
+                            return callee
                         if len(args) == 1:
                             return idx_get(args[0])
                         return idx_get(args)
@@ -712,6 +720,8 @@ class VBInterpreter:
             idx_get = getattr(callee_any, '__vbs_index_get__', None)
             if idx_get is not None:
                 try:
+                    if not args:
+                        return callee
                     if len(args) == 1:
                         return idx_get(args[0])
                     return idx_get(args)
@@ -764,19 +774,7 @@ class VBInterpreter:
             # VBScript: any arithmetic with Null propagates Null
             if left is VBNull or right is VBNull:
                 return VBNull
-            # '+' in VBScript is numeric add if possible, else string concat.
-            # Date arithmetic: date + number => add days.
-            if isinstance(left, (_dt.datetime, _dt.date)) and isinstance(right, (int, float)):
-                ld = left if isinstance(left, _dt.datetime) else _dt.datetime(left.year, left.month, left.day)
-                return ld + _dt.timedelta(days=float(right))
-            if isinstance(right, (_dt.datetime, _dt.date)) and isinstance(left, (int, float)):
-                rd = right if isinstance(right, _dt.datetime) else _dt.datetime(right.year, right.month, right.day)
-                return rd + _dt.timedelta(days=float(left))
-            ln = _try_number(left)
-            rn = _try_number(right)
-            if ln is not None and rn is not None:
-                return ln + rn
-            return vbs_cstr(left) + vbs_cstr(right)
+            return _vb_plus(left, right)
         if isinstance(expr, UnaryOp):
             v = self.eval_expr(expr.expr)
             if expr.op == '-':
@@ -885,7 +883,8 @@ class VBInterpreter:
                 rn = _try_number(r)
                 if ln is None or rn is None:
                     raise_runtime('TYPE_MISMATCH')
-                return ln ** rn
+                # VBScript '^' ALWAYS returns a Double (TypeName(2^2) = "Double").
+                return float(ln ** rn)
             if expr.op == '/':
                 ln = _try_number(l)
                 rn = _try_number(r)
@@ -932,6 +931,9 @@ class VBInterpreter:
 
     def _eval_numberlit(self, expr):
         return expr.value
+
+    def _eval_parenexpr(self, expr):
+        return self.eval_expr(expr.expr)
 
 
     def _eval_datelit(self, expr):
@@ -1130,6 +1132,11 @@ class VBInterpreter:
                     if a is None: args.append(None)
                     else: args.append(self.eval_expr(a))
                 try:
+                    # Zero args on an indexable object (d.Items(), d.Keys())
+                    # yields the object itself, so chained indexing like
+                    # d.Items()(0) works.
+                    if not args:
+                        return callee
                     if len(args) == 1:
                         return idx_get(args[0])
                     return idx_get(args)
@@ -1167,6 +1174,8 @@ class VBInterpreter:
         idx_get = getattr(callee, '__vbs_index_get__', None)
         if idx_get is not None:
             try:
+                if not args:
+                    return callee
                 if len(args) == 1:
                     return idx_get(args[0])
                 return idx_get(args)
@@ -1221,19 +1230,7 @@ class VBInterpreter:
         # VBScript: any arithmetic with Null propagates Null
         if left is VBNull or right is VBNull:
             return VBNull
-        # '+' in VBScript is numeric add if possible, else string concat.
-        # Date arithmetic: date + number => add days.
-        if isinstance(left, (_dt.datetime, _dt.date)) and isinstance(right, (int, float)):
-            ld = left if isinstance(left, _dt.datetime) else _dt.datetime(left.year, left.month, left.day)
-            return ld + _dt.timedelta(days=float(right))
-        if isinstance(right, (_dt.datetime, _dt.date)) and isinstance(left, (int, float)):
-            rd = right if isinstance(right, _dt.datetime) else _dt.datetime(right.year, right.month, right.day)
-            return rd + _dt.timedelta(days=float(left))
-        ln = _try_number(left)
-        rn = _try_number(right)
-        if ln is not None and rn is not None:
-            return ln + rn
-        return vbs_cstr(left) + vbs_cstr(right)
+        return _vb_plus(left, right)
 
     def _eval_unaryop(self, expr):
         v = self.eval_expr(expr.expr)
@@ -1344,7 +1341,8 @@ class VBInterpreter:
             rn = _try_number(r)
             if ln is None or rn is None:
                 raise_runtime('TYPE_MISMATCH')
-            return ln ** rn
+            # VBScript '^' ALWAYS returns a Double (TypeName(2^2) = "Double").
+            return float(ln ** rn)
         if expr.op == '/':
             ln = _try_number(l)
             rn = _try_number(r)
@@ -2870,7 +2868,98 @@ VBInterpreter._EXPR_DISPATCH = {
     Concat: VBInterpreter._eval_concat,
     UnaryOp: VBInterpreter._eval_unaryop,
     BinaryOp: VBInterpreter._eval_binaryop,
+    ParenExpr: VBInterpreter._eval_parenexpr,
 }
+
+
+_OA_EPOCH = _dt.datetime(1899, 12, 30)
+
+
+def _to_oaserial(v):
+    """Convert a date/datetime/time value to an OLE Automation serial (Double)."""
+    if isinstance(v, _dt.datetime):
+        return (v - _OA_EPOCH).total_seconds() / 86400.0
+    if isinstance(v, _dt.date):
+        return (_dt.datetime(v.year, v.month, v.day) - _OA_EPOCH).total_seconds() / 86400.0
+    if isinstance(v, _dt.time):
+        return (v.hour * 3600 + v.minute * 60 + v.second + v.microsecond / 1e6) / 86400.0
+    return None
+
+
+def _from_oaserial(serial):
+    """Convert an OLE Automation serial back to a datetime (VBScript Date)."""
+    return _OA_EPOCH + _dt.timedelta(days=float(serial))
+
+
+def _plus_str_to_number(s):
+    """Numeric interpretation of a string for the '+' operator.
+
+    VBScript: number + string converts the string to a number, raising
+    Type Mismatch when it cannot be converted. Unlike _try_number, an
+    empty string is NOT numeric here (1 + "" => Type Mismatch on IIS).
+    Accepts scientific notation ("1e5") like CDbl does.
+    """
+    t = s.strip()
+    if t == "":
+        return None
+    try:
+        return int(t)
+    except ValueError:
+        pass
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def _vb_plus(left, right):
+    """VBScript '+' operator semantics.
+
+    - Null + anything            => Null (handled by callers)
+    - String + String            => concatenation ("5"+"5" => "55")
+    - Number + Number            => addition (Boolean as -1/0)
+    - Number + numeric String    => addition; Type Mismatch otherwise
+    - Date + Number              => date arithmetic (add days)
+    - Date + Date/Time           => add underlying OA serials (Date result),
+                                    so DateSerial(...) + TimeSerial(...) works
+    - Empty + Number             => Number;  Empty + String => String
+    """
+    lstr = isinstance(left, str)
+    rstr = isinstance(right, str)
+    if lstr and rstr:
+        return left + right
+
+    ldate = isinstance(left, (_dt.datetime, _dt.date, _dt.time))
+    rdate = isinstance(right, (_dt.datetime, _dt.date, _dt.time))
+    if ldate or rdate:
+        if ldate and rdate:
+            return _from_oaserial(_to_oaserial(left) + _to_oaserial(right))
+        other = right if ldate else left
+        if isinstance(other, bool):
+            other = -1 if other else 0
+        if other is VBEmpty:
+            other = 0
+        if isinstance(other, str):
+            n = _plus_str_to_number(other)
+            if n is None:
+                raise_runtime('TYPE_MISMATCH')
+            other = n
+        if isinstance(other, (int, float)):
+            dv = left if ldate else right
+            return _from_oaserial(_to_oaserial(dv) + float(other))
+        raise_runtime('TYPE_MISMATCH')
+
+    # Empty behaves as "" next to a string, as 0 next to a number.
+    if left is VBEmpty and rstr:
+        return right
+    if right is VBEmpty and lstr:
+        return left
+
+    ln = _plus_str_to_number(left) if lstr else _try_number(left)
+    rn = _plus_str_to_number(right) if rstr else _try_number(right)
+    if ln is None or rn is None:
+        raise_runtime('TYPE_MISMATCH')
+    return ln + rn
 
 
 def _try_number(v):
@@ -2898,9 +2987,12 @@ def _try_number(v):
         if s == "":
             return 0
         try:
-            if '.' in s:
-                return float(s)
             return int(s)
+        except Exception:
+            pass
+        try:
+            # Also accepts scientific notation ("1e5"), like CDbl.
+            return float(s)
         except Exception:
             return None
     return None
@@ -2942,6 +3034,26 @@ def _compare(op: str, a, b):
             return sa > sb
         if op == '>=':
             return sa >= sb
+    # Dates compare by their OA serial (Double). This also makes a date-only
+    # value equal to a datetime at midnight (DateSerial(...) = CDate("...")).
+    a_dateish = isinstance(a, (_dt.datetime, _dt.date, _dt.time))
+    b_dateish = isinstance(b, (_dt.datetime, _dt.date, _dt.time))
+    if a_dateish or b_dateish:
+        an = _to_oaserial(a) if a_dateish else _try_number(a)
+        bn = _to_oaserial(b) if b_dateish else _try_number(b)
+        if an is not None and bn is not None:
+            if op == '=':
+                return an == bn
+            if op == '<>':
+                return an != bn
+            if op == '<':
+                return an < bn
+            if op == '<=':
+                return an <= bn
+            if op == '>':
+                return an > bn
+            if op == '>=':
+                return an >= bn
     a_is_empty_str = isinstance(a, str) and a.strip() == ""
     b_is_empty_str = isinstance(b, str) and b.strip() == ""
     an = None if a_is_empty_str else _try_number(a)

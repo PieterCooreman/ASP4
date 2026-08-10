@@ -193,6 +193,14 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
     if on_context_created:
         on_context_created(ctx)
 
+    # Make cookies set via Response.Cookies visible through Request.Cookies
+    # within the same request (IIS Classic ASP behavior).
+    if request is not None:
+        try:
+            request.Cookies.attach_response(resp)
+        except Exception:
+            pass
+
     if session is not None:
         try:
             resp.SetCookie("ASP_PY_SESSIONID", getattr(session, 'CookieID', getattr(session, 'SessionID', '')))

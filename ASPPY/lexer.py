@@ -233,6 +233,16 @@ class Lexer:
                                 continue
                             break
                         n = int(''.join(digits), base)
+                        # VBScript semantics: hex/oct literals wrap to signed
+                        # Integer (16-bit) when they fit in 16 bits, otherwise
+                        # to signed Long (32-bit): &HFFFF => -1, &H8000 =>
+                        # -32768, &HFFFFFFFF => -1, &H10000 => 65536.
+                        if n <= 0xFFFF:
+                            if n >= 0x8000:
+                                n -= 0x10000
+                        elif n <= 0xFFFFFFFF:
+                            if n >= 0x80000000:
+                                n -= 0x100000000
                         return Token("NUMBER", str(n), pos)
             return Token("AMP", ch, pos)
         if ch == '+':
@@ -261,7 +271,7 @@ class Lexer:
                 return Token("GE", ">=", pos)
             return Token("GT", ">", pos)
 
-        # Number (int or simple float)
+        # Number (int, float or scientific notation)
         if ch.isdigit():
             buf = [ch]
             while self.i < self.n and self.text[self.i].isdigit():
@@ -274,6 +284,23 @@ class Lexer:
                 while self.i < self.n and self.text[self.i].isdigit():
                     buf.append(self.text[self.i])
                     self.i += 1
+            # optional exponent part: 1E10, 2.5E-3, 1e+5 (VBScript => Double).
+            # Only consume the E if a (signed) digit follows, so identifiers
+            # like "3rdItem" splits and "1End" still lexes as "1" + "End"...
+            # actually "E" followed by non-digit must NOT be consumed.
+            if self.i < self.n and self.text[self.i] in ('e', 'E'):
+                j = self.i + 1
+                if j < self.n and self.text[j] in ('+', '-'):
+                    j += 1
+                if j < self.n and self.text[j].isdigit():
+                    buf.append('E')
+                    self.i += 1
+                    if self.text[self.i] in ('+', '-'):
+                        buf.append(self.text[self.i])
+                        self.i += 1
+                    while self.i < self.n and self.text[self.i].isdigit():
+                        buf.append(self.text[self.i])
+                        self.i += 1
             return Token("NUMBER", "".join(buf), pos)
 
         # Identifier / keyword

@@ -88,6 +88,17 @@ class Concat(Expr):
         self.right = right
 
 
+class ParenExpr(Expr):
+    """A parenthesized (sub)expression.
+
+    Kept as an explicit node because parentheses are semantically meaningful
+    in VBScript argument lists: `Foo (x)` / `Call Foo((x))` force ByVal even
+    for a ByRef parameter. Evaluation simply evaluates the inner expression.
+    """
+    def __init__(self, expr):
+        self.expr = expr
+
+
 class UnaryOp(Expr):
     def __init__(self, op: str, expr: Expr):
         self.op = op

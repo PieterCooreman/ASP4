@@ -32,16 +32,26 @@ from .vb_runtime import VBScriptRuntimeError, VBScriptCOMError, vbs_cstr, vbs_ge
 from .vm.values import VBNull
 
 
+# VBScript has exactly ONE Date type (an OLE Automation double). ASPPY
+# normalizes every date/time producer to datetime.datetime so that equality,
+# comparison and arithmetic behave consistently (DateSerial() = CDate() must
+# be True). Time-only values carry the OA zero date (1899-12-30); rendering
+# code (vbs_cstr) prints date-only / time-only forms exactly like IIS does.
+_OA_ZERO = _dt.datetime(1899, 12, 30)
+
+
 def Now():
     return _dt.datetime.now()
 
 
 def Date():
-    return _dt.date.today()
+    t = _dt.date.today()
+    return _dt.datetime(t.year, t.month, t.day)
 
 
 def Time():
-    return _dt.datetime.now().time().replace(microsecond=0)
+    n = _dt.datetime.now()
+    return _OA_ZERO.replace(hour=n.hour, minute=n.minute, second=n.second)
 
 
 def Timer():
@@ -83,7 +93,7 @@ def DateSerial(year, month, day):
     # Normalize month
     y += (m - 1) // 12
     m = ((m - 1) % 12) + 1
-    base = _dt.date(y, m, 1)
+    base = _dt.datetime(y, m, 1)
     return base + _dt.timedelta(days=d - 1)
 
 
@@ -96,7 +106,7 @@ def TimeSerial(hour, minute, second):
     h = total // 3600
     mi = (total % 3600) // 60
     s = total % 60
-    return _dt.time(h, mi, s)
+    return _OA_ZERO.replace(hour=h, minute=mi, second=s)
 
 
 def DateAdd(interval, number, date):
@@ -131,12 +141,21 @@ def DateDiff(interval, date1, date2, firstdayofweek=vbSunday, firstweekofyear=vb
     d1 = _to_datetime(date1)
     d2 = _to_datetime(date2)
 
+    # VBScript DateDiff counts BOUNDARY crossings, not elapsed intervals:
+    # both dates are truncated to the interval unit before diffing, so
+    # DateDiff("n", 14:30:45, 15:00:15) = 30 (not 29).
     if itv in ("s",):
-        return int((d2 - d1).total_seconds())
+        t1 = d1.replace(microsecond=0)
+        t2 = d2.replace(microsecond=0)
+        return int(round((t2 - t1).total_seconds()))
     if itv in ("n",):
-        return int((d2 - d1).total_seconds() // 60)
+        t1 = d1.replace(second=0, microsecond=0)
+        t2 = d2.replace(second=0, microsecond=0)
+        return int(round((t2 - t1).total_seconds())) // 60
     if itv in ("h",):
-        return int((d2 - d1).total_seconds() // 3600)
+        t1 = d1.replace(minute=0, second=0, microsecond=0)
+        t2 = d2.replace(minute=0, second=0, microsecond=0)
+        return int(round((t2 - t1).total_seconds())) // 3600
     if itv in ("d", "y"):
         return (d2.date() - d1.date()).days
     if itv in ("ww", "w"):
@@ -221,17 +240,28 @@ def MonthName(month, abbreviate=False):
 
 def DateValue(s):
     dt = _parse_iso_datetime(str(s))
-    return dt.date()
+    return _dt.datetime(dt.year, dt.month, dt.day)
 
 
 def TimeValue(s):
     dt = _parse_iso_datetime(str(s))
-    return dt.time().replace(microsecond=0)
+    return _OA_ZERO.replace(hour=dt.hour, minute=dt.minute, second=dt.second)
 
 
 def CDate(s):
     if s is VBNull:
         raise VBScriptCOMError(94, "Invalid use of Null")
+    if isinstance(s, (_dt.datetime, _dt.date, _dt.time)):
+        return _to_datetime(s)
+    # Numbers are OA date serials: CDate(CDbl(d)) round-trips.
+    if isinstance(s, (int, float)) and not isinstance(s, bool):
+        base = _OA_ZERO + _dt.timedelta(days=float(s))
+        # Round to whole seconds like VBScript does.
+        micro = base.microsecond
+        base = base.replace(microsecond=0)
+        if micro >= 500000:
+            base += _dt.timedelta(seconds=1)
+        return base
     try:
         return _parse_iso_datetime(str(s))
     except VBScriptRuntimeError:
@@ -316,8 +346,8 @@ def _to_datetime(value) -> _dt.datetime:
     if isinstance(value, _dt.date) and not isinstance(value, _dt.datetime):
         return _dt.datetime(value.year, value.month, value.day)
     if isinstance(value, _dt.time):
-        today = _dt.date.today()
-        return _dt.datetime(today.year, today.month, today.day, value.hour, value.minute, value.second)
+        # Time-only values live on the OA zero date, like VBScript.
+        return _OA_ZERO.replace(hour=value.hour, minute=value.minute, second=value.second)
     if isinstance(value, (int, float)):
         # VBScript/OLE Automation date: days since 1899-12-30
         base = _dt.datetime(1899, 12, 30)
@@ -398,11 +428,12 @@ def _parse_iso_datetime(s: str) -> _dt.datetime:
             frac = m.group(7) or ""
             micro = int((frac + "000000")[:6]) if frac else 0
             return _dt.datetime(yr, mo, da, hh, mi, se, micro)
-        # Accept: HH:MM:SS (today)
-        if len(s) == 8 and s[2] == ':' and s[5] == ':':
-            t = _dt.datetime.strptime(s, "%H:%M:%S").time()
-            today = _dt.date.today()
-            return _dt.datetime(today.year, today.month, today.day, t.hour, t.minute, t.second)
+        # Accept time-only strings: H:MM, HH:MM, H:MM:SS, with optional AM/PM
+        # (VBScript: IsDate("13:45") = True, CDate("13:45") = pure time value)
+        m = _re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$", s)
+        if m:
+            hh, mi, se = _parse_time_parts(m.group(1), m.group(2), m.group(3), m.group(4))
+            return _OA_ZERO.replace(hour=hh, minute=mi, second=se)
 
         # Accept: MonthName D[, YYYY] [H:MM[:SS] [AM|PM]]
         m = _re.match(

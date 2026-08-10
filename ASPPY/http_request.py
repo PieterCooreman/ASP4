@@ -45,13 +45,13 @@ class NameValueCollection:
         if lk in self._kmap:
             k = self._kmap[lk]
         vals = self._m.get(k)
+        # IIS returns an IStringList: it renders/compares as a string (the
+        # values joined with ", "), but also supports .Count and 1-based
+        # indexing: Request.QueryString("a")(1). A missing key yields an
+        # empty IStringList (prints "", Count = 0).
         if not vals:
-            return ""
-        if len(vals) == 1:
-            # Request collections should be stringly-typed.
-            return "" if vals[0] is None else str(vals[0])
-        # IIS Classic ASP joins multi-valued keys with comma+space.
-        return ", ".join(["" if v is None else str(v) for v in vals])
+            return IStringList([])
+        return IStringList(["" if v is None else str(v) for v in vals])
 
     def __vbs_index_get__(self, key):
         return self.Item(key)
@@ -63,8 +63,8 @@ class NameValueCollection:
         
 
 class ServerVariablesCollection(NameValueCollection):
-    """Like NameValueCollection but Item() returns IStringList objects,
-    matching IIS Classic ASP behaviour where TypeName() returns 'IStringList'."""
+    """Like NameValueCollection but a missing key yields IStringList([""])
+    (one empty value), matching IIS Classic ASP Request.ServerVariables."""
 
     def Item(self, key):
         k = str(key)
@@ -79,42 +79,46 @@ class ServerVariablesCollection(NameValueCollection):
     def __vbs_index_get__(self, key):
         return self.Item(key)
 
-class IStringList:
-    """Emulates the Classic ASP IStringList returned by Request.ServerVariables.
-    
-    TypeName() returns "IStringList". It behaves as a string (str() returns the
-    first/joined value) but also exposes Count and iteration over the values.
+class IStringList(str):
+    """Emulates the Classic ASP IStringList returned by Request.QueryString,
+    Request.Form and Request.ServerVariables items.
+
+    It IS a string (subclass of str: the values joined with ", "), so every
+    string operation keeps working, but it also exposes:
+      - .Count            number of values
+      - .Item(i) / (i)    1-based access to the individual values
+      - For Each          iterates the individual values
     """
 
-    def __init__(self, values: list):
-        self._values = [str(v) for v in values] if values else [""]
+    __slots__ = ('_values',)
+
+    def __new__(cls, values=None):
+        vals = [str(v) for v in values] if values else []
+        obj = super().__new__(cls, ", ".join(vals))
+        obj._values = vals
+        return obj
 
     @property
     def Count(self):
         return len(self._values)
 
-    def Item(self, index=1):
+    # VBScript is case-insensitive: shield str.count so that .Count/.count
+    # both resolve to the item count instead of leaking a bound method.
+    count = Count
+
+    def Item(self, index=None):
+        if index is None:
+            return str(self)
         i = int(index)
         if i < 1 or i > len(self._values):
             raise IndexError("Index out of range")
         return self._values[i - 1]
 
+    def __vbs_index_get__(self, index):
+        return self.Item(index)
+
     def __iter__(self):
         return iter(self._values)
-
-    def __str__(self):
-        # IIS joins multiple values with ", " just like NameValueCollection does
-        return ", ".join(self._values)
-
-    def __repr__(self):
-        return f"IStringList({self._values!r})"
-
-    # Allow direct string comparisons like If Request.ServerVariables("HTTPS") = "on"
-    def __eq__(self, other):
-        return str(self) == str(other)
-
-    def __ne__(self, other):
-        return str(self) != str(other)
 
     def __vbs_typename__(self):
         return "IStringList"
@@ -491,9 +495,56 @@ class CookiesCollection:
             lk = str(k).lower()
             if lk not in self._kmap:
                 self._kmap[lk] = k
+        # Response object (attached per request) so that cookies written via
+        # Response.Cookies are readable through Request.Cookies within the
+        # same request, like IIS Classic ASP does.
+        self._resp = None
+
+    def attach_response(self, resp):
+        self._resp = resp
+
+    # The ASPPY session cookie is infrastructure (IIS also hides its
+    # ASPSESSIONID* cookies from the Request.Cookies collection).
+    _HIDDEN = ('asp_py_sessionid',)
+
+    def _resp_cookie_names(self):
+        r = self._resp
+        if r is None:
+            return []
+        try:
+            jar = getattr(r, '_cookies', None) or {}
+            return [n for n in jar.keys() if str(n).lower() not in self._HIDDEN]
+        except Exception:
+            return []
+
+    def _resp_cookie(self, name):
+        r = self._resp
+        if r is None:
+            return None
+        lk = str(name).lower()
+        if lk in self._HIDDEN:
+            return None
+        try:
+            jar = getattr(r, '_cookies', None) or {}
+        except Exception:
+            return None
+        for n, c in jar.items():
+            if str(n).lower() == lk:
+                return c
+        return None
+
+    def _all_names(self):
+        names = list(self._m.keys())
+        seen = {str(n).lower() for n in names}
+        for n in self._resp_cookie_names():
+            if str(n).lower() not in seen:
+                names.append(n)
+        return names
 
     def Exists(self, name) -> bool:
-        return str(name).lower() in self._kmap
+        if str(name).lower() in self._kmap:
+            return True
+        return self._resp_cookie(name) is not None
 
     def Item(self, name) -> str:
         c = self.__vbs_index_get__(name)
@@ -501,18 +552,29 @@ class CookiesCollection:
 
     @property
     def Count(self):
-        return len(self._m)
+        return len(self._all_names())
 
     def Key(self, index):
         i = int(index)
-        if i < 1 or i > len(self._m):
+        names = self._all_names()
+        if i < 1 or i > len(names):
             raise IndexError("Index out of range")
-        return list(self._m.keys())[i - 1]
+        return names[i - 1]
 
     def __iter__(self):
-        return iter(self._m.keys())
+        return iter(self._all_names())
 
     def __vbs_index_get__(self, name):
+        # Cookies written in THIS request via Response.Cookies win over the
+        # ones the client sent (IIS behavior).
+        rc = self._resp_cookie(name)
+        if rc is not None:
+            try:
+                keys = list(getattr(rc, '_keys', []) or [])
+                value = str(rc)
+            except Exception:
+                keys, value = [], ""
+            return CookieIn(getattr(rc, 'Name', str(name)), value, keys=keys)
         n = str(name)
         lk = n.lower()
         if lk in self._kmap:

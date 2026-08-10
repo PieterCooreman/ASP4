@@ -41,6 +41,10 @@ def Split(s, delimiter=" ", count=-1, compare=0):
     if cnt == 0:
         return VBArray(-1, allocated=True, dynamic=True)
 
+    # VBScript: Split("") returns an EMPTY array (UBound = -1).
+    if txt == "":
+        return VBArray(-1, allocated=True, dynamic=True)
+
     def _split_chars(t, limit):
         if limit is None or limit < 0:
             return list(t)

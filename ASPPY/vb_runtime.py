@@ -59,6 +59,13 @@ except Exception:  # pragma: no cover
     VBNothing = object()
 
 
+class VBSingle(float):
+    """Marker type for VBScript Single (CSng): VarType 4, TypeName "Single",
+    CStr with 7 significant digits. Arithmetic promotes to plain float
+    (Double), which is close enough for ASP compatibility purposes."""
+    __slots__ = ()
+
+
 class VBScriptRuntimeError(Exception):
     pass
 
@@ -110,24 +117,25 @@ def vbs_cstr(value) -> str:
             s = '0'
         return s
     if isinstance(value, float):
-        # VBScript numeric string formatting is locale-dependent.
-        # Approximate Single formatting: 7 significant digits, and IIS/VBScript
-        # tends to emit scientific notation for values < 0.1.
+        # VBScript CStr renders a Double with up to 15 significant digits
+        # (CStr(1/3) => "0.333333333333333"); a Single (CSng) uses 7.
+        # Scientific notation kicks in below 1E-4, like VBScript.
         if value == 0.0:
             return "0"
 
+        digits = 7 if isinstance(value, VBSingle) else 15
         av = abs(value)
-        if av < 0.1:
-            # scientific with 6 decimals in mantissa (total ~7 sig digits)
+        if av < 1e-4:
+            # scientific notation: mantissa with (digits-1) decimals, trimmed
             exp = int(_math.floor(_math.log10(av)))
             mant = value / (10 ** exp)
-            s = f"{mant:.6f}"
+            s = f"{mant:.{digits - 1}f}"
             # Trim trailing zeros like VBScript tends to
             if '.' in s:
                 s = s.rstrip('0').rstrip('.')
             s = f"{s}E{exp:+03d}"
         else:
-            s = format(value, '.7g')
+            s = format(value, f'.{digits}g')
             if 'e' in s or 'E' in s:
                 s = s.replace('e', 'E')
                 m = _re.match(r"^(.*)E([+-]?)(\d+)$", s)
@@ -138,6 +146,12 @@ def vbs_cstr(value) -> str:
         return s
     if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
         if isinstance(value, _dt.datetime):
+            # VBScript prints date-only when the time part is midnight and
+            # time-only when the value is a pure time (OA zero date).
+            if (value.year, value.month, value.day) == (1899, 12, 30):
+                return value.strftime("%H:%M:%S")
+            if value.hour == 0 and value.minute == 0 and value.second == 0 and value.microsecond == 0:
+                return value.strftime("%Y-%m-%d")
             return value.strftime("%Y-%m-%d %H:%M:%S")
         if isinstance(value, _dt.date):
             return value.strftime("%Y-%m-%d")

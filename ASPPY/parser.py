@@ -13,6 +13,7 @@ from .ast_nodes import (
     Concat,
     UnaryOp,
     BinaryOp,
+    ParenExpr,
     ResponseWrite,
     ResponseEnd,
     ResponseClear,
@@ -794,6 +795,29 @@ class Parser:
                 expr = CallExpr(expr, args)
             else:
                 raise ParseError("Expected operator between expressions")
+        elif self.tok.kind == "COMMA" and isinstance(expr, CallExpr) and len(expr.args) == 1:
+            # VBScript: `Foo (x), y` is a paren-less Sub call whose FIRST
+            # argument is parenthesized (=> ByVal). _parse_expr consumed
+            # `Foo (x)` as a one-arg call; a comma means more args follow.
+            first = expr.args[0]
+            if not isinstance(first, ParenExpr):
+                first = ParenExpr(first)
+            args = [first]
+            while self.tok.kind == "COMMA":
+                self._eat("COMMA")
+                # Missing argument => Empty
+                if self.tok.kind in ("COMMA", "NEWLINE", "COLON", "EOF"):
+                    args.append(Ident("EMPTY")) # ensure upper
+                    continue
+                args.append(self._parse_expr())
+            expr = CallExpr(expr.callee, args)
+        elif isinstance(expr, CallExpr) and len(expr.args) == 1 \
+                and self.tok.kind in ("NEWLINE", "COLON", "EOF", "ELSE", "END"):
+            # Statement-level `Foo(x)` without Call: VBScript treats the
+            # parentheses as expression parens around the single argument,
+            # which forces ByVal.
+            if not isinstance(expr.args[0], ParenExpr):
+                expr = CallExpr(expr.callee, [ParenExpr(expr.args[0])])
 
         # After parsing a statement expression, require statement terminator.
         if self.tok.kind not in ("NEWLINE", "COLON", "EOF", "ELSE", "END"):
@@ -1330,7 +1354,15 @@ class Parser:
 
         if self.tok.kind == "NUMBER":
             val_s = self.tok.value
-            val = float(val_s) if '.' in val_s else int(val_s)
+            # Scientific notation ("1E10") is always a Double in VBScript.
+            if '.' in val_s or 'E' in val_s or 'e' in val_s:
+                val = float(val_s)
+            else:
+                val = int(val_s)
+                # Integer literals beyond the 32-bit Long range become Doubles
+                # in VBScript (TypeName(5000000000) = "Double").
+                if val > 2147483647 or val < -2147483648:
+                    val = float(val)
             self._eat("NUMBER")
             expr = NumberLit(val)
             return self._parse_postfix(expr)
@@ -1378,7 +1410,9 @@ class Parser:
             expr = self._parse_expr()
             self._skip_newlines()
             self._eat("RPAREN")
-            return self._parse_postfix(expr)
+            # Keep the parentheses as an explicit node: in argument position
+            # they force ByVal (VBScript: `Foo (x)` / `Call Foo((x))`).
+            return self._parse_postfix(ParenExpr(expr))
 
         raise ParseError(f"Expected expression at position {self.tok.pos}")
 

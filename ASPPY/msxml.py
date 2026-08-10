@@ -417,14 +417,51 @@ class _Attr:
     def __init__(self, name: str, text: str):
         self.name = name
         self.text = text
+        # MSXML attribute node aliases
+        self.nodeName = name
+        self.value = text
+        self.nodeValue = text
+        self.nodeTypedValue = text
+        self.nodeType = 2
+        self.nodeTypeString = "attribute"
 
 
 class _AttrList:
+    """MSXML NamedNodeMap (node.attributes): length/item/getNamedItem."""
+
     def __init__(self, attrs: list[_Attr]):
         self._attrs = list(attrs)
 
     def __iter__(self):
         return iter(self._attrs)
+
+    @property
+    def length(self):
+        return len(self._attrs)
+
+    def item(self, idx):
+        i = int(idx)
+        if i < 0 or i >= len(self._attrs):
+            return None
+        return self._attrs[i]
+
+    def Item(self, idx):
+        return self.item(idx)
+
+    def __vbs_index_get__(self, idx):
+        return self.item(idx)
+
+    def getNamedItem(self, name):
+        want = str(name)
+        for a in self._attrs:
+            if a.name == want:
+                return a
+        # Fallback: case-insensitive / local-name match (namespace prefixes)
+        want_l = want.split(':', 1)[-1].lower()
+        for a in self._attrs:
+            if a.name.split(':', 1)[-1].lower() == want_l:
+                return a
+        return None
 
 
 class _NodeList:
@@ -521,6 +558,14 @@ class _Node:
         if kind in ("comment", "processinginstruction"):
             return self._e.text or ""
         return "".join(self._e.itertext())
+
+    @text.setter
+    def text(self, value):
+        # MSXML: assigning node.text replaces the node's entire content
+        # with a single text node.
+        for ch in list(self._e):
+            self._e.remove(ch)
+        self._e.text = str(value)
 
     @property
     def xml(self):

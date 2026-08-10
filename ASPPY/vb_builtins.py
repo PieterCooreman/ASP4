@@ -6,8 +6,10 @@ import math as _math
 import random as _random
 from decimal import Decimal, ROUND_HALF_EVEN
 
+import struct as _struct
+
 from .vb_errors import raise_runtime
-from .vb_runtime import vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
+from .vb_runtime import VBSingle, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
 from .vm.values import VBEmpty, VBNull, VBNothing
 
 # Re-implement core functions to guarantee they exist in this module scope
@@ -19,9 +21,11 @@ def Len(expression):
     return len(vbs_cstr(expression))
 
 def UCase(string):
+    if string is VBNull: return VBNull
     return vbs_cstr(string).upper()
 
 def LCase(string):
+    if string is VBNull: return VBNull
     return vbs_cstr(string).lower()
 
 def Trim(string):
@@ -56,6 +60,8 @@ def Split(expression, delimiter=" ", count=-1, compare=0):
     s = vbs_cstr(expression)
     d = vbs_cstr(delimiter)
     from .vm.values import VBArray
+    # VBScript: Split("") returns an EMPTY array (UBound = -1).
+    if s == "": return VBArray([-1], allocated=True, dynamic=True)
     if d == "": return VBArray([0], allocated=True, dynamic=True)
     cnt = int(_to_int(count))
     if cnt < 0:
@@ -202,8 +208,13 @@ def TypeName(varname):
     if v is VBNothing: return "Nothing"
     if isinstance(v, bool): return "Boolean"
     if isinstance(v, int): return "Integer" if -32768 <= v <= 32767 else "Long"
+    if isinstance(v, VBSingle): return "Single"
     if isinstance(v, float): return "Double"
     if isinstance(v, Decimal): return "Currency"
+    tn_hook = getattr(v, '__vbs_typename__', None)
+    if tn_hook is not None:
+        try: return tn_hook()
+        except Exception: pass
     if isinstance(v, str): return "String"
     if isinstance(v, (_dt.datetime, _dt.date, _dt.time)): return "Date"
     from .vm.values import VBArray
@@ -224,11 +235,14 @@ def VarType(varname):
     if v is VBEmpty or v is None: return 0
     if v is VBNull: return 1
     if isinstance(v, bool): return 11
-    if isinstance(v, int): return 3
+    # vbInteger (2) for values in Integer range, vbLong (3) beyond - keep
+    # consistent with TypeName so VarType(42) = 2 like IIS.
+    if isinstance(v, int): return 2 if -32768 <= v <= 32767 else 3
+    if isinstance(v, VBSingle): return 4
     if isinstance(v, float): return 5
     if isinstance(v, Decimal): return 6
     if isinstance(v, str): return 8
-    if isinstance(v, (_dt.datetime, _dt.date)): return 7
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)): return 7
     from .vm.values import VBArray
     if isinstance(v, VBArray): return 8204
     if v is VBNothing: return 9
@@ -315,7 +329,12 @@ def CDbl(expr):
 
 def CSng(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
-    return float(_to_number(expr))
+    f = float(_to_number(expr))
+    # Reduce to real 32-bit float precision, like VBScript Single.
+    f32 = _struct.unpack('f', _struct.pack('f', f))[0]
+    if _math.isinf(f32) and not _math.isinf(f):
+        raise_runtime('OVERFLOW')
+    return VBSingle(f32)
 
 def CInt(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
@@ -328,7 +347,11 @@ def CInt(expr):
 def CLng(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     if isinstance(expr, bool): return -1 if expr else 0
-    return int(_round_bankers(_to_decimal(expr)))
+    result = int(_round_bankers(_to_decimal(expr)))
+    # VBScript Long is 32-bit: CLng(2147483648) => Overflow (error 6).
+    if result < -2147483648 or result > 2147483647:
+        raise_runtime('OVERFLOW')
+    return result
 
 def CStr(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
@@ -339,7 +362,9 @@ def CBool(expr):
     return vbs_cbool(expr)
 
 def Hex(number):
-    n = int(_to_int(number))
+    if number is VBNull: return VBNull
+    # VBScript rounds (banker's) before converting: Hex(15.7) => "10".
+    n = int(_round_bankers(_to_decimal(number)))
     if n < 0: n = n & 0xFFFFFFFF
     return format(n, 'X')
 
@@ -446,7 +471,9 @@ def InStrB(*args):
     return 0 if idx < 0 else (idx + 1)
 
 def Oct(number):
-    n = int(_to_int(number))
+    if number is VBNull: return VBNull
+    # VBScript rounds (banker's) before converting, like Hex.
+    n = int(_round_bankers(_to_decimal(number)))
     if n < 0: n = n & 0xFFFFFFFF
     return format(n, 'o')
 
@@ -464,9 +491,13 @@ def Exp(number):
     return _math.exp(float(_to_number(number)))
 
 def Int(number):
+    # VBScript: Int(Null) = Null (no error).
+    if number is VBNull: return VBNull
     return _math.floor(float(_to_number(number)))
 
 def Fix(number):
+    # VBScript: Fix(Null) = Null (no error).
+    if number is VBNull: return VBNull
     x = float(_to_number(number))
     return int(x)
 
@@ -484,13 +515,18 @@ def _to_number(v):
     if isinstance(v, (int, float)): return v
     if isinstance(v, Decimal): return float(v)
     if isinstance(v, (_dt.datetime, _dt.date)): return _date_to_oaserial(v)
+    if v is VBEmpty: return 0
     s = vbs_cstr(v).strip()
-    if s == "": return 0
+    # VBScript: CInt("")/CDbl("") is a Type Mismatch; only Empty converts to 0.
+    if s == "": raise_runtime('TYPE_MISMATCH')
     if len(s) >= 2 and s[0] == '&' and s[1] in ('H', 'h', 'O', 'o'):
         try: return int(s.replace('&H','0x').replace('&h','0x').replace('&O','0o').replace('&o','0o'), 0)
         except: raise_runtime('TYPE_MISMATCH')
-    try: return float(s) if '.' in s else int(s)
-    except: raise_runtime('TYPE_MISMATCH')
+    try: return int(s)
+    except ValueError: pass
+    # Accept float and scientific notation ("1e5"), like CDbl on IIS.
+    try: return float(s)
+    except ValueError: raise_runtime('TYPE_MISMATCH')
 
 def _to_int(v):
     return int(_to_number(v))
@@ -501,8 +537,10 @@ def _to_decimal(v) -> Decimal:
     if isinstance(v, bool): return Decimal(1 if v else 0)
     if isinstance(v, (int, float)): return Decimal(str(v))
     if isinstance(v, (_dt.datetime, _dt.date)): return Decimal(str(_date_to_oaserial(v)))
+    if v is VBEmpty: return Decimal(0)
     s = vbs_cstr(v).strip()
-    if s == "": return Decimal(0)
+    # VBScript: CInt("")/CLng("") is a Type Mismatch; only Empty converts to 0.
+    if s == "": raise_runtime('TYPE_MISMATCH')
     if len(s) >= 2 and s[0] == '&' and s[1] in ('H', 'h', 'O', 'o'):
         # VBScript hex/octal strings ("&HFF", "&O77") are valid input to
         # CLng/CInt/CCur etc. Keep behavior identical to _to_number.
@@ -606,7 +644,8 @@ def RGB(red, green, blue):
     return r | (g << 8) | (b << 16)
 
 def Round(expression, numdecimalplaces=0):
-    if expression is VBNull: return VBNull
+    # VBScript quirk: unlike Int/Fix, Round(Null) raises error 94.
+    if expression is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     n = _to_decimal(expression)
     dp = int(_to_int(numdecimalplaces))
     if dp < 0: raise_runtime('INVALID_PROC_CALL')
