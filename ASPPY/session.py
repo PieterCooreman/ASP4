@@ -74,6 +74,8 @@ class Session:
         from ASPPY.application import StaticObjectsCollection
         self.StaticObjects = StaticObjectsCollection(self._static_objects)
         self.LCID_ = 0
+        # ASPPY renders as UTF-8, so 65001 is the default code page.
+        self.CodePage_ = 65001
 
     @property
     def SessionID(self):
@@ -103,12 +105,17 @@ class Session:
 
     @property
     def CodePage(self):
-        return 65001
+        return self.CodePage_
 
     @CodePage.setter
     def CodePage(self, value):
-        # No-op (cross-platform)
-        pass
+        # Store the value so a page can read back what it set (IIS does).
+        # ASPPY still emits UTF-8 regardless: the code page is not used to
+        # re-encode output, it is remembered for compatibility only.
+        try:
+            self.CodePage_ = int(value)
+        except Exception:
+            pass
 
     @property
     def LCID(self):

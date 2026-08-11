@@ -11,6 +11,7 @@ import email.utils
 import urllib.parse
 
 from .vb_runtime import vbs_cstr, vbs_set_lcid
+from .vm.values import VBNull
 
 
 class ResponseEndException(Exception):
@@ -421,6 +422,18 @@ class Response:
 
     @property
     def Status(self):
+        # IIS reports the CURRENT status line, defaulting to "200 OK" rather
+        # than an empty string when the page has not set one.
+        if self._status is None:
+            code = getattr(self._res, 'status_code', 200) or 200
+            msg = getattr(self._res, 'status_message', '') or ''
+            if not msg:
+                import http
+                try:
+                    msg = http.HTTPStatus(int(code)).phrase
+                except Exception:
+                    msg = ''
+            return f"{code} {msg}".strip()
         return self._status
 
     @Status.setter
@@ -458,9 +471,57 @@ class Response:
     def CacheControl(self, value):
         self._cache_control = vbs_cstr(value)
 
+    # IIS keeps ONE expiry internally and exposes it through both properties:
+    # setting either one makes the other reflect it. Verified against IIS:
+    #   unset                              -> Expires = Null, ExpiresAbsolute = #00:00:00#
+    #   Expires = 45                       -> Expires = 45 (Long)
+    #   ExpiresAbsolute = #2030-01-01 12:00# -> Expires = 1783593 (minutes from now)
+    #   Expires = -1                       -> Expires = 0 (never negative)
+
+    def _expires_absolute_dt(self):
+        """The pending expiry as a naive LOCAL datetime, or None if never set."""
+        if self._expires is None:
+            return None
+        kind, val = self._expires
+        if kind == "REL":
+            return dt.datetime.now() + dt.timedelta(minutes=int(val))
+        try:
+            from .vb_datetime import CDate
+            return CDate(val)
+        except Exception:
+            return None
+
+    def _expires_absolute_utc(self):
+        """The pending expiry as an aware UTC datetime, or None if never set.
+
+        A VBScript Date is a LOCAL time, so it must be converted rather than
+        simply relabelled as UTC. The offset that applies at the TARGET date is
+        used, which is what IIS does: setting #2030-01-01 12:00:00# in a
+        UTC+1-in-winter zone emits "01 Jan 2030 11:00:00 GMT" even when the
+        request happens during summer time (UTC+2).
+        """
+        when = self._expires_absolute_dt()
+        if when is None:
+            return None
+        if when.tzinfo is None:
+            when = when.astimezone()  # attach the offset in effect at `when`
+        return when.astimezone(dt.timezone.utc)
+
     @property
     def Expires(self):
-        return None
+        # Never set: IIS reports Null (prints as an empty string).
+        if self._expires is None:
+            return VBNull
+        from .vb_runtime import VBLong
+        kind, val = self._expires
+        if kind == "REL":
+            return VBLong(max(0, int(val)))
+        when = self._expires_absolute_utc()
+        if when is None:
+            return VBLong(0)
+        now_utc = dt.datetime.now(dt.timezone.utc)
+        minutes = int((when - now_utc).total_seconds() // 60)
+        return VBLong(max(0, minutes))
 
     @Expires.setter
     def Expires(self, value):
@@ -468,7 +529,11 @@ class Response:
 
     @property
     def ExpiresAbsolute(self):
-        return None
+        when = self._expires_absolute_dt()
+        if when is None:
+            # Never set: IIS reports the OA zero date, i.e. #00:00:00#.
+            return dt.datetime(1899, 12, 30)
+        return when
 
     @ExpiresAbsolute.setter
     def ExpiresAbsolute(self, value):
@@ -500,17 +565,11 @@ class Response:
             self._res.headers.append(("Cache-Control", self._cache_control))
 
         if self._expires is not None:
-            kind, val = self._expires
-            if kind == "REL":
-                minutes = int(val)
-                when = dt.datetime.utcnow() + dt.timedelta(minutes=minutes)
-            else:
-                try:
-                    from .vb_datetime import CDate
-                    when = CDate(val)
-                except Exception:
-                    when = dt.datetime.utcnow()
-            when = when.replace(tzinfo=dt.timezone.utc)
+            # A VBScript Date is LOCAL time, so convert it to UTC instead of
+            # relabelling it (which used to emit 12:00 GMT for a local 12:00).
+            when = self._expires_absolute_utc()
+            if when is None:
+                when = dt.datetime.now(dt.timezone.utc)
             self._res.headers.append(("Expires", email.utils.format_datetime(when, usegmt=True)))
 
         for (hn, hv) in self._extra_headers:
