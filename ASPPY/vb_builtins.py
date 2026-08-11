@@ -4,21 +4,26 @@ from __future__ import annotations
 import datetime as _dt
 import math as _math
 import random as _random
-from decimal import Decimal, ROUND_HALF_EVEN
+from decimal import Decimal, ROUND_HALF_EVEN, InvalidOperation
 
 import struct as _struct
 
 from .vb_errors import raise_runtime
-from .vb_runtime import VBSingle, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
+from .vb_runtime import VBSingle, VBLong, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
 from .vm.values import VBEmpty, VBNull, VBNothing
 
 # Re-implement core functions to guarantee they exist in this module scope
 
 def Len(expression):
+    # VBScript Len() returns a Long (TypeName(Len("")) = "Long").
     if expression is VBNull: return VBNull
-    if expression is VBEmpty or expression is VBNothing: return 0
-    if isinstance(expression, (str, bytes, bytearray)): return len(expression)
-    return len(vbs_cstr(expression))
+    if expression is VBEmpty or expression is VBNothing: return VBLong(0)
+    if isinstance(expression, (bytes, bytearray)):
+        # Len() counts CHARACTERS, and a binary string holds 2 bytes per
+        # character: Len(ChrB(65)) = 0 on IIS (use LenB for the byte count).
+        return VBLong(len(expression) // 2)
+    if isinstance(expression, str): return VBLong(len(expression))
+    return VBLong(len(vbs_cstr(expression)))
 
 def UCase(string):
     if string is VBNull: return VBNull
@@ -173,13 +178,18 @@ def IsDate(expression):
     except: return False
 
 def IsEmpty(expression):
-    return expression is VBEmpty
+    # A missing Request key coerces to Empty through its default property,
+    # so IsEmpty(Request.Form("nope")) is True on IIS.
+    return _scalarize(expression) is VBEmpty
 
 def IsNull(expression):
-    return expression is VBNull
+    return _scalarize(expression) is VBNull
 
 def IsNumeric(expression):
+    expression = _scalarize(expression)
     if expression is VBNull: return False
+    # VBScript: IsNumeric(Empty) = True (Empty coerces to 0).
+    if expression is VBEmpty: return True
     if isinstance(expression, (int, float, Decimal, bool)): return True
     if isinstance(expression, _dt.datetime): return False
     s = vbs_cstr(expression)
@@ -203,11 +213,17 @@ def IsObject(expression):
 
 def TypeName(varname):
     v = varname
+    # NOTE: TypeName does NOT go through the default property -- IIS reports
+    # "IStringList" for Request values even when the key is missing (verified
+    # against IIS), unlike VarType/IsEmpty which report Empty/0.
     if v is VBEmpty or v is None: return "Empty"
     if v is VBNull: return "Null"
     if v is VBNothing: return "Nothing"
     if isinstance(v, bool): return "Boolean"
-    if isinstance(v, int): return "Integer" if -32768 <= v <= 32767 else "Long"
+    if isinstance(v, VBLong): return "Long"
+    # VBScript quirk (verified on IIS): -32768 reports as Long even though it
+    # fits in an Integer, because the literal is negated from a Long.
+    if isinstance(v, int): return "Integer" if -32767 <= v <= 32767 else "Long"
     if isinstance(v, VBSingle): return "Single"
     if isinstance(v, float): return "Double"
     if isinstance(v, Decimal): return "Currency"
@@ -228,16 +244,29 @@ def TypeName(varname):
     tn = type(v).__name__
     if tn == 'ScriptingDictionary': return 'Dictionary'
     if tn == '_Sentinel': return 'Object'
+    # The built-in ASP objects report their COM interface name on IIS.
+    asp_iface = {
+        'Request': 'IRequest',
+        'Response': 'IResponse',
+        'ServerObject': 'IServer',
+        'Server': 'IServer',
+        'Session': 'ISessionObject',
+        'Application': 'IApplicationObject',
+        'ScriptingContext': 'IScriptingContext',
+    }.get(tn)
+    if asp_iface is not None: return asp_iface
     return "Object"
 
 def VarType(varname):
-    v = varname
+    v = _scalarize(varname)
     if v is VBEmpty or v is None: return 0
     if v is VBNull: return 1
     if isinstance(v, bool): return 11
+    if isinstance(v, VBLong): return 3
     # vbInteger (2) for values in Integer range, vbLong (3) beyond - keep
-    # consistent with TypeName so VarType(42) = 2 like IIS.
-    if isinstance(v, int): return 2 if -32768 <= v <= 32767 else 3
+    # consistent with TypeName so VarType(42) = 2 like IIS (including the
+    # -32768 => Long quirk).
+    if isinstance(v, int): return 2 if -32767 <= v <= 32767 else 3
     if isinstance(v, VBSingle): return 4
     if isinstance(v, float): return 5
     if isinstance(v, Decimal): return 6
@@ -345,13 +374,14 @@ def CInt(expr):
     return result
 
 def CLng(expr):
-    if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
-    if isinstance(expr, bool): return -1 if expr else 0
+    if _scalarize(expr) is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    if isinstance(_scalarize(expr), bool): return VBLong(-1 if _scalarize(expr) else 0)
     result = int(_round_bankers(_to_decimal(expr)))
     # VBScript Long is 32-bit: CLng(2147483648) => Overflow (error 6).
     if result < -2147483648 or result > 2147483647:
         raise_runtime('OVERFLOW')
-    return result
+    # CLng always yields the Long subtype, even for small values.
+    return VBLong(result)
 
 def CStr(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
@@ -362,20 +392,41 @@ def CBool(expr):
     return vbs_cbool(expr)
 
 def Hex(number):
-    if number is VBNull: return VBNull
+    if _scalarize(number) is VBNull: return VBNull
     # VBScript rounds (banker's) before converting: Hex(15.7) => "10".
     n = int(_round_bankers(_to_decimal(number)))
-    if n < 0: n = n & 0xFFFFFFFF
+    if n < 0: n = n & _neg_mask(number, n)
     return format(n, 'X')
 
+def _neg_mask(original, n):
+    """Two's-complement width VBScript uses when formatting a negative number.
+
+    The width follows the value's SUBTYPE, verified against IIS:
+        Hex(-1)             = "FFFF"      (Integer)
+        Hex(True)           = "FFFF"      (Boolean behaves as Integer -1)
+        Hex(CLng(-1))       = "FFFFFFFF"  (Long, even though it fits 16 bits)
+        Hex(-32768)         = "FFFF8000"  (Long: -32768 is not an Integer)
+        Hex(CLng(-70000))   = "FFFEEE90"  (Long by magnitude)
+    """
+    orig = _scalarize(original)
+    if isinstance(orig, bool): return 0xFFFF
+    # An explicit Long (CLng/Len/...) always uses the 32-bit width.
+    if isinstance(orig, VBLong): return 0xFFFFFFFF
+    # Integer subtype is -32767..32767 here: -32768 reports as Long on IIS
+    # (same quirk as TypeName), so it takes the 32-bit width.
+    if isinstance(orig, int) and -32767 <= orig <= 32767: return 0xFFFF
+    if isinstance(orig, (float, Decimal)) and -32767 <= n <= 32767: return 0xFFFF
+    return 0xFFFFFFFF
+
 def LenB(expr):
+    # Like Len(), LenB() returns a Long on IIS.
     v = expr
     if v is VBNull: return VBNull
-    if v is VBEmpty or v is VBNothing or v is None: return 0
-    if isinstance(v, (bytes, bytearray)): return len(v)
+    if v is VBEmpty or v is VBNothing or v is None: return VBLong(0)
+    if isinstance(v, (bytes, bytearray)): return VBLong(len(v))
     s = vbs_cstr(v)
-    try: return len(s.encode('utf-16le'))
-    except: return len(s)
+    try: return VBLong(len(s.encode('utf-16le')))
+    except: return VBLong(len(s))
 
 def LeftB(string, length):
     if string is VBNull: return VBNull
@@ -471,13 +522,15 @@ def InStrB(*args):
     return 0 if idx < 0 else (idx + 1)
 
 def Oct(number):
-    if number is VBNull: return VBNull
+    if _scalarize(number) is VBNull: return VBNull
     # VBScript rounds (banker's) before converting, like Hex.
     n = int(_round_bankers(_to_decimal(number)))
-    if n < 0: n = n & 0xFFFFFFFF
+    if n < 0: n = n & _neg_mask(number, n)
     return format(n, 'o')
 
 def Abs(number):
+    # VBScript: Abs(Null) = Null (documented, no error).
+    if _scalarize(number) is VBNull: return VBNull
     x = _to_number(number)
     return -x if x < 0 else x
 
@@ -509,9 +562,21 @@ def _date_to_oaserial(v):
         d = _dt.datetime(v.year, v.month, v.day)
     return (d - _dt.datetime(1899, 12, 30)).total_seconds() / 86400.0
 
+def _scalarize(v):
+    """Invoke a wrapped value's default-scalar hook (IStringList etc.).
+
+    IIS coerces such COM objects through their default property before any
+    conversion; an empty IStringList (missing Request key) becomes Empty."""
+    hook = getattr(v.__class__, '__vbs_scalar__', None)
+    if hook is not None:
+        return hook(v)
+    return v
+
 def _to_number(v):
+    v = _scalarize(v)
     if v is VBNull: raise_runtime('INVALID_USE_OF_NULL')
-    if isinstance(v, bool): return 1 if v else 0
+    # VBScript: True is -1, False is 0 (CDbl(True) = -1, Hex(True) = "FFFF").
+    if isinstance(v, bool): return -1 if v else 0
     if isinstance(v, (int, float)): return v
     if isinstance(v, Decimal): return float(v)
     if isinstance(v, (_dt.datetime, _dt.date)): return _date_to_oaserial(v)
@@ -532,9 +597,11 @@ def _to_int(v):
     return int(_to_number(v))
 
 def _to_decimal(v) -> Decimal:
+    v = _scalarize(v)
     if v is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     if isinstance(v, Decimal): return v
-    if isinstance(v, bool): return Decimal(1 if v else 0)
+    # VBScript: True is -1, False is 0.
+    if isinstance(v, bool): return Decimal(-1 if v else 0)
     if isinstance(v, (int, float)): return Decimal(str(v))
     if isinstance(v, (_dt.datetime, _dt.date)): return Decimal(str(_date_to_oaserial(v)))
     if v is VBEmpty: return Decimal(0)
@@ -599,23 +666,32 @@ def Mid(string, start, length=None):
     return s[st-1:st-1+ln]
 
 def Replace(expression, find, replace, start=1, count=-1, compare=0):
-    if expression is VBNull: return VBNull
-    if find is VBNull or find == "": return vbs_cstr(expression)
-    if replace is VBNull: replace = ""
+    # VBScript: Replace(Null, ...) raises error 94 (it does NOT return Null).
+    expr_v = _scalarize(expression)
+    if expr_v is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    find_v = _scalarize(find)
+    if find_v is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    if _scalarize(replace) is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     expr_s = vbs_cstr(expression)
     find_s = vbs_cstr(find)
     repl_s = vbs_cstr(replace)
+    # A zero-length search string means "nothing to find": return unchanged.
+    # (Empty must be handled here too; the sentinel is not == "".)
+    if find_s == "": return expr_s
     st = int(_to_int(start))
     cnt = int(_to_int(count))
     cmp = int(_to_int(compare))
     if st < 1: raise_runtime('INVALID_PROC_CALL')
     working = expr_s[st-1:]
+    # count = 0 means "replace nothing"; only a negative count means "all".
+    if cnt == 0: return working
     if cmp == 1:
         import re
         pat = re.escape(find_s)
         flags = re.IGNORECASE
-        if cnt < 0: cnt = 0
-        return re.sub(pat, lambda m: repl_s, working, count=cnt, flags=flags)
+        # re.sub(count=0) means unlimited, so map "all" explicitly.
+        n = 0 if cnt < 0 else cnt
+        return re.sub(pat, lambda m: repl_s, working, count=n, flags=flags)
     else:
         if cnt < 0: return working.replace(find_s, repl_s)
         return working.replace(find_s, repl_s, cnt)
@@ -626,9 +702,13 @@ def Space(number):
     return " " * n
 
 def String(number, character):
+    # VBScript raises error 94 for Null in either argument, and the character
+    # check comes first (String(3, Null) errors rather than returning Null).
+    if _scalarize(number) is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    char_v = _scalarize(character)
+    if character is None or char_v is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     n = int(_to_int(number))
     if n < 0: raise_runtime('INVALID_PROC_CALL')
-    if character is None or character is VBNull: return VBNull
     c = ""
     if isinstance(character, int): c = chr(character)
     else:
@@ -645,18 +725,34 @@ def RGB(red, green, blue):
 
 def Round(expression, numdecimalplaces=0):
     # VBScript quirk: unlike Int/Fix, Round(Null) raises error 94.
-    if expression is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    expr = _scalarize(expression)
+    if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    # VBScript preserves the Boolean subtype: Round(True) => True.
+    if isinstance(expr, bool): return expr
     n = _to_decimal(expression)
     dp = int(_to_int(numdecimalplaces))
     if dp < 0: raise_runtime('INVALID_PROC_CALL')
     quant = Decimal("1")
     if dp > 0: quant = Decimal("0." + ("0" * dp))
-    return float(n.quantize(quant, rounding=ROUND_HALF_EVEN))
+    try:
+        return float(n.quantize(quant, rounding=ROUND_HALF_EVEN))
+    except InvalidOperation:
+        # Values beyond the Decimal context precision (e.g. 1E30) have no
+        # fractional part left to round; IIS just returns them unchanged.
+        return float(n)
 
 def FormatNumber(expression, numdigitsafterdecimal=2, includeleadingdigit=True, useparensfornegativenumbers=False, groupdigits=True):
     if expression is VBNull: return VBNull
+    # An OMITTED argument (FormatNumber(n, 2, , , True)) arrives as Python
+    # None. VBScript treats such a gap as "use the system default", exactly
+    # like vbUseDefault (-2), so restore each parameter's default here rather
+    # than letting None reach _to_int (which would be a Type Mismatch).
+    if numdigitsafterdecimal is None: numdigitsafterdecimal = -1
+    if includeleadingdigit is None: includeleadingdigit = -2
+    if useparensfornegativenumbers is None: useparensfornegativenumbers = -2
+    if groupdigits is None: groupdigits = -2
     n = _to_number(expression)
-    
+
     # Handle Default (-1) for arguments
     nd = int(_to_int(numdigitsafterdecimal))
     if nd == -1: nd = 2

@@ -100,7 +100,9 @@ class IStringList(str):
 
     @property
     def Count(self):
-        return len(self._values)
+        # IIS reports a Long here (TypeName(...Count) = "Long").
+        from .vb_runtime import VBLong
+        return VBLong(len(self._values))
 
     # VBScript is case-insensitive: shield str.count so that .Count/.count
     # both resolve to the item count instead of leaking a bound method.
@@ -122,6 +124,16 @@ class IStringList(str):
 
     def __vbs_typename__(self):
         return "IStringList"
+
+    def __vbs_scalar__(self):
+        """IIS: coercing an IStringList to a scalar invokes its default
+        property. A missing Request key (empty list) yields Empty, so
+        CInt(Request.Form("missing")) = 0 like on IIS; a present key yields
+        the joined string (CInt("") stays a Type Mismatch, also like IIS)."""
+        if self._values:
+            return str(self)
+        from .vm.values import VBEmpty
+        return VBEmpty
 
 
 class UploadedFile:
@@ -322,7 +334,9 @@ class Request:
 
     @property
     def TotalBytes(self):
-        return self._body_len
+        # IIS reports a Long here (TypeName(Request.TotalBytes) = "Long").
+        from .vb_runtime import VBLong
+        return VBLong(self._body_len)
 
     def Close(self):
         try:
@@ -423,8 +437,8 @@ class Request:
             return cc.Item(k)
         if self._server_vars.Exists(k):
             return self._server_vars.Item(k)
-        # ASP returns EMPTY; we currently represent this as empty string.
-        return ""
+        # IIS returns an empty IStringList (coerces to Empty; prints "").
+        return IStringList([])
 
     def __vbs_index_get__(self, key):
         v = self.Item(key)

@@ -64,11 +64,11 @@ from ..ast_nodes import (
     EndIfStmt,
     ExecuteStmt,
 )
-from ..vb_runtime import vbs_cstr, VBScriptCOMError
+from ..vb_runtime import vbs_cstr, VBScriptCOMError, VBLong as _VBLong
 from .. import vb_datetime
 import datetime as _dt
 import weakref as _weakref
-from decimal import Decimal as _Decimal
+from decimal import Decimal as _Decimal, ROUND_HALF_EVEN as _ROUND_HALF_EVEN
 import math
 import struct
 import time
@@ -376,7 +376,10 @@ class VBClassInstance:
         # Fields
         if up in self._fields:
             if up in self._cls.private_fields and not self._can_access_private(interp):
-                raise VBScriptRuntimeError("Object doesn't support this property or method")
+                # IIS reports error 438 here, which On Error Resume Next can
+                # inspect via Err.Number (a free-text error would give 0).
+                raise_runtime('OBJECT_NOT_SUPPORT',
+                              f"Object doesn't support this property or method: {name}")
             return self._fields.get(up, VBEmpty)
 
         raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
@@ -999,6 +1002,17 @@ class VBInterpreter:
         get_prop = _maybe_attr(obj_any, 'vbs_get_prop')
         if get_prop is not None:
             return _maybe_invoke_zero_arg(get_prop(expr.name))
+        # Member access on a plain SCALAR is "Object required" (424) on IIS:
+        # `s = "hi" : s.Count` errors. This check must come BEFORE the Python
+        # attribute fallback below, otherwise Python's own str/int methods
+        # (str.count, str.index, ...) would leak into the page as
+        # "<built-in method count of str object ...>".
+        # Note: IStringList is a str subclass and is excluded, since it is a
+        # real COM object here with .Count/.Item members.
+        if isinstance(obj, (int, float, str, bool, bytes, bytearray, _Decimal,
+                            _dt.datetime, _dt.date, _dt.time)) \
+                and getattr(obj.__class__, '__vbs_scalar__', None) is None:
+            raise VBScriptCOMError(424, "Object required")
         # Basic Python attribute fallback (only for explicit host objects)
         if hasattr(obj, expr.name):
             return _maybe_invoke_zero_arg(getattr(obj, expr.name))
@@ -1233,13 +1247,22 @@ class VBInterpreter:
         return _vb_plus(left, right)
 
     def _eval_unaryop(self, expr):
-        v = self.eval_expr(expr.expr)
+        v = _scalarize(self.eval_expr(expr.expr))
         if expr.op == '-':
+            # VBScript: -Null => Null (Null propagates through arithmetic).
+            if v is VBNull:
+                return VBNull
+            # A Date negates as its OA serial, yielding a Date again.
+            if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+                return _from_oaserial(-_to_oaserial(v))
             n = _try_number(v)
             if n is None:
                 raise_runtime('TYPE_MISMATCH')
             return -n
         if expr.op.upper() == 'NOT':
+            # VBScript: Not Null => Null.
+            if v is VBNull:
+                return VBNull
             if isinstance(v, bool):
                 return not v
             n = _try_number(v)
@@ -1251,8 +1274,31 @@ class VBInterpreter:
     def _eval_binaryop(self, expr):
         op = expr.op.upper()
         if op in ('AND', 'OR', 'XOR', 'EQV', 'IMP'):
-            l = self.eval_expr(expr.left)
-            r = self.eval_expr(expr.right)
+            l = _scalarize(self.eval_expr(expr.left))
+            r = _scalarize(self.eval_expr(expr.right))
+            # VBScript uses three-valued logic for Null:
+            #   Null And True  => Null      Null And False => False
+            #   Null Or  True  => True      Null Or  False => Null
+            #   Null Xor/Eqv/Imp x => Null (except False Imp Null => True)
+            if l is VBNull or r is VBNull:
+                other = r if l is VBNull else l
+                if op == 'AND':
+                    # Only a definite False forces the result.
+                    if other is not VBNull and not _try_truthy(other):
+                        return False
+                    return VBNull
+                if op == 'OR':
+                    if other is not VBNull and _try_truthy(other):
+                        return True
+                    return VBNull
+                if op == 'IMP':
+                    # False Imp anything => True; anything Imp True => True.
+                    if l is not VBNull and not _try_truthy(l):
+                        return True
+                    if r is not VBNull and _try_truthy(r):
+                        return True
+                    return VBNull
+                return VBNull
             # VBScript And/Or/Xor/Eqv/Imp are ALWAYS bitwise.
             # True = -1, False = 0.  Track whether BOTH operands
             # were boolean so the result type is correct:
@@ -1312,10 +1358,16 @@ class VBInterpreter:
                 raise_runtime('TYPE_MISMATCH')
             return l is r
 
-        l = self.eval_expr(expr.left)
-        r = self.eval_expr(expr.right)
+        l = _scalarize(self.eval_expr(expr.left))
+        r = _scalarize(self.eval_expr(expr.right))
         if expr.op in ('=', '<>', '<', '<=', '>', '>='):
             return _compare(expr.op, l, r)
+
+        # Every arithmetic operator below propagates Null, like IIS does:
+        # Null * 2, 2 - Null, Null \ 2 ... all yield Null (no error).
+        if l is VBNull or r is VBNull:
+            return VBNull
+
         if expr.op == '-':
             # Date arithmetic: date - number => subtract days; date - date => days diff
             if isinstance(l, (_dt.datetime, _dt.date)) and isinstance(r, (int, float)):
@@ -1325,57 +1377,111 @@ class VBInterpreter:
                 ld = l if isinstance(l, _dt.datetime) else _dt.datetime(l.year, l.month, l.day)
                 rd = r if isinstance(r, _dt.datetime) else _dt.datetime(r.year, r.month, r.day)
                 return (ld - rd).total_seconds() / 86400.0
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
+            # number - date: VBScript coerces the Date to its OA serial and
+            # returns a Date again (2 - #2020-03-05# => #1779-10-27#).
+            if isinstance(r, (_dt.datetime, _dt.date, _dt.time)):
+                ln = _arith_number(l)
+                return _from_oaserial(ln - _to_oaserial(r))
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             return ln - rn
         if expr.op == '*':
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             return ln * rn
         if expr.op == '^':
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             # VBScript '^' ALWAYS returns a Double (TypeName(2^2) = "Double").
-            return float(ln ** rn)
+            try:
+                res = ln ** rn
+            except ZeroDivisionError:
+                # 0 ^ -1 => error 5 on IIS (not "division by zero").
+                raise_runtime('INVALID_PROC_CALL')
+            if isinstance(res, complex):
+                # (-2) ^ 0.5 => error 5 on IIS.
+                raise_runtime('INVALID_PROC_CALL')
+            return float(res)
         if expr.op == '/':
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             if rn == 0:
                 raise_runtime('DIVISION_BY_ZERO')
             return ln / rn
         if expr.op == '\\':
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
-            if rn == 0:
-                raise_runtime('DIVISION_BY_ZERO')
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             # VBScript integer division: round operands to int first
             # (banker's rounding), then truncate toward zero (like C).
-            li_d = int(round(ln))
-            ri_d = int(round(rn))
-            return int(math.trunc(li_d / ri_d))
-        if op == 'MOD' or expr.op.upper() == 'MOD':
-            ln = _try_number(l)
-            rn = _try_number(r)
-            if ln is None or rn is None:
-                raise_runtime('TYPE_MISMATCH')
-            if rn == 0:
+            li_d = int(_bankers_round(ln))
+            ri_d = int(_bankers_round(rn))
+            # The zero check must happen AFTER rounding: 5 \ 0.4 rounds the
+            # divisor to 0 and is Division by zero (11) on IIS.
+            if ri_d == 0:
                 raise_runtime('DIVISION_BY_ZERO')
+            return _intdiv_subtype(l, r, math.trunc(li_d / ri_d))
+        if op == 'MOD' or expr.op.upper() == 'MOD':
+            ln = _arith_number(l)
+            rn = _arith_number(r)
             # VBScript Mod: result has sign of dividend (not divisor).
             # Operands are rounded to integers first.
-            li_m = int(round(ln))
-            ri_m = int(round(rn))
-            return int(math.fmod(li_m, ri_m))
+            li_m = int(_bankers_round(ln))
+            ri_m = int(_bankers_round(rn))
+            # Rounding first, then the zero check: 5 Mod 0.4 => error 11.
+            if ri_m == 0:
+                raise_runtime('DIVISION_BY_ZERO')
+            return _intdiv_subtype(l, r, math.fmod(li_m, ri_m))
         raise_runtime('INVALID_PROC_CALL') # Unsupported binary op
+
+    def _eval_condition(self, cond_expr):
+        """Evaluate an If/ElseIf condition with IIS's error semantics.
+
+        On IIS, a Type Mismatch in the condition (e.g. If "" Then or
+        If "abc" Then) still ENTERS the True branch while recording the error
+        in Err, instead of skipping the whole statement. Under On Error Resume
+        Next we reproduce that; without it the error propagates as usual.
+        """
+        try:
+            return bool(_try_truthy(self.eval_expr(cond_expr)))
+        except Exception as e:
+            if isinstance(e, (ResponseEndException, ServerTransferException,
+                              _ExitFor, _ExitDo, _ExitSelect,
+                              _ExitFunction, _ExitSub, _ExitProperty)):
+                raise
+            if not self.on_error_resume_next:
+                raise
+            self._record_err(e)
+            return True
+
+    def _record_err(self, e):
+        """Populate the Err object from an exception (On Error Resume Next)."""
+        if getattr(self.ctx, 'Err', None) is None:
+            return
+        try:
+            number = 5
+            desc = str(e)
+            src = ""
+            if isinstance(e, VBScriptError) and e.error_def:
+                number = e.error_def.number
+                desc = e.description
+                src = getattr(e, 'source_snippet', '')
+            elif isinstance(e, VBScriptCOMError):
+                number = int(getattr(e, 'number', 2147500037))
+                desc = str(getattr(e, 'description', str(e)))
+                src = str(getattr(e, 'source', ''))
+            else:
+                number = 2147500037
+                desc = str(e)
+            self.ctx.Err.Number = number
+            self.ctx.Err.Description = desc
+            # Err.Raise may supply its own Source; only fill in the engine
+            # default when the raiser did not set one.
+            if src:
+                self.ctx.Err.Source = src
+            elif not getattr(self.ctx.Err, 'Source', ''):
+                self.ctx.Err.Source = "Microsoft VBScript runtime error"
+        except Exception:
+            pass
 
     def _eval_member_ref(self, expr: Member):
         """Evaluate a Member expression as a callable reference.
@@ -1453,32 +1559,7 @@ class VBInterpreter:
                 raise
 
             if self.on_error_resume_next:
-                if getattr(self.ctx, 'Err', None) is not None:
-                    try:
-                        # Map known error types to Err object
-                        number = 5 # default to invalid proc call
-                        desc = str(e)
-                        src = ""
-                        
-                        if isinstance(e, VBScriptError) and e.error_def:
-                            number = e.error_def.number
-                            desc = e.description
-                            src = getattr(e, 'source_snippet', '')
-                        elif isinstance(e, VBScriptCOMError):
-                            number = int(getattr(e, 'number', 2147500037))
-                            desc = str(getattr(e, 'description', str(e)))
-                            src = str(getattr(e, 'source', ''))
-                        else:
-                            # Generic python exception map
-                            number = 2147500037 # Unspecified
-                            desc = str(e)
-
-                        self.ctx.Err.Number = number
-                        self.ctx.Err.Description = desc
-                        if src:
-                            self.ctx.Err.Source = src
-                    except Exception:
-                        pass
+                self._record_err(e)
                 return
             try:
                 if getattr(e, 'vbs_pos', None) is None:
@@ -1610,6 +1691,12 @@ class VBInterpreter:
         if isinstance(stmt, Assign):
             val = self.eval_expr(stmt.expr)
             tgt = stmt.target
+            # A plain (Let) assignment reads the object's DEFAULT property.
+            # The built-in ASP objects have none, so `r = Request` is error
+            # 450 on IIS rather than copying the reference.
+            if _is_asp_builtin_object(val):
+                raise_runtime('WRONG_NUM_ARGS',
+                              "Wrong number of arguments or invalid property assignment")
             if isinstance(tgt, Ident):
                 self._set_ident(tgt.name, val, is_set=False)  # parser ensures upper
                 return
@@ -1678,6 +1765,11 @@ class VBInterpreter:
             val = self.eval_expr(stmt.expr)
             tgt = stmt.target
             if isinstance(tgt, Ident):
+                # `With <expr>` desugars to a Set into a generated temp. VBScript
+                # requires an OBJECT there: With "text" / With 5 is error 424
+                # (verified against IIS), so reject non-objects at the binding.
+                if tgt.name.upper().startswith('__ASP_PY_WITH_') and not _is_vb_object(val):
+                    raise VBScriptCOMError(424, "Object required")
                 self._set_ident(tgt.name, val, is_set=True) # parser ensures upper
                 return
             if isinstance(tgt, Member):
@@ -1810,12 +1902,12 @@ class VBInterpreter:
             return
 
         if isinstance(stmt, IfStmt):
-            if bool(_try_truthy(self.eval_expr(stmt.cond))):
+            if bool(self._eval_condition(stmt.cond)):
                 for s in stmt.then_block:
                     self.exec_stmt(s)
                 return
             for (c, b) in stmt.elseif_parts:
-                if bool(_try_truthy(self.eval_expr(c))):
+                if bool(self._eval_condition(c)):
                     for s in b:
                         self.exec_stmt(s)
                     return
@@ -1881,8 +1973,11 @@ class VBInterpreter:
             var_key = stmt.var_name # parser ensures upper
             self._set_ident(var_key, i, is_set=False)
             if step == 0:
-                raise VBScriptRuntimeError("For Step cannot be 0")
-            if step > 0:
+                # VBScript does NOT reject Step 0: the loop simply never
+                # advances and runs until an Exit For (or forever). Emulate
+                # that instead of raising, so guarded pages behave like IIS.
+                cond = lambda v: True
+            elif step > 0:
                 cond = lambda v: v <= end
             else:
                 cond = lambda v: v >= end
@@ -1899,6 +1994,10 @@ class VBInterpreter:
                 if i is None:
                     break
                 i = i + step
+                # Publish the stepped value too: after a normal loop exit the
+                # counter is one step PAST the limit on IIS
+                # (For i = 1 To 2 Step 0.5 leaves i = 2.5).
+                self._set_ident(var_key, i, is_set=False)
             return
 
         if isinstance(stmt, ForEachStmt):
@@ -2398,6 +2497,15 @@ class VBInterpreter:
     def _set_ident(self, up: str, value, *, is_set: bool = False):
         if not is_set and isinstance(value, VBArray):
             value = value.clone()
+        # A Let assignment reads the source's DEFAULT PROPERTY, so a Request
+        # value (IStringList) collapses to a plain String -- or to Empty when
+        # the key is missing. Verified on IIS: after v = Request.QueryString(k)
+        # TypeName(v) is "String" and v.Count is an error, while the direct
+        # Request.QueryString(k).Count still works.
+        if not is_set:
+            hook = getattr(value.__class__, '__vbs_scalar__', None)
+            if hook is not None:
+                value = hook(value)
         # Inside class procedures, assignment to a declared field should update
         # the instance field (not create a local).
         if self._this_stack:
@@ -2756,6 +2864,11 @@ class VBInterpreter:
         # Bind parameters (VBScript default is ByRef).
         frame: dict[str, Any] = {}
         fn_name = proc.name # parser ensures upper
+        # VBScript has no optional parameters: passing too few or too many
+        # arguments is error 450 on IIS, not a silently-Empty parameter.
+        if len(arg_exprs) != len(proc.params):
+            raise_runtime('WRONG_NUM_ARGS',
+                          f"{proc.name} expects {len(proc.params)} argument(s), got {len(arg_exprs)}")
         if proc.kind == 'FUNCTION':
             frame[fn_name] = VBEmpty
 
@@ -2887,8 +3000,30 @@ def _to_oaserial(v):
 
 
 def _from_oaserial(serial):
-    """Convert an OLE Automation serial back to a datetime (VBScript Date)."""
-    return _OA_EPOCH + _dt.timedelta(days=float(serial))
+    """Convert an OLE Automation serial back to a datetime (VBScript Date).
+
+    OA dates are sign-magnitude, not linear: the integer part carries the
+    date and the FRACTION always advances the time forward. So serial
+    -43893.6046875 is 1779-10-27 14:30:45 (not ...-10-26 09:29:15), exactly
+    like IIS renders it.
+    """
+    s = float(serial)
+    days = math.trunc(s)
+    frac = abs(s - days)
+    return _OA_EPOCH + _dt.timedelta(days=days) + _dt.timedelta(days=frac)
+
+
+def _scalarize(v):
+    """IIS coerces wrapped Request values (IStringList) through their default
+    property before operators run; a missing key yields Empty. Fast no-op for
+    the common plain types."""
+    cls = v.__class__
+    if cls is str or cls is int or cls is float or cls is bool:
+        return v
+    hook = getattr(cls, '__vbs_scalar__', None)
+    if hook is not None:
+        return hook(v)
+    return v
 
 
 def _plus_str_to_number(s):
@@ -2898,14 +3033,19 @@ def _plus_str_to_number(s):
     Type Mismatch when it cannot be converted. Unlike _try_number, an
     empty string is NOT numeric here (1 + "" => Type Mismatch on IIS).
     Accepts scientific notation ("1e5") like CDbl does.
+
+    A string is always converted as a Double, like IIS does:
+    TypeName(Request.QueryString("id") + 1) = "Double" for id=7.
     """
     t = s.strip()
     if t == "":
         return None
     try:
-        return int(t)
+        int(t)
     except ValueError:
         pass
+    else:
+        return float(t)
     try:
         return float(t)
     except ValueError:
@@ -2924,6 +3064,8 @@ def _vb_plus(left, right):
                                     so DateSerial(...) + TimeSerial(...) works
     - Empty + Number             => Number;  Empty + String => String
     """
+    left = _scalarize(left)
+    right = _scalarize(right)
     lstr = isinstance(left, str)
     rstr = isinstance(right, str)
     if lstr and rstr:
@@ -2960,6 +3102,95 @@ def _vb_plus(left, right):
     if ln is None or rn is None:
         raise_runtime('TYPE_MISMATCH')
     return ln + rn
+
+
+def _intdiv_subtype(left, right, result):
+    """Subtype of a '\\' or 'Mod' result, following IIS.
+
+    Integer only when BOTH operands are already Integer-typed; a Double, Date
+    or String operand promotes the result to Long (verified against IIS:
+    TypeName(5 \\ 2) = "Integer" but TypeName(5.5 \\ 2) = "Long").
+    """
+    n = int(result)
+    def _is_int_subtype(v):
+        if isinstance(v, bool):
+            return True
+        if isinstance(v, _VBLong):
+            return False
+        return isinstance(v, int)
+    if _is_int_subtype(left) and _is_int_subtype(right) and -32768 <= n <= 32767:
+        return n
+    return _VBLong(n)
+
+
+def _is_vb_object(v):
+    """True when the value is an OBJECT in VBScript terms.
+
+    Scalars (String/Number/Boolean/Date), Empty, Null and arrays are not
+    objects, so `With`/`Set` on them is "Object required" (424) on IIS.
+    """
+    if v is VBEmpty or v is VBNull or v is None:
+        return False
+    if v is VBNothing:
+        # Nothing IS an object reference (an empty one); With Nothing raises
+        # 424 at member access, not at the binding.
+        return True
+    if isinstance(v, (str, bytes, bytearray, bool, int, float, _Decimal,
+                      _dt.datetime, _dt.date, _dt.time)):
+        return False
+    if isinstance(v, VBArray):
+        return False
+    return True
+
+
+def _is_asp_builtin_object(v):
+    """True for the intrinsic ASP objects (Request/Response/Server/...).
+
+    These expose no default property, so using them in a Let assignment or a
+    string context is error 450 on IIS."""
+    if v is None or isinstance(v, (str, int, float, bool, bytes, bytearray)):
+        return False
+    return type(v).__name__ in (
+        'Request', 'Response', 'ServerObject', 'Session', 'Application',
+    )
+
+
+def _bankers_round(x):
+    """Round half-to-even, like VBScript does for \\ and Mod operands."""
+    return _Decimal(str(float(x))).quantize(_Decimal('1'), rounding=_ROUND_HALF_EVEN)
+
+
+def _arith_number(v):
+    """Coerce an operand of *, /, \\, Mod, ^, - to a number like IIS does.
+
+    Differs from _try_number in two ways that match real VBScript:
+      - a Date becomes its OLE Automation serial (Now * 2 works on IIS)
+      - an empty/blank string is a Type Mismatch, not 0 (1 - "" errors)
+    Raises the VBScript error instead of returning None.
+    """
+    if isinstance(v, bool):
+        return -1 if v else 0
+    t = v.__class__
+    if t is int or t is float:
+        return v
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return _to_oaserial(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            raise_runtime('TYPE_MISMATCH')
+        try:
+            return int(s)
+        except ValueError:
+            pass
+        try:
+            return float(s)
+        except ValueError:
+            raise_runtime('TYPE_MISMATCH')
+    n = _try_number(v)
+    if n is None:
+        raise_runtime('TYPE_MISMATCH')
+    return n
 
 
 def _try_number(v):
@@ -2999,15 +3230,34 @@ def _try_number(v):
 
 
 def _try_truthy(v):
-    # VBScript-like truthiness (minimal): empty string/0/False => False
+    # VBScript condition semantics = CBool(): a string is converted to a
+    # NUMBER first, so "0" is False and "-1"/"5" are True. Only the literals
+    # "True"/"False" (locale keywords) are accepted as words; anything else
+    # non-numeric is a Type Mismatch on IIS, e.g. If "abc" Then.
+    v = _scalarize(v)
     if v is VBEmpty or v is VBNull or v is VBNothing or v is None:
         return False
     if isinstance(v, bool):
         return v
-    if isinstance(v, (int, float)):
+    if isinstance(v, (int, float, _Decimal)):
         return v != 0
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return _to_oaserial(v) != 0
     if isinstance(v, str):
-        return v != ""
+        s = v.strip()
+        low = s.lower()
+        if low == 'true':
+            return True
+        if low == 'false':
+            return False
+        try:
+            return int(s) != 0
+        except ValueError:
+            pass
+        try:
+            return float(s) != 0.0
+        except ValueError:
+            raise_runtime('TYPE_MISMATCH')
     return bool(v)
 
 
@@ -3016,6 +3266,8 @@ def _compare(op: str, a, b):
     # Important: do NOT treat empty strings as numeric 0 for comparisons.
     # VBScript code frequently uses: If Trim(x) = "" Then ...
     # and expects "0" to NOT equal "".
+    a = _scalarize(a)
+    b = _scalarize(b)
     if a is VBNull or b is VBNull:
         return VBNull
     # Short-circuit: both strings => compare directly without numeric conversion attempt

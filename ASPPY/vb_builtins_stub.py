@@ -11,26 +11,23 @@ import os
 from decimal import Decimal, ROUND_HALF_EVEN
 
 # Re-implement simple math helpers to avoid circular imports or missing definitions
+# These route through vb_builtins._to_number so that Empty (and a missing
+# Request key) converts to 0 and Boolean True converts to -1, exactly like IIS.
 def Sgn(number):
-    try:
-        x = float(number)
-    except:
-        x = 0.0
+    from .vb_builtins import _to_number, _scalarize
+    if _scalarize(number) is VBNull: return VBNull
+    x = float(_to_number(number))
     if x > 0: return 1
     if x < 0: return -1
     return 0
 
 def Sin(number):
-    try:
-        return _math.sin(float(number))
-    except:
-        raise_runtime('INVALID_PROC_CALL')
+    from .vb_builtins import _to_number
+    return _math.sin(float(_to_number(number)))
 
 def Tan(number):
-    try:
-        return _math.tan(float(number))
-    except:
-        raise_runtime('INVALID_PROC_CALL')
+    from .vb_builtins import _to_number
+    return _math.tan(float(_to_number(number)))
 
 # Stub remaining builtins to satisfy import
 def ScriptEngine(): return "VBScript"

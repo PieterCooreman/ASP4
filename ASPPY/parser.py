@@ -474,7 +474,12 @@ class Parser:
             else:
                 tmp_name = self._new_with_name()
                 target = tmp_name
-                prefix = [DimStmt([DimDecl(tmp_name)]), Assign(Ident(tmp_name), target_expr)]
+                # `With <obj>` binds an object REFERENCE, so the temp must be
+                # bound with Set semantics. A plain (Let) assignment would
+                # read the object's default property, which fails with error
+                # 450 for the intrinsic ASP objects (With Request/Server).
+                prefix = [DimStmt([DimDecl(tmp_name)]),
+                          SetAssign(Ident(tmp_name), target_expr)]
 
             from .ast_nodes import Block
             body = []
@@ -997,33 +1002,24 @@ class Parser:
         return SelectCaseStmt(expr, cases, else_block)
 
     def _parse_case_pattern(self):
-        """Parse a single Case pattern: expression, Is <op> expr, or expr To expr."""
-        # Case Is > value / Case Is < value / Case Is >= value / etc.
+        """Parse a single Case pattern (a plain expression).
+
+        NOTE: `Case Is > x` and `Case lo To hi` are VB6/VBA syntax that
+        VBScript does NOT support -- IIS rejects such a page with a compile
+        error. Accepting them would let pages run here that fail in
+        production, so both forms are refused (verified against IIS).
+        """
         if self.tok.kind == "IS":
-            self._eat("IS")
-            op_map = {
-                "EQ": "=",
-                "NE": "<>",
-                "LT": "<",
-                "LE": "<=",
-                "GT": ">",
-                "GE": ">=",
-            }
-            if self.tok.kind not in op_map:
-                raise ParseError(f"Expected comparison operator after 'Is', got {self.tok.kind}")
-            op = op_map[self.tok.kind]
-            self._eat(self.tok.kind)
-            expr = self._parse_expr()
-            return CaseIsPattern(op, expr)
+            raise ParseError(
+                "'Case Is' is not supported in VBScript (VB6/VBA-only syntax)")
 
         # Parse a normal expression first
         expr = self._parse_expr()
 
-        # Case expr To expr (range match)
+        # `Case lo To hi` is likewise VB6/VBA-only.
         if self.tok.kind == "TO":
-            self._eat("TO")
-            upper = self._parse_expr()
-            return CaseToPattern(expr, upper)
+            raise ParseError(
+                "'Case ... To ...' ranges are not supported in VBScript (VB6/VBA-only syntax)")
 
         return expr
 
@@ -1103,7 +1099,18 @@ class Parser:
             self._eat("STEP")
             step = self._parse_expr()
         self._skip_seps()
-        body = self._parse_block_until({"NEXT"})
+        # VBScript forbids reusing the same counter in a nested For, so track
+        # the active loop variables while parsing the body (IIS rejects the
+        # whole page with "Can't use the same variable for multiple For loops").
+        if not hasattr(self, '_for_vars'):
+            self._for_vars = []
+        if var in self._for_vars:
+            raise ParseError(f"Can't use the same variable for multiple For loops: {var}")
+        self._for_vars.append(var)
+        try:
+            body = self._parse_block_until({"NEXT"})
+        finally:
+            self._for_vars.pop()
         if self.tok.kind != "NEXT":
             raise ParseError("Expected NEXT")
         self._eat("NEXT")
@@ -1286,45 +1293,68 @@ class Parser:
         return left
 
     def _parse_add(self):
-        left = self._parse_mul()
+        left = self._parse_mod()
         while self.tok.kind in ("PLUS", "MINUS"):
             if self.tok.kind == "PLUS":
                 self._eat("PLUS")
-                right = self._parse_mul()
+                right = self._parse_mod()
                 left = Concat(left, '+', right)
                 continue
             self._eat("MINUS")
-            right = self._parse_mul()
+            right = self._parse_mod()
             left = BinaryOp("-", left, right)
+        return left
+
+    # VBScript arithmetic precedence, from LOWEST to HIGHEST:
+    #   Mod  <  \  <  * and /  <  unary -  <  ^
+    # Each level is left-associative. This ordering is what makes
+    # 10 \ 3 / 2 evaluate as 10 \ (3 / 2) = 5, exactly like IIS.
+
+    def _parse_mod(self):
+        left = self._parse_intdiv()
+        while self.tok.kind == "IDENT" and self.tok.value.upper() == "MOD":
+            self._eat("IDENT")
+            right = self._parse_intdiv()
+            left = BinaryOp("MOD", left, right)
+        return left
+
+    def _parse_intdiv(self):
+        left = self._parse_mul()
+        while self.tok.kind == "BSLASH":
+            self._eat("BSLASH")
+            right = self._parse_mul()
+            left = BinaryOp("\\", left, right)
         return left
 
     def _parse_mul(self):
         left = self._parse_unary()
-        while self.tok.kind in ("STAR", "SLASH", "BSLASH") or (self.tok.kind == "IDENT" and self.tok.value.upper() == "MOD"):
+        while self.tok.kind in ("STAR", "SLASH"):
             if self.tok.kind == "STAR":
                 self._eat("STAR")
                 right = self._parse_unary()
                 left = BinaryOp("*", left, right)
                 continue
-            if self.tok.kind == "IDENT" and self.tok.value.upper() == "MOD":
-                self._eat("IDENT")
-                right = self._parse_unary()
-                left = BinaryOp("MOD", left, right)
-                continue
-            if self.tok.kind == "SLASH":
-                self._eat("SLASH")
-                right = self._parse_unary()
-                left = BinaryOp("/", left, right)
-                continue
-            self._eat("BSLASH")
+            self._eat("SLASH")
             right = self._parse_unary()
-            left = BinaryOp("\\", left, right)
+            left = BinaryOp("/", left, right)
         return left
 
     def _parse_unary(self):
         if self.tok.kind == "MINUS":
             self._eat("MINUS")
-            return UnaryOp("-", self._parse_unary())
+            # VBScript applies '^' to the ALREADY-NEGATED value:
+            #   -2 ^ 2      = (-2) ^ 2     = 4    (not -(2^2) = -4)
+            #   -2 ^ 2 * 3  = ((-2)^2) * 3 = 12
+            # So take only the immediate operand here, wrap it in the unary
+            # minus, and let any '^' chain apply to that negated value.
+            if self.tok.kind == "MINUS" or (self.tok.kind == "IDENT" and self.tok.value.upper() == "NOT"):
+                # Stacked signs (--x, -Not x): keep the recursive behaviour.
+                return UnaryOp("-", self._parse_unary())
+            node = UnaryOp("-", self._parse_term())
+            while self.tok.kind == "CARET":
+                self._eat("CARET")
+                node = BinaryOp("^", node, self._parse_unary_pow())
+            return node
         if self.tok.kind == "IDENT" and self.tok.value.upper() == "NOT":
             self._eat("IDENT")
             return UnaryOp("NOT", self._parse_unary())
@@ -1332,11 +1362,29 @@ class Parser:
 
     def _parse_pow(self):
         left = self._parse_term()
-        if self.tok.kind == "CARET":
+        # VBScript's '^' is LEFT-associative: 2 ^ 3 ^ 2 = (2^3)^2 = 64,
+        # not 2^(3^2) = 512.
+        while self.tok.kind == "CARET":
             self._eat("CARET")
-            right = self._parse_pow()
-            return BinaryOp("^", left, right)
+            # The exponent may carry a sign: VBScript accepts 2 ^ -1 and
+            # 10 ^ -3, so consume a leading MINUS here instead of failing
+            # with "Expected expression".
+            right = self._parse_unary_pow()
+            left = BinaryOp("^", left, right)
         return left
+
+    def _parse_unary_pow(self):
+        """Parse a possibly-signed exponent (right side of '^').
+
+        Only the sign and a single term are consumed; the caller's loop keeps
+        '^' left-associative."""
+        if self.tok.kind == "MINUS":
+            self._eat("MINUS")
+            return UnaryOp("-", self._parse_unary_pow())
+        if self.tok.kind == "PLUS":
+            self._eat("PLUS")
+            return self._parse_unary_pow()
+        return self._parse_term()
 
     def _parse_term(self):
         # primary

@@ -277,12 +277,66 @@ def parse_asp_file_to_nodes(path: str, docroot: str, current_virtual: str) -> Li
         return get_cached_monolithic_nodes(path, monolithic_parser)
 
 
+# Also swallow the line break that ends the block (and any indentation before
+# it), so removing a server-side script block leaves no blank line behind.
+_SERVER_SCRIPT_RE = re.compile(r"(?is)[ \t]*<script\b([^>]*)>(.*?)</script\s*>[ \t]*\r?\n?")
+
+
+def _split_server_scripts(text: str):
+    """Pull `<SCRIPT RUNAT="Server">` blocks out of an ASP page.
+
+    Classic ASP treats these as server-side code, NOT as markup. Returns the
+    page text with each such block removed, plus the list of (code, line)
+    blocks in source order.
+
+    The block is removed completely, including the newline that follows it:
+    IIS emits no blank line where a server-side script block stood.
+
+    A <script> WITHOUT runat=server is left untouched: that is ordinary
+    client-side script and must reach the browser verbatim.
+    """
+    blocks: list[tuple[str, int]] = []
+
+    def _repl(m):
+        attrs = m.group(1) or ""
+        body = m.group(2) or ""
+        # RUNAT may be unquoted or single-quoted, and attribute order is free:
+        # RUNAT=Server, runat='server' and RUNAT="SERVER" are all valid on IIS.
+        if re.search(r"(?is)\brunat\s*=\s*(?:\"\s*server\s*\"|'\s*server\s*'|server\b)", attrs) is None:
+            return m.group(0)
+        # IIS requires an explicit LANGUAGE on a server-side script block:
+        # <SCRIPT RUNAT="Server"> without LANGUAGE is a compile error there
+        # (verified), so refuse it here rather than running it.
+        lang = re.search(r"(?is)\blanguage\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))", attrs)
+        if lang is None:
+            raise VBScriptCompilationError(
+                "A server-side <SCRIPT RUNAT=\"Server\"> block requires a LANGUAGE attribute")
+        # Only VBScript is executed by this engine. A LANGUAGE that is present
+        # and is not VBScript (e.g. JScript) is left in place rather than
+        # silently mis-executed as VBScript.
+        name = (lang.group(1) or lang.group(2) or lang.group(3) or "").strip().lower()
+        if name and name not in ("vbscript", "vbs"):
+            return m.group(0)
+        start_line = text.count("\n", 0, m.start()) + 1
+        blocks.append((body, start_line))
+        return ""
+
+    stripped = _SERVER_SCRIPT_RE.sub(_repl, text)
+    return stripped, blocks
+
+
 def parse_asp_page(text: str) -> List[object]:
     """Split an .asp page into HTML/Script/Expr nodes.
 
     Implements IIS quirk: whitespace-only lines between consecutive shorthand
     expression blocks do not emit CR/LF (and indentation on those blank lines are dropped).
     """
+    # Server-side <SCRIPT RUNAT="Server"> blocks are code, not markup. IIS runs
+    # them AFTER all inline <% %> code (verified against IIS: inline output
+    # comes first, then each script block in source order), so they are pulled
+    # out here and appended as trailing script nodes.
+    text, _server_scripts = _split_server_scripts(text)
+
     nodes: List[object] = []
     pos = 0
     line = 1
@@ -343,6 +397,12 @@ def parse_asp_page(text: str) -> List[object]:
             prev_was_directive = True
         elif cur_is_expr:
             expr_src = code_probe[1:].strip()
+            if expr_src == '':
+                # IIS rejects an empty output expression (<%= %>) as a syntax
+                # error rather than emitting nothing.
+                from .vb_errors import VBScriptCompilationError
+                raise VBScriptCompilationError(
+                    f"Expected expression in <%= %> at line {block_line}")
             nodes.append(ExprNode(expr_src, block_line, block_col))
             prev_was_expr = True
             prev_was_code = True
@@ -363,6 +423,11 @@ def parse_asp_page(text: str) -> List[object]:
                 col += 1
 
         pos = end + 2
+
+    # Append the server-side SCRIPT blocks last, matching IIS execution order.
+    for code, start_line in _server_scripts:
+        if code.strip():
+            nodes.append(ScriptNode(code, start_line, 1))
 
     return nodes
 

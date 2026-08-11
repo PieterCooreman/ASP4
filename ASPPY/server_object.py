@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import glob
 import os
+import re
 import shutil
 import uuid
 import urllib.parse
@@ -13,7 +14,7 @@ import mimetypes
 import datetime
 
 from .vb_runtime import vbs_cstr, VBScriptRuntimeError, VBScriptCOMError
-from .vb_errors import VBScriptError, RUNTIME_ERRORS
+from .vb_errors import VBScriptError, RUNTIME_ERRORS, raise_runtime
 from .vm.values import VBNull
 
 
@@ -97,18 +98,191 @@ class ServerTransferException(Exception):
         self.target = target
 
 
+_WSH_ENV_REG_PATHS = {
+    'SYSTEM': (r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment", 'HKLM'),
+    'USER': (r"Environment", 'HKCU'),
+    'VOLATILE': (r"Volatile Environment", 'HKCU'),
+}
+
+
+def _read_persistent_environment(scope: str) -> dict:
+    """Read a persistent (non-PROCESS) WSH environment scope.
+
+    On Windows these live in the registry and form a smaller set than the
+    process environment. On other platforms -- and if the registry is
+    unreadable -- fall back to the process environment so the collection is
+    still usable rather than empty.
+    """
+    entry = _WSH_ENV_REG_PATHS.get(scope)
+    if entry is None:
+        return dict(os.environ)
+    sub, hive_name = entry
+    try:
+        import winreg  # Windows-only; absent elsewhere
+    except ImportError:
+        return dict(os.environ)
+    hive = winreg.HKEY_LOCAL_MACHINE if hive_name == 'HKLM' else winreg.HKEY_CURRENT_USER
+    out = {}
+    try:
+        with winreg.OpenKey(hive, sub) as key:
+            i = 0
+            while True:
+                try:
+                    name, value, _kind = winreg.EnumValue(key, i)
+                except OSError:
+                    break
+                out[str(name)] = str(value)
+                i += 1
+    except OSError:
+        return dict(os.environ)
+    return out
+
+
+class WshEnvironment:
+    """WScript.Shell Environment collection (IWshEnvironment).
+
+    Verified against IIS:
+      - Item(name) / env(name) are case-insensitive; a missing name yields "".
+      - Count is the number of variables.
+      - For Each yields "KEY=VALUE" strings (not just the keys).
+    """
+
+    def __init__(self, scope: str = "SYSTEM"):
+        self._scope = str(scope or "SYSTEM").upper()
+        # Only the PROCESS scope reflects the live process environment. The
+        # persistent scopes (SYSTEM/USER/VOLATILE) come from the registry on
+        # Windows and are a SMALLER set -- e.g. COMPUTERNAME is a process-only
+        # variable and is absent there (verified against IIS).
+        if self._scope == 'PROCESS':
+            self._d = dict(os.environ)
+        else:
+            self._d = _read_persistent_environment(self._scope)
+        self._kmap = {k.upper(): k for k in self._d}
+
+    @property
+    def Count(self):
+        from .vb_runtime import VBLong
+        return VBLong(len(self._d))
+
+    def Item(self, name=None):
+        if name is None:
+            return ""
+        k = vbs_cstr(name).upper()
+        real = self._kmap.get(k)
+        return self._d.get(real, "") if real is not None else ""
+
+    def __vbs_index_get__(self, name):
+        return self.Item(name)
+
+    def Remove(self, name):
+        k = vbs_cstr(name).upper()
+        real = self._kmap.pop(k, None)
+        if real is not None:
+            self._d.pop(real, None)
+
+    def __iter__(self):
+        # WSH yields "KEY=VALUE" pairs when iterating an Environment.
+        return iter([f"{k}={v}" for k, v in self._d.items()])
+
+    def __vbs_typename__(self):
+        return "IWshEnvironment"
+
+
 class WScriptShell:
-    def _unsupported(self, *_args, **_kwargs):
-        raise VBScriptRuntimeError("WScript.Shell is not supported in ASPPY")
+    """Partial WScript.Shell (IWshShell3).
 
-    def __getattr__(self, _name):
-        return self._unsupported
+    Implemented: the read-only members that legacy Classic ASP uses for config
+    interpolation -- ExpandEnvironmentStrings, Environment and CurrentDirectory.
 
-    def vbs_get_prop(self, _name: str):
-        self._unsupported()
+    NOT implemented: Run and Exec. Those execute arbitrary shell commands from
+    a web request, which would contradict the sandboxing ASPPY applies
+    elsewhere (FileSystemObject is confined to the docroot). They raise a
+    catchable ActiveX error (429) instead of failing silently.
+    """
 
-    def vbs_set_prop(self, _name: str, _value):
-        self._unsupported()
+    _ENV_SCOPES = ("SYSTEM", "USER", "VOLATILE", "PROCESS")
+
+    def _unsupported(self, name: str):
+        # Previously this raised a free-text VBScriptRuntimeError, which left
+        # Err.Number = 0 -- so On Error Resume Next code could not detect the
+        # failure at all. Use a real, catchable ActiveX error number instead.
+        raise_runtime('COMPONENT_CANT_CREATE',
+                      f"WScript.Shell.{name} is not supported in ASPPY")
+
+    def ExpandEnvironmentStrings(self, template=""):
+        """Expand %NAME% placeholders.
+
+        Unlike os.path.expandvars, WSH PRESERVES unknown placeholders:
+        ExpandEnvironmentStrings("%NOPE%") returns "%NOPE%" (verified on IIS).
+        Lookup is case-insensitive, and a lone '%' is left alone.
+        """
+        s = vbs_cstr(template)
+        if not s:
+            return ""
+        upper_map = {k.upper(): v for k, v in os.environ.items()}
+
+        def _sub(m):
+            name = m.group(1)
+            val = upper_map.get(name.upper())
+            return val if val is not None else m.group(0)
+
+        return re.sub(r"%([^%]+)%", _sub, s)
+
+    def Environment(self, scope=None):
+        if scope is None:
+            # WSH defaults to the SYSTEM scope when called without arguments.
+            return WshEnvironment("SYSTEM")
+        name = vbs_cstr(scope).upper()
+        if name not in self._ENV_SCOPES:
+            # IIS raises error 5 for an unknown scope (verified).
+            raise_runtime('INVALID_PROC_CALL',
+                          f"Unknown WScript.Shell environment scope: {scope}")
+        return WshEnvironment(name)
+
+    @property
+    def CurrentDirectory(self):
+        return os.getcwd()
+
+    @CurrentDirectory.setter
+    def CurrentDirectory(self, value):
+        try:
+            os.chdir(vbs_cstr(value))
+        except Exception:
+            raise_runtime('INVALID_PROC_CALL',
+                          "WScript.Shell.CurrentDirectory: path not found")
+
+    def Run(self, *_args, **_kwargs):
+        self._unsupported('Run')
+
+    def Exec(self, *_args, **_kwargs):
+        self._unsupported('Exec')
+
+    def __vbs_typename__(self):
+        return "IWshShell3"
+
+    def vbs_get_prop(self, name: str):
+        up = str(name).upper()
+        if up == 'CURRENTDIRECTORY':
+            return self.CurrentDirectory
+        if up == 'EXPANDENVIRONMENTSTRINGS':
+            return self.ExpandEnvironmentStrings
+        if up == 'ENVIRONMENT':
+            return self.Environment
+        if up == 'RUN':
+            return self.Run
+        if up == 'EXEC':
+            return self.Exec
+        # Anything else genuinely does not exist on this object: IIS reports
+        # 438 (e.g. WScript.Shell has no GetEnv member).
+        raise_runtime('OBJECT_NOT_SUPPORT',
+                      f"WScript.Shell does not support this property or method: {name}")
+
+    def vbs_set_prop(self, name: str, value):
+        if str(name).upper() == 'CURRENTDIRECTORY':
+            self.CurrentDirectory = value
+            return
+        raise_runtime('OBJECT_NOT_SUPPORT',
+                      f"WScript.Shell does not support this property or method: {name}")
 
 
 class ASPError:
@@ -216,19 +390,16 @@ class ScriptingDictionary:
 
     @CompareMode.setter
     def CompareMode(self, value):
+        from .vb_errors import raise_runtime
         v = int(value)
         if v not in (0, 1, 2):
-            raise Exception("Invalid CompareMode")
-        # Reindex existing keys if switching modes (preserve original casing)
-        if v != self._compare_mode:
-            items = list(self._d.values())
-            self._d = {}
-            self._compare_mode = v
-            for orig, it in items:
-                nk = self._norm(orig)
-                self._d[nk] = (orig, it)
-        else:
-            self._compare_mode = v
+            raise_runtime('INVALID_PROC_CALL', "Invalid CompareMode")
+        # Scripting.Dictionary refuses a CompareMode change once it holds
+        # data: IIS raises error 5 (Invalid procedure call or argument) with
+        # the plain standard description.
+        if self._d and v != self._compare_mode:
+            raise_runtime('INVALID_PROC_CALL')
+        self._compare_mode = v
 
     def Add(self, key, item):
         k = self._norm(key)
@@ -412,7 +583,11 @@ class Server:
         if pid in ("adodb.command",):
             from .adodb import ADOCommand
             return ADOCommand()
-        raise Exception(f"Server.CreateObject not supported: {progid}")
+        # IIS reports an ASP 0177 failure with HRESULT 0x800401F3
+        # (invalid class string) for an unknown ProgID. Err.Number becomes
+        # -2147221005, which pages test for, so mirror that exactly.
+        raise VBScriptCOMError(-2147221005,
+                               "006~ASP 0177~Server.CreateObject failed~800401f3")
 
     def HTMLEncode(self, s):
         if s is VBNull:
@@ -2203,10 +2378,21 @@ class FileSystemObject:
         return os.path.join(base, nm)
 
     def FileExists(self, path):
-        return os.path.isfile(self._resolve(path))
+        # A pure existence check must never raise: IIS answers True/False for
+        # any path. Anything the sandbox refuses simply "does not exist",
+        # so legacy pages like If fso.FolderExists("C:\") Then keep working.
+        try:
+            phys = self._resolve(path)
+        except Exception:
+            return False
+        return os.path.isfile(phys)
 
     def FolderExists(self, path):
-        return os.path.isdir(self._resolve(path))
+        try:
+            phys = self._resolve(path)
+        except Exception:
+            return False
+        return os.path.isdir(phys)
 
     def CreateFolder(self, path):
         phys = self._resolve(path)

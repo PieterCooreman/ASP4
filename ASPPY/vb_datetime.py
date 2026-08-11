@@ -29,7 +29,8 @@ from .vb_constants import (
     vbShortTime,
 )
 from .vb_runtime import VBScriptRuntimeError, VBScriptCOMError, vbs_cstr, vbs_get_lcid_info
-from .vm.values import VBNull
+from .vm.values import VBNull, VBEmpty
+from decimal import Decimal as _Decimal
 
 
 # VBScript has exactly ONE Date type (an OLE Automation double). ASPPY
@@ -61,35 +62,60 @@ def Timer():
     return (n - midnight).total_seconds()
 
 
+def _is_null(v):
+    """True when the value is Null (also through a Request default property)."""
+    if v is VBNull:
+        return True
+    return _scalarize(v) is VBNull
+
+
 def Year(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).year
 
 
 def Month(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).month
 
 
 def Day(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).day
 
 
 def Hour(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).hour
 
 
 def Minute(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).minute
 
 
 def Second(d):
+    if _is_null(d): return VBNull
     return _to_datetime(d).second
+
+
+def _pivot_2digit_year(y: int) -> int:
+    # VBScript/OLE: a year of 0..29 means 2000..2029, 30..99 means 1930..1999.
+    if 0 <= y <= 29:
+        return y + 2000
+    if 30 <= y <= 99:
+        return y + 1900
+    return y
 
 
 def DateSerial(year, month, day):
     # VBScript normalizes overflow/underflow. Python doesn't directly.
-    y = int(year)
-    m = int(month)
-    d = int(day)
+    if _is_null(year) or _is_null(month) or _is_null(day):
+        return VBNull
+    y = int(_date_arg_number(year))
+    m = int(_date_arg_number(month))
+    d = int(_date_arg_number(day))
+    y = _pivot_2digit_year(y)
     # Normalize month
     y += (m - 1) // 12
     m = ((m - 1) % 12) + 1
@@ -98,9 +124,11 @@ def DateSerial(year, month, day):
 
 
 def TimeSerial(hour, minute, second):
-    h = int(hour)
-    mi = int(minute)
-    s = int(second)
+    if _is_null(hour) or _is_null(minute) or _is_null(second):
+        return VBNull
+    h = int(_date_arg_number(hour))
+    mi = int(_date_arg_number(minute))
+    s = int(_date_arg_number(second))
     total = h * 3600 + mi * 60 + s
     total = total % 86400
     h = total // 3600
@@ -110,8 +138,10 @@ def TimeSerial(hour, minute, second):
 
 
 def DateAdd(interval, number, date):
+    if _is_null(number) or _is_null(date):
+        return VBNull
     itv = str(interval).lower()
-    n = float(number)
+    n = _date_arg_number(number)
     dt = _to_datetime(date)
 
     if itv == "yyyy":
@@ -137,6 +167,8 @@ def DateAdd(interval, number, date):
 
 
 def DateDiff(interval, date1, date2, firstdayofweek=vbSunday, firstweekofyear=vbFirstJan1):
+    if _is_null(date1) or _is_null(date2):
+        return VBNull
     itv = str(interval).lower()
     d1 = _to_datetime(date1)
     d2 = _to_datetime(date2)
@@ -173,6 +205,8 @@ def DateDiff(interval, date1, date2, firstdayofweek=vbSunday, firstweekofyear=vb
 
 
 def DatePart(interval, date, firstdayofweek=vbSunday, firstweekofyear=vbFirstJan1):
+    if _is_null(date):
+        return VBNull
     itv = str(interval).lower()
     dt = _to_datetime(date)
 
@@ -202,14 +236,14 @@ def DatePart(interval, date, firstdayofweek=vbSunday, firstweekofyear=vbFirstJan
 
 
 def Weekday(date, firstdayofweek=vbSunday):
-    if date is VBNull:
+    if _is_null(date) or _is_null(firstdayofweek):
         return VBNull
     dt = _to_datetime(date)
     # Python weekday: Monday=0..Sunday=6
     py = dt.weekday()
     # Convert to Sunday=1..Saturday=7
     vb = ((py + 1) % 7) + 1
-    fdw = int(firstdayofweek)
+    fdw = int(_date_arg_number(firstdayofweek))
     if fdw in (vbUseSystemDayOfWeek, 0):
         fdw = vbSunday
     # Adjust so that fdw becomes 1
@@ -249,8 +283,16 @@ def TimeValue(s):
 
 
 def CDate(s):
+    # IIS: an IStringList (Request value) coerces through its default
+    # property; a missing key yields Empty.
+    hook = getattr(s.__class__, '__vbs_scalar__', None)
+    if hook is not None:
+        s = hook(s)
     if s is VBNull:
         raise VBScriptCOMError(94, "Invalid use of Null")
+    if s is VBEmpty:
+        # VBScript: CDate(Empty) = #12:00:00 AM# (OA serial 0).
+        return _OA_ZERO
     if isinstance(s, (_dt.datetime, _dt.date, _dt.time)):
         return _to_datetime(s)
     # Numbers are OA date serials: CDate(CDbl(d)) round-trips.
@@ -278,8 +320,10 @@ def IsDate(s):
 
 
 def FormatDateTime(date, namedformat=vbGeneralDate):
+    if _is_null(date) or _is_null(namedformat):
+        return VBNull
     dt = _to_datetime(date)
-    fmt = int(namedformat)
+    fmt = int(_date_arg_number(namedformat))
     # Force deterministic US-like formats (ignoring host locale)
     # Use English names for %A and %B manually or ensure strftime uses C locale?
     # Python strftime depends on C locale.
@@ -293,6 +337,13 @@ def FormatDateTime(date, namedformat=vbGeneralDate):
     # Let's use strict patterns matching 1033 VBScript defaults roughly.
     
     if fmt == vbGeneralDate:
+        # VBScript vbGeneralDate shows only the parts that carry information:
+        # a value on the OA zero date (1899-12-30, e.g. Empty or TimeSerial)
+        # prints time-only, and a midnight value prints date-only.
+        if (dt.year, dt.month, dt.day) == (1899, 12, 30):
+            return _fmt_us_long_time(dt)
+        if (dt.hour, dt.minute, dt.second, dt.microsecond) == (0, 0, 0, 0):
+            return _fmt_us_short_date(dt)
         # 2/24/2026 3:53:19 PM
         return _fmt_us_short_date(dt) + " " + _fmt_us_long_time(dt)
     if fmt == vbLongDate:
@@ -340,6 +391,17 @@ def _fmt_us_long_date(dt):
 
 
 
+def _scalarize(v):
+    """Invoke a wrapped value's default-property hook (IStringList etc.).
+
+    IIS coerces such COM objects through their default property before
+    converting; an empty IStringList (missing Request key) becomes Empty."""
+    hook = getattr(v.__class__, '__vbs_scalar__', None)
+    if hook is not None:
+        return hook(v)
+    return v
+
+
 def _to_datetime(value) -> _dt.datetime:
     if isinstance(value, _dt.datetime):
         return value
@@ -348,13 +410,54 @@ def _to_datetime(value) -> _dt.datetime:
     if isinstance(value, _dt.time):
         # Time-only values live on the OA zero date, like VBScript.
         return _OA_ZERO.replace(hour=value.hour, minute=value.minute, second=value.second)
+    if isinstance(value, bool):
+        # VBScript: True is -1, False is 0 (as an OA serial).
+        return _OA_ZERO + _dt.timedelta(days=-1 if value else 0)
     if isinstance(value, (int, float)):
         # VBScript/OLE Automation date: days since 1899-12-30
         base = _dt.datetime(1899, 12, 30)
         return base + _dt.timedelta(days=float(value))
+    value = _scalarize(value)
+    if value is VBNull:
+        # Callers turn this into Null propagation / error 94.
+        raise VBScriptCOMError(94, "Invalid use of Null")
+    if value is VBEmpty or value is None:
+        # VBScript treats Empty as OA serial 0: Year(Empty) = 1899,
+        # Month(Empty) = 12, Day(Empty) = 30, Hour(Empty) = 0.
+        return _OA_ZERO
     if isinstance(value, str):
+        # A Request value that coerced to Empty already returned above; a
+        # genuinely empty string is a Type Mismatch on IIS.
         return _parse_iso_datetime(value)
+    if isinstance(value, _Decimal):
+        return _dt.datetime(1899, 12, 30) + _dt.timedelta(days=float(value))
     raise VBScriptRuntimeError(f"Expected date/time value, got {type(value).__name__}")
+
+
+def _date_arg_number(v, what="argument"):
+    """Coerce a numeric date argument like VBScript: Empty => 0, Null => 94.
+
+    Used for DateAdd's `number` and DateSerial/TimeSerial's parts so that
+    Empty (or a missing Request key) behaves as 0 instead of raising a bare
+    Python TypeError."""
+    v = _scalarize(v)
+    if v is VBNull:
+        raise VBScriptCOMError(94, "Invalid use of Null")
+    if v is VBEmpty or v is None:
+        return 0.0
+    if isinstance(v, bool):
+        return -1.0 if v else 0.0
+    if isinstance(v, (int, float, _Decimal)):
+        return float(v)
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return (_to_datetime(v) - _OA_ZERO).total_seconds() / 86400.0
+    s = vbs_cstr(v).strip()
+    if s == "":
+        raise VBScriptCOMError(13, "Type mismatch")
+    try:
+        return float(s)
+    except ValueError:
+        raise VBScriptCOMError(13, "Type mismatch")
 
 
 def _parse_iso_datetime(s: str) -> _dt.datetime:

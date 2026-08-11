@@ -66,6 +66,16 @@ class VBSingle(float):
     __slots__ = ()
 
 
+class VBLong(int):
+    """Marker type for VBScript Long (VarType 3, TypeName "Long").
+
+    ASPPY normally infers Integer vs Long from an int's magnitude, but some
+    APIs return a Long even for small values -- Len(), .Count, CLng() and the
+    '\\' operator all report "Long" on IIS. Subclassing int keeps every
+    arithmetic and comparison operation working unchanged."""
+    __slots__ = ()
+
+
 class VBScriptRuntimeError(Exception):
     pass
 
@@ -125,7 +135,11 @@ def vbs_cstr(value) -> str:
 
         digits = 7 if isinstance(value, VBSingle) else 15
         av = abs(value)
-        if av < 1e-4:
+        # VBScript keeps plain decimal notation for small magnitudes far
+        # longer than most languages: CStr(0.000001) = "0.000001" and even
+        # CStr(0.00000001) = "0.00000001". Scientific notation only kicks in
+        # once the exponent drops below -19 (verified against IIS).
+        if av < 1e-19:
             # scientific notation: mantissa with (digits-1) decimals, trimmed
             exp = int(_math.floor(_math.log10(av)))
             mant = value / (10 ** exp)
@@ -137,11 +151,21 @@ def vbs_cstr(value) -> str:
         else:
             s = format(value, f'.{digits}g')
             if 'e' in s or 'E' in s:
-                s = s.replace('e', 'E')
-                m = _re.match(r"^(.*)E([+-]?)(\d+)$", s)
-                if m:
-                    mant, sign, exp2 = m.group(1), m.group(2) or '+', m.group(3)
-                    s = mant + 'E' + sign + exp2.zfill(2)
+                # Python switches to exponent form much earlier than VBScript.
+                # For small magnitudes (down to 1E-19) VBScript prints plain
+                # decimals, so re-render those without an exponent.
+                exp10 = int(_math.floor(_math.log10(av)))
+                if exp10 < 0:
+                    dec = (digits - 1) - exp10
+                    s = f"{value:.{dec}f}"
+                    if '.' in s:
+                        s = s.rstrip('0').rstrip('.')
+                else:
+                    s = s.replace('e', 'E')
+                    m = _re.match(r"^(.*)E([+-]?)(\d+)$", s)
+                    if m:
+                        mant, sign, exp2 = m.group(1), m.group(2) or '+', m.group(3)
+                        s = mant + 'E' + sign + exp2.zfill(2)
 
         return s
     if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
