@@ -265,6 +265,10 @@ def WeekdayName(weekday, abbreviate=False, firstdayofweek=vbSunday):
 
 
 def MonthName(month, abbreviate=False):
+    # Without this guard the int() below leaks a raw Python failure as
+    # 0x80004005; IIS reports Invalid use of Null (94).
+    if _is_null(month) or _is_null(abbreviate):
+        raise VBScriptCOMError(94, "Invalid use of Null")
     m = int(month)
     if m < 1 or m > 12:
         raise VBScriptRuntimeError("MonthName: month must be 1..12")
@@ -319,8 +323,10 @@ def IsDate(s):
 
 
 def FormatDateTime(date, namedformat=vbGeneralDate):
+    # Like the other Format* functions, IIS raises Type mismatch (13) for Null
+    # rather than propagating it. Verified against IIS.
     if _is_null(date) or _is_null(namedformat):
-        return VBNull
+        raise VBScriptCOMError(13, "Type mismatch")
     dt = _to_datetime(date)
     fmt = int(_date_arg_number(namedformat))
     lcid = vbs_get_lcid()

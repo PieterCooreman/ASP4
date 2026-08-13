@@ -47,10 +47,14 @@ def RTrim(string):
     return vbs_cstr(string).rstrip()
 
 def StrReverse(string):
-    if string is VBNull: return VBNull
+    # IIS raises Invalid use of Null here rather than propagating Null, unlike
+    # Left/Right/Mid/Trim/LCase which all return Null. Verified against IIS.
+    if string is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     return vbs_cstr(string)[::-1]
 
 def StrComp(string1, string2, compare=0):
+    # StrComp does propagate Null (verified against IIS).
+    if string1 is VBNull or string2 is VBNull: return VBNull
     s1 = vbs_cstr(string1)
     s2 = vbs_cstr(string2)
     cmp = int(_to_int(compare))
@@ -63,7 +67,11 @@ def StrComp(string1, string2, compare=0):
     return 0
 
 def Split(expression, delimiter=" ", count=-1, compare=0):
-    if expression is VBNull: return VBNull
+    # IIS rejects Null in either position with Invalid use of Null (94); it does
+    # not propagate Null and does not return an empty array. Verified against
+    # IIS for Split(Null), Split(Null, ",") and Split("a,b", Null).
+    if expression is VBNull or delimiter is VBNull:
+        raise_runtime('INVALID_USE_OF_NULL')
     s = vbs_cstr(expression)
     d = vbs_cstr(delimiter)
     from .vm.values import VBArray
@@ -83,7 +91,9 @@ def Split(expression, delimiter=" ", count=-1, compare=0):
 
 def Join(list_var, delimiter=" "):
     from .vm.values import VBArray
-    if list_var is VBNull: return VBNull
+    # Invalid use of Null (94) on IIS, not Null propagation.
+    if list_var is VBNull or delimiter is VBNull:
+        raise_runtime('INVALID_USE_OF_NULL')
     if not isinstance(list_var, (VBArray, list, tuple)): raise_runtime('TYPE_MISMATCH')
     items = list_var._items if isinstance(list_var, VBArray) else list_var
     d = vbs_cstr(delimiter)
@@ -289,6 +299,9 @@ def Array(*args):
 
 def Filter(inputstrings, value, include=True, compare=0):
     from .vm.values import VBArray
+    # A Null array/value is Invalid use of Null (94) on IIS, not Type mismatch.
+    if inputstrings is VBNull or value is VBNull:
+        raise_runtime('INVALID_USE_OF_NULL')
     if not IsArray(inputstrings): raise_runtime('TYPE_MISMATCH')
     arr = inputstrings
     if not arr._allocated: return VBArray([-1])
@@ -304,6 +317,9 @@ def Filter(inputstrings, value, include=True, compare=0):
     return out
 
 def Asc(s):
+    # Null is Invalid use of Null (94); only an *empty string* is Invalid
+    # procedure call (5). Verified against IIS.
+    if s is VBNull: raise_runtime('INVALID_USE_OF_NULL')
     t = vbs_cstr(s)
     if t == "": raise_runtime('INVALID_PROC_CALL')
     return ord(t[0])
@@ -777,7 +793,9 @@ def _format_args(numdigitsafterdecimal, includeleadingdigit,
 
 
 def FormatNumber(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
-    if expression is VBNull: return VBNull
+    # The Format* family does NOT propagate Null: IIS raises Type mismatch (13),
+    # not Invalid use of Null and not a Null result. Verified against IIS.
+    if expression is VBNull: raise_runtime('TYPE_MISMATCH')
     nd, lead, parens, group = _format_args(
         numdigitsafterdecimal, includeleadingdigit,
         useparensfornegativenumbers, groupdigits)
@@ -786,7 +804,7 @@ def FormatNumber(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, u
 
 
 def FormatCurrency(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
-    if expression is VBNull: return VBNull
+    if expression is VBNull: raise_runtime('TYPE_MISMATCH')
     nd, lead, parens, group = _format_args(
         numdigitsafterdecimal, includeleadingdigit,
         useparensfornegativenumbers, groupdigits)
@@ -795,7 +813,7 @@ def FormatCurrency(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2,
 
 
 def FormatPercent(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
-    if expression is VBNull: return VBNull
+    if expression is VBNull: raise_runtime('TYPE_MISMATCH')
     nd, lead, parens, group = _format_args(
         numdigitsafterdecimal, includeleadingdigit,
         useparensfornegativenumbers, groupdigits)

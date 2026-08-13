@@ -590,16 +590,19 @@ class Server:
                                "006~ASP 0177~Server.CreateObject failed~800401f3")
 
     def HTMLEncode(self, s):
+        # The Server methods report Type mismatch (13) for Null, not Invalid use
+        # of Null (94) as the VBScript string functions do. Verified against IIS.
         if s is VBNull:
-            raise VBScriptCOMError(94, "Invalid use of Null")
+            raise VBScriptCOMError(13, "Type mismatch")
         # VBScript coerces Empty/Nothing/Null to an empty string in most
         # string contexts; avoid leaking sentinel reprs like "VBEmpty".
         t = vbs_cstr(s)
         return t.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
     def URLEncode(self, s):
+        # Type mismatch (13), matching Server.HTMLEncode - see note there.
         if s is VBNull:
-            raise VBScriptCOMError(94, "Invalid use of Null")
+            raise VBScriptCOMError(13, "Type mismatch")
         # Use '+' for spaces like typical URL encoding
         return urllib.parse.quote_plus(vbs_cstr(s))
 

@@ -14,6 +14,29 @@ from .vb_runtime import vbs_cstr, vbs_set_lcid
 from .vm.values import VBNull
 
 
+def _nul_terminate(s: str) -> str:
+    """Truncate a string at the first NUL, the way IIS does on output.
+
+    ASP hands VBScript strings to Windows as NUL-terminated buffers, so a
+    embedded Chr(0) ends the string: on IIS,
+    ``Response.Write "a" & vbNullChar & "b"`` emits just ``a`` - the NUL *and
+    everything after it in that call* are dropped, not merely the NUL itself.
+    Verified against IIS for Response.Write, Response.AddHeader and
+    Response.Cookies.
+
+    Beyond parity this is a hard requirement for header values: emitting a raw
+    NUL into a header produces a malformed response that clients reject with a
+    protocol error rather than rendering the page.
+
+    Deliberately NOT applied to BinaryWrite, where NUL bytes are legitimate
+    payload data.
+    """
+    if not s:
+        return s
+    i = s.find('\x00')
+    return s if i < 0 else s[:i]
+
+
 class ResponseEndException(Exception):
     pass
 
@@ -101,7 +124,7 @@ class Response:
         self._body_out.extend(b)
 
     def Write(self, s):
-        txt = vbs_cstr(s)
+        txt = _nul_terminate(vbs_cstr(s))
         if not self._sent_first_output:
             txt = txt.lstrip("\r\n")
             if not txt:
@@ -276,7 +299,8 @@ class Response:
         raise ResponseEndException()
 
     def AddHeader(self, name, value):
-        self._extra_headers.append((str(name), vbs_cstr(value)))
+        self._extra_headers.append((_nul_terminate(str(name)),
+                                    _nul_terminate(vbs_cstr(value))))
 
     def AppendToLog(self, s):
         msg = vbs_cstr(s)
@@ -576,6 +600,16 @@ class Response:
             self._res.headers.append((hn, hv))
         for c in self._cookies.values():
             self._res.headers.append(("Set-Cookie", c.to_set_cookie_header()))
+
+        # Final guard on every header, whatever produced it. A NUL is never a
+        # legal header character: emitting one yields a malformed response that
+        # clients reject outright with a protocol error instead of rendering the
+        # page. IIS truncates at the NUL (verified for AddHeader and Cookies),
+        # so do the same here rather than escaping or dropping the header.
+        self._res.headers[:] = [
+            (_nul_terminate(str(hn)), _nul_terminate(str(hv)))
+            for (hn, hv) in self._res.headers
+        ]
 
 
 class ResponseCookiesCollection:

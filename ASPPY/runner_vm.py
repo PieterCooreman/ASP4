@@ -101,7 +101,10 @@ for _name in dir(_vb_builtins_stub):
         _STATIC_ENV_TEMPLATE.setdefault(_name.upper(), _v)
 
 _STATIC_ENV_TEMPLATE['INSTRREV'] = _InStrRev
-_STATIC_ENV_TEMPLATE['CBOOL'] = vbs_cbool
+# NB: bind vb_builtins.CBool, not the raw vbs_cbool coercion helper. CBool(Null)
+# must raise Invalid use of Null (94) like IIS; vbs_cbool would quietly yield
+# False.
+_STATIC_ENV_TEMPLATE['CBOOL'] = vb_builtins.CBool
 
 # Ensure VB string constants are in the template (belt-and-suspenders;
 # they should already be injected via vb_constants, but guarantee it).

@@ -15,7 +15,11 @@ from decimal import Decimal, ROUND_HALF_EVEN
 # Request key) converts to 0 and Boolean True converts to -1, exactly like IIS.
 def Sgn(number):
     from .vb_builtins import _to_number, _scalarize
-    if _scalarize(number) is VBNull: return VBNull
+    # Sgn rejects Null with Invalid use of Null (94) on IIS, unlike Abs/Int/Fix
+    # which propagate Null. Verified against IIS.
+    if _scalarize(number) is VBNull:
+        from .vb_errors import raise_runtime
+        raise_runtime('INVALID_USE_OF_NULL')
     x = float(_to_number(number))
     if x > 0: return 1
     if x < 0: return -1

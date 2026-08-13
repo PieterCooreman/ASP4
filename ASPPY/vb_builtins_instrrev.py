@@ -13,9 +13,12 @@ from .vb_builtins import _to_int
 
 def InStrRev(string1, string2, start=-1, compare=0):
 
+    # InStrRev differs from InStr: IIS raises Invalid use of Null (94) here,
+    # whereas InStr(Null, s) propagates Null. Verified against IIS.
     if string1 is VBNull or string2 is VBNull:
-        return VBNull
-        
+        raise_runtime('INVALID_USE_OF_NULL')
+
+
     s1 = vbs_cstr(string1)
     s2 = vbs_cstr(string2)
     st = int(_to_int(start))
