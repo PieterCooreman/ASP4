@@ -187,8 +187,6 @@ If you're migrating a critical application, run your own regression tests agains
 
 ASPPY implements the Classic ASP locale model - `Session.LCID`, `Response.LCID`, `<%@ LCID %>`, `GetLocale`/`SetLocale` - across **60 locales**. Formatting, parsing and collation are all locale-aware: `FormatNumber`/`FormatCurrency`/`FormatPercent`, `FormatDateTime`, `MonthName`/`WeekdayName`, `CDbl`/`CDate`/`IsNumeric`/`IsDate`, `Weekday`, and `StrComp` with `vbTextCompare`.
 
-The locale table is generated from the Windows NLS data and was validated field-by-field against live IIS output. **58 of the 60 locales match IIS exactly**; ar-SA and th-TH differ only in their calendar (Hijri and Buddhist era are not modelled - names, separators and currency are correct).
-
 Two deliberate divergences, both chosen so that behaviour is deterministic across hosts:
 
 - **Default locale is 1033 (en-US)** when nothing is set, rather than the host's system locale.
