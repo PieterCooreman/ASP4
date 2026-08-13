@@ -1037,7 +1037,10 @@ class ADODBStream:
         # ADODB.Stream default Charset under Windows/ADO is typically "Unicode".
         self.Charset = "Unicode"
         # Default line separator for text streams (adCRLF).
-        self.LineSeparator = "\r\n"
+        # ADO exposes LineSeparator as a LineSeparatorEnum, and IIS reports the
+        # enum value (adCRLF = -1), not the literal separator string. Verified
+        # against IIS. _get_line_separator() resolves it to characters.
+        self.LineSeparator = -1  # adCRLF
         self.Mode = 1
         self._pos = 0
         self._buf_text = ""
@@ -1414,7 +1417,12 @@ class ADODBStream:
                 self._buf_bin.extend(b)
         self._pos = end
 
-    def WriteText(self, s):
+    def WriteText(self, s, options=0):
+        """Write text to the stream.
+
+        `options` is a StreamWriteEnum: adWriteChar (0, default) writes the text
+        as-is, adWriteLine (1) appends LineSeparator afterwards.
+        """
         self._ensure_open()
         if isinstance(s, (bytes, bytearray)) and self._type == self.adTypeText:
             # Preserve bytes 1:1 in the binary buffer (upload scripts depend on this).
@@ -1440,6 +1448,12 @@ class ADODBStream:
             return self.Write(self._coerce_bytes(s))
 
         ins = vbs_cstr(s)
+        try:
+            write_line = int(options) == 1        # adWriteLine
+        except Exception:
+            write_line = False
+        if write_line:
+            ins = ins + self._get_line_separator()
         text = vbs_cstr(self._buf_text)
         pos = min(self._pos, len(text))
         if pos == 0:

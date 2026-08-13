@@ -29,26 +29,34 @@ def vbs_get_lcid():
     return getattr(_fmt_tls, 'lcid', 0)
 
 
-_LCID_INFO = {
-    1033: {"decimal": ".", "thousands": ",", "currency": "USD", "date_short": "%m/%d/%Y", "date_long": "%A, %B %d, %Y", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1041: {"decimal": ".", "thousands": ",", "currency": "JPY", "date_short": "%Y/%m/%d", "date_long": "%Y %B %d", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1049: {"decimal": ",", "thousands": " ", "currency": "RUB", "date_short": "%d.%m.%Y", "date_long": "%d %B %Y", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1031: {"decimal": ",", "thousands": ".", "currency": "EUR", "date_short": "%d.%m.%Y", "date_long": "%d. %B %Y", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1025: {"decimal": ".", "thousands": ",", "currency": "SAR", "date_short": "%d/%m/%Y", "date_long": "%d %B %Y", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1081: {"decimal": ".", "thousands": ",", "currency": "INR", "date_short": "%d-%m-%Y", "date_long": "%d %B %Y", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    2052: {"decimal": ".", "thousands": ",", "currency": "CNY", "date_short": "%Y-%m-%d", "date_long": "%Y %B %d", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-    1042: {"decimal": ".", "thousands": ",", "currency": "KRW", "date_short": "%Y-%m-%d", "date_long": "%Y %B %d", "time_short": "%H:%M", "time_long": "%H:%M:%S"},
-}
+def _decimal_sep():
+    """Decimal separator for the current thread's LCID.
+
+    Imported lazily so that vb_locale (stdlib-only) stays independent of the
+    runtime's import order.
+    """
+    from . import vb_locale
+    return vb_locale.decimal_separator(vbs_get_lcid())
 
 
 def vbs_get_lcid_info(lcid=None):
-    if lcid is None:
-        lcid = vbs_get_lcid()
-    try:
-        lcid = int(lcid)
-    except Exception:
-        lcid = 0
-    return _LCID_INFO.get(lcid, _LCID_INFO.get(1033))
+    """Deprecated compatibility shim.
+
+    Superseded by :mod:`ASPPY.vb_locale`, which is driven by the full NLS table
+    in locale_data.json (60 locales) rather than the 8 hand-written entries this
+    used to hold. Retained so any external caller keeps working.
+    """
+    from . import vb_locale
+    L = vb_locale.get(vbs_get_lcid() if lcid is None else lcid)
+    return {
+        "decimal":    L['numberDecimalSeparator'],
+        "thousands":  L['numberGroupSeparator'],
+        "currency":   L['currencySymbol'],
+        "date_short": L['shortDatePattern'],
+        "date_long":  L['longDatePattern'],
+        "time_short": L['shortTimePattern'],
+        "time_long":  L['longTimePattern'],
+    }
 
 
 try:
@@ -125,7 +133,7 @@ def vbs_cstr(value) -> str:
             s = s.rstrip('0').rstrip('.')
         if s in ('', '-', '-0'):
             s = '0'
-        return s
+        return s.replace('.', _decimal_sep())
     if isinstance(value, float):
         # VBScript CStr renders a Double with up to 15 significant digits
         # (CStr(1/3) => "0.333333333333333"); a Single (CSng) uses 7.
@@ -167,19 +175,39 @@ def vbs_cstr(value) -> str:
                         mant, sign, exp2 = m.group(1), m.group(2) or '+', m.group(3)
                         s = mant + 'E' + sign + exp2.zfill(2)
 
-        return s
+        return s.replace('.', _decimal_sep())
     if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
+        # VBScript prints date-only when the time part is midnight and time-only
+        # when the value is a pure time (OA zero date).
         if isinstance(value, _dt.datetime):
-            # VBScript prints date-only when the time part is midnight and
-            # time-only when the value is a pure time (OA zero date).
-            if (value.year, value.month, value.day) == (1899, 12, 30):
-                return value.strftime("%H:%M:%S")
-            if value.hour == 0 and value.minute == 0 and value.second == 0 and value.microsecond == 0:
-                return value.strftime("%Y-%m-%d")
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        if isinstance(value, _dt.date):
-            return value.strftime("%Y-%m-%d")
-        return value.strftime("%H:%M:%S")
+            has_date = (value.year, value.month, value.day) != (1899, 12, 30)
+            has_time = (value.hour, value.minute, value.second, value.microsecond) != (0, 0, 0, 0)
+            dt_value = value
+        elif isinstance(value, _dt.date):
+            has_date, has_time = True, False
+            dt_value = _dt.datetime(value.year, value.month, value.day)
+        else:
+            has_date, has_time = False, True
+            dt_value = _dt.datetime(1899, 12, 30, value.hour, value.minute,
+                                    value.second, value.microsecond)
+        if not has_date and not has_time:
+            has_time = True
+
+        # Under IIS this always follows the locale. ASPPY keeps its ISO output
+        # while no locale has been chosen (LCID 0) so that apps which never
+        # localise - and commonly concatenate dates straight into SQL - are not
+        # silently broken, and switches to full IIS parity as soon as the app
+        # opts in via Session.LCID / SetLocale / <%@ LCID %>. See README
+        # "Character encoding" for the same deterministic-default reasoning.
+        if vbs_get_lcid():
+            from . import vb_locale
+            return vb_locale.general_date(dt_value, vbs_get_lcid(), has_date, has_time)
+
+        if has_date and has_time:
+            return dt_value.strftime("%Y-%m-%d %H:%M:%S")
+        if has_date:
+            return dt_value.strftime("%Y-%m-%d")
+        return dt_value.strftime("%H:%M:%S")
     # Only do the expensive _UserProc check if the object looks like one,
     # avoiding costly imports and getattr chains on every unrecognised type.
     if hasattr(value, 'kind') and hasattr(value, 'params'):

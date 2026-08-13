@@ -21,8 +21,8 @@ While other frameworks pile on tooling, ASPPY strips it away. This is what sets 
 ### No build step. Ever.
 No `npm install`. No bundlers. No transpilers. No `.ps1` setup scripts. No dependency hell. You edit an `.asp` file, you hit refresh, it's live. **Deployment is a file copy.**
 
-### The entire runtime is under 700 KB - and human-readable
-Not 700 MB. **KB.** 39 plain Python files (~150 KB zipped) that you can open, read, and understand. No black box, no vendor magic. If you want to know how something works, you just read the source - all of it fits in your head.
+### The entire runtime is under 900 KB - and human-readable
+Not 900 MB. **KB.** 40 plain Python files plus one generated locale table (~195 KB zipped) that you can open, read, and understand. No black box, no vendor magic. If you want to know how something works, you just read the source - all of it fits in your head.
 
 ### Compiled, not interpreted line-by-line
 ASPPY runs on Python, which **compiles code to bytecode** before execution. Your ASP pages aren't re-scanned as raw text on every hit.
@@ -43,7 +43,7 @@ No multi-hundred-MB runtime installers, no self-contained EXE blobs, no Docker i
 
 ## Built for the AI Era - The Perfect Match for Vibe Coding
 
-ASPPY is a dream partner for AI coding tools like **Claude Code, OpenCode, Codex, Cursor, GitHub Copilot** and all the other important players. Why? Because the entire runtime is a **readable codebase of under 700 KB** - small enough that any modern LLM (even free models, and certainly the well-known cloud models like Opus, Fable, Gemini, GPT, Kimi, GLM, DeepSeek, and friends) can read and understand it **in minutes or less**. No million-line framework to guess about, no hidden magic the AI has to hallucinate around - the model sees the whole picture and gets it right the first time.
+ASPPY is a dream partner for AI coding tools like **Claude Code, OpenCode, Codex, Cursor, GitHub Copilot** and all the other important players. Why? Because the entire runtime is a **readable codebase of under 900 KB** - small enough that any modern LLM (even free models, and certainly the well-known cloud models like Opus, Fable, Gemini, GPT, Kimi, GLM, DeepSeek, and friends) can read and understand it **in minutes or less**. No million-line framework to guess about, no hidden magic the AI has to hallucinate around - the model sees the whole picture and gets it right the first time.
 
 For experienced ASP developers, this is a genuinely exciting moment: the skills you've built over decades suddenly pair with the most powerful development tools ever created. Describe the app you want, point your AI agent at ASPPY, and watch it **develop brand-new web apps or re-create existing ASP/VBScript applications in no time - for nearly free**. Legacy modernization, rapid prototyping, full production apps: what used to take weeks of budget and planning now happens in an afternoon. Classic ASP knowledge has never been this valuable - or this much fun to use.
 
@@ -179,9 +179,46 @@ Windows · Linux · macOS
 
 ## Compatibility Notes
 
-ASPPY targets practical app-level compatibility, not byte-for-byte IIS parity. Locale-specific formatting, edge-case type coercion, and COM-level quirks may differ. SQL is executed as-is by the underlying driver - no dialect translation is performed.
+ASPPY targets practical app-level compatibility, not byte-for-byte IIS parity. Edge-case type coercion and COM-level quirks may differ. SQL is executed as-is by the underlying driver - no dialect translation is performed.
 
 If you're migrating a critical application, run your own regression tests against ASPPY alongside IIS before cutting over.
+
+### Localization: 60 locales, verified against IIS
+
+ASPPY implements the Classic ASP locale model - `Session.LCID`, `Response.LCID`, `<%@ LCID %>`, `GetLocale`/`SetLocale` - across **60 locales**. Formatting, parsing and collation are all locale-aware: `FormatNumber`/`FormatCurrency`/`FormatPercent`, `FormatDateTime`, `MonthName`/`WeekdayName`, `CDbl`/`CDate`/`IsNumeric`/`IsDate`, `Weekday`, and `StrComp` with `vbTextCompare`.
+
+The locale table is generated from the Windows NLS data and was validated field-by-field against live IIS output. **58 of the 60 locales match IIS exactly**; ar-SA and th-TH differ only in their calendar (Hijri and Buddhist era are not modelled - names, separators and currency are correct).
+
+Two deliberate divergences, both chosen so that behaviour is deterministic across hosts:
+
+- **Default locale is 1033 (en-US)** when nothing is set, rather than the host's system locale.
+- **`CStr(date)` stays ISO** (`2024-03-05 14:07:09`) while no locale has been selected, so apps that concatenate dates into SQL keep working. Selecting a locale switches it to full IIS formatting.
+
+See [docs/specifications.html](docs/specifications.html) for the supported locale list and details.
+
+### Character encoding: UTF-8 by default - an intentional break from IIS
+
+Classic ASP under IIS defaults to the **system ANSI codepage** of the host machine - typically `1252` on a Western Windows server, `932` on a Japanese one. ASPPY instead defaults to **UTF-8 (codepage 65001) everywhere**. This is a deliberate divergence, not an oversight:
+
+- ASPPY runs on Linux and macOS, where "the system ANSI codepage" has no meaningful equivalent. There is no coherent host default to inherit.
+- Every modern consumer - browsers, `fetch`, JSON APIs, HTML5 - assumes UTF-8.
+- VBScript strings are Unicode internally. UTF-8 is the only encoding that round-trips them losslessly; every legacy codepage silently substitutes characters it cannot represent.
+
+| Surface | ASPPY default | IIS default |
+|---|---|---|
+| `Session.CodePage` / `Response.CodePage` | `65001` | system ANSI (e.g. `1252`) |
+| `Response.Charset` | `utf-8` | unset - header omits `charset` |
+| `.asp` source files | UTF-8, BOM-tolerant, falls back to `cp1252` | BOM, else `@CODEPAGE`, else metabase |
+| `Request.Form` / `Request.QueryString` | decoded as UTF-8 | decoded per `Session.CodePage` |
+| `Server.URLEncode` | percent-encoded UTF-8 | percent-encoded per current codepage |
+
+**What this means when migrating.** Pages served as `windows-1252` under IIS are served as UTF-8 by ASPPY and labelled as such in the `Content-Type` header, so browsers render them correctly with no source change. Legacy `.asp` files saved in `windows-1252` also need no conversion - ASPPY detects and decodes them automatically.
+
+You only need to intervene where a **non-browser** consumer expects legacy bytes: CSV exports opened in Excel, fixed-format files for banking or EDI partners, or older integration endpoints that assume `iso-8859-1`. Set the encoding explicitly on those responses:
+
+```asp
+Response.Charset = "windows-1252"
+```
 
 ---
 

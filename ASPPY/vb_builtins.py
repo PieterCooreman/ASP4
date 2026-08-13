@@ -10,6 +10,7 @@ import struct as _struct
 
 from .vb_errors import raise_runtime
 from .vb_runtime import VBSingle, VBLong, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
+from . import vb_locale
 from .vm.values import VBEmpty, VBNull, VBNothing
 
 # Re-implement core functions to guarantee they exist in this module scope
@@ -54,8 +55,9 @@ def StrComp(string1, string2, compare=0):
     s2 = vbs_cstr(string2)
     cmp = int(_to_int(compare))
     if cmp == 1:
-        s1 = s1.lower()
-        s2 = s2.lower()
+        # vbTextCompare is a locale collation, not a lowercase byte compare:
+        # "strasse" equals "stra<sharp-s>e" and accents act as a tiebreak.
+        return vb_locale.compare_text(s1, s2)
     if s1 < s2: return -1
     if s1 > s2: return 1
     return 0
@@ -587,10 +589,18 @@ def _to_number(v):
     if len(s) >= 2 and s[0] == '&' and s[1] in ('H', 'h', 'O', 'o'):
         try: return int(s.replace('&H','0x').replace('&h','0x').replace('&O','0o').replace('&o','0o'), 0)
         except: raise_runtime('TYPE_MISMATCH')
-    try: return int(s)
+    # Numeric strings are interpreted in the current locale, which is what makes
+    # CDbl("1,5") 15 under en-US (comma = group separator) but 1.5 under nl-BE,
+    # and makes fr-FR reject "1.5" outright. The locale reading is authoritative:
+    # falling back to a plain float() here would wrongly accept separators the
+    # locale does not define. Scientific notation ("1e5") is handled by the
+    # normaliser, so it keeps working at every locale.
+    norm = vb_locale.normalize_number_string(s, vbs_get_lcid())
+    if norm is None:
+        raise_runtime('TYPE_MISMATCH')
+    try: return int(norm)
     except ValueError: pass
-    # Accept float and scientific notation ("1e5"), like CDbl on IIS.
-    try: return float(s)
+    try: return float(norm)
     except ValueError: raise_runtime('TYPE_MISMATCH')
 
 def _to_int(v):
@@ -613,7 +623,10 @@ def _to_decimal(v) -> Decimal:
         # CLng/CInt/CCur etc. Keep behavior identical to _to_number.
         try: return Decimal(int(s.replace('&H','0x').replace('&h','0x').replace('&O','0o').replace('&o','0o'), 0))
         except: raise_runtime('TYPE_MISMATCH')
-    try: return Decimal(s)
+    # Same locale reading as _to_number, so CCur agrees with CDbl.
+    norm = vb_locale.normalize_number_string(s, vbs_get_lcid())
+    if norm is None: raise_runtime('TYPE_MISMATCH')
+    try: return Decimal(norm)
     except: raise_runtime('TYPE_MISMATCH')
 
 def _round_bankers(d: Decimal) -> Decimal:
@@ -741,87 +754,74 @@ def Round(expression, numdecimalplaces=0):
         # fractional part left to round; IIS just returns them unchanged.
         return float(n)
 
-def FormatNumber(expression, numdigitsafterdecimal=2, includeleadingdigit=True, useparensfornegativenumbers=False, groupdigits=True):
-    if expression is VBNull: return VBNull
-    # An OMITTED argument (FormatNumber(n, 2, , , True)) arrives as Python
-    # None. VBScript treats such a gap as "use the system default", exactly
-    # like vbUseDefault (-2), so restore each parameter's default here rather
-    # than letting None reach _to_int (which would be a Type Mismatch).
+def _format_args(numdigitsafterdecimal, includeleadingdigit,
+                 useparensfornegativenumbers, groupdigits):
+    """Normalise the four shared Format* arguments.
+
+    An OMITTED argument (FormatNumber(n, 2, , , True)) arrives as Python None.
+    VBScript treats such a gap as "use the system default", exactly like
+    vbUseDefault (-2), so restore each parameter's default here rather than
+    letting None reach _to_int (which would be a Type Mismatch).
+    """
     if numdigitsafterdecimal is None: numdigitsafterdecimal = -1
     if includeleadingdigit is None: includeleadingdigit = -2
     if useparensfornegativenumbers is None: useparensfornegativenumbers = -2
     if groupdigits is None: groupdigits = -2
-    n = _to_number(expression)
-
-    # Handle Default (-1) for arguments
     nd = int(_to_int(numdigitsafterdecimal))
-    if nd == -1: nd = 2
-    
-    if nd < 0: raise_runtime('INVALID_PROC_CALL')
-        
-    fmt = f"{{:.{nd}f}}"
-    s = fmt.format(n)
-    
-    # Defaults for tristate args: -2 (Default) -> True or False
-    # VBScript defaults: LeadingDigit=True, Parens=False, Group=True usually
-    
-    inc_lead = int(_to_int(includeleadingdigit))
-    if inc_lead == -2: inc_lead = -1 # True
-    
-    use_parens = int(_to_int(useparensfornegativenumbers))
-    if use_parens == -2: use_parens = 0 # False
-    
-    use_group = int(_to_int(groupdigits))
-    if use_group == -2: use_group = -1 # True
+    if nd < -1:
+        raise_runtime('INVALID_PROC_CALL')
+    return (nd,
+            int(_to_int(includeleadingdigit)),
+            int(_to_int(useparensfornegativenumbers)),
+            int(_to_int(groupdigits)))
 
-    if use_group and use_group != 0:
-        parts = s.split('.')
-        parts[0] = _group_thousands(parts[0])
-        s = '.'.join(parts)
-        
-    if inc_lead == 0: 
-        if s.startswith('0.'): s = s[1:]
-        elif s.startswith('-0.'): s = '-' + s[2:]
-            
-    if use_parens and use_parens != 0 and n < 0:
-        s = f"({s.replace('-', '')})"
-        
-    return s
+
+def FormatNumber(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
+    if expression is VBNull: return VBNull
+    nd, lead, parens, group = _format_args(
+        numdigitsafterdecimal, includeleadingdigit,
+        useparensfornegativenumbers, groupdigits)
+    return vb_locale.format_number(_to_number(expression), nd, lead, parens,
+                                   group, lcid=vbs_get_lcid())
+
 
 def FormatCurrency(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
-    s = FormatNumber(expression, numdigitsafterdecimal, includeleadingdigit, useparensfornegativenumbers, groupdigits)
-    # Simple hardcoded symbol for now, as user doesn't want full locale support but expects currency-like output.
-    # Check for parens (negative)
-    if s.startswith('(') and s.endswith(')'):
-        return f"(${s[1:-1]})"
-    return f"${s}"
+    if expression is VBNull: return VBNull
+    nd, lead, parens, group = _format_args(
+        numdigitsafterdecimal, includeleadingdigit,
+        useparensfornegativenumbers, groupdigits)
+    return vb_locale.format_currency(_to_number(expression), nd, lead, parens,
+                                     group, lcid=vbs_get_lcid())
+
 
 def FormatPercent(expression, numdigitsafterdecimal=-1, includeleadingdigit=-2, useparensfornegativenumbers=-2, groupdigits=-2):
-    try:
-        val = float(_to_number(expression)) * 100.0
-    except:
-        val = 0.0
-    s = FormatNumber(val, numdigitsafterdecimal, includeleadingdigit, useparensfornegativenumbers, groupdigits)
-    return s + "%"
+    if expression is VBNull: return VBNull
+    nd, lead, parens, group = _format_args(
+        numdigitsafterdecimal, includeleadingdigit,
+        useparensfornegativenumbers, groupdigits)
+    return vb_locale.format_percent(_to_number(expression), nd, lead, parens,
+                                    group, lcid=vbs_get_lcid())
 
 
 # -----------------------------------------------------------------------------
 # Locale functions: GetLocale / SetLocale
 #
 # VBScript stores the current locale per script engine (per thread in IIS).
-# ASPPY already keeps a thread-local LCID in vb_runtime (used by Response.LCID
-# and locale-aware formatting via vbs_get_lcid_info), so these builtins simply
-# read/write that same state.
+# ASPPY already keeps a thread-local LCID in vb_runtime (used by Response.LCID,
+# Session.LCID and all locale-aware formatting via vb_locale), so these builtins
+# simply read/write that same state.
 # -----------------------------------------------------------------------------
 
-# Default LCID when nothing was set. The runtime treats LCID 0 as "system
-# default" and formats as en-US (see vb_runtime.vbs_get_lcid_info), so the
-# deterministic default reported to scripts is 1033 (en-US), matching typical
-# IIS installs.
-_DEFAULT_LCID = 1033
+# Default LCID when nothing was set. LCID 0 means "system default"; ASPPY
+# resolves it deterministically to en-US rather than inheriting the host locale.
+_DEFAULT_LCID = vb_locale.DEFAULT_LCID
 
-# Common VBScript locale short-name -> LCID map (SetLocale accepts either a
-# numeric LCID or a short string like "en-gb", "de", "zh-cn").
+# Curated VBScript locale short-name -> LCID map. This takes precedence over the
+# generated table in locale_data.json because it pins the conventional default
+# sub-language for bare language codes ("pt" -> pt-PT, "zh" -> zh-CN) and covers
+# a few names that have no formatting record of their own (en-nz, en-ie, en-za,
+# zh-sg). Anything not listed here is resolved from locale_data.json, which
+# covers all 60 supported locales.
 _LOCALE_NAME_TO_LCID = {
     'ar': 1025, 'ar-sa': 1025,
     'cs': 1029, 'cs-cz': 1029,
@@ -879,6 +879,8 @@ def SetLocale(lcid=0):
             new_lcid = 0  # system default
         elif name in _LOCALE_NAME_TO_LCID:
             new_lcid = _LOCALE_NAME_TO_LCID[name]
+        elif vb_locale.lcid_for_name(name) is not None:
+            new_lcid = vb_locale.lcid_for_name(name)
         else:
             # Allow numeric LCIDs passed as strings ("1033").
             try:

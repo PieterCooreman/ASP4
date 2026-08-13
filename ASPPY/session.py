@@ -123,9 +123,16 @@ class Session:
 
     @LCID.setter
     def LCID(self, value):
-        # Stores the value but does not enforce it, as requested for legacy compatibility.
+        # Setting Session.LCID takes effect immediately for the current request
+        # and is re-applied at the start of every later request in this session
+        # (see runner_vm), matching how IIS seeds the script engine locale.
         try:
             self.LCID_ = int(value)
+        except Exception:
+            return
+        try:
+            from .vb_runtime import vbs_set_lcid
+            vbs_set_lcid(self.LCID_)
         except Exception:
             pass
 

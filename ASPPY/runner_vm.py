@@ -28,7 +28,7 @@ from . import adodb as _adodb
 from .adodb import close_all_connections
 from . import vb_builtins_stub as _vb_builtins_stub
 from .vb_builtins_instrrev import InStrRev as _InStrRev
-from .asp_page import parse_asp_page, exec_asp_nodes, parse_asp_file_to_nodes, compile_asp_nodes, ScriptNode, IncludeNode, ExprNode, HtmlNode, _attach_location
+from .asp_page import parse_asp_page, exec_asp_nodes, parse_asp_file_to_nodes, compile_asp_nodes, ScriptNode, IncludeNode, ExprNode, HtmlNode, DirectiveNode, _attach_location
 from .asp_cache import get_cached_asp_nodes
 from .ast_nodes import ClassDef, SubDef, FuncDef, OptionExplicitStmt
 from .vm.context import ExecutionContext
@@ -208,8 +208,15 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
             pass
             
     # Reset thread-local state (LCID, ADO connections) to ensure clean execution
-    # even if the server reuses threads (Keep-Alive).
+    # even if the server reuses threads (Keep-Alive), then re-seed the script
+    # engine locale from Session.LCID the way IIS does at the start of a request.
     vbs_set_lcid(0)
+    if session is not None:
+        try:
+            if getattr(session, 'LCID_', 0):
+                vbs_set_lcid(session.LCID_)
+        except Exception:
+            pass
     
     env = _build_globals_env(ctx)
     interp = VBInterpreter(ctx, env)
@@ -428,6 +435,16 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
                     _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
                     raise e
                 run(inc_nodes, n.virtual)
+            elif isinstance(n, DirectiveNode):
+                # <%@ LCID=... CODEPAGE=... %> - same effect as assigning
+                # Response.LCID / Response.CodePage at the top of the page.
+                try:
+                    if n.lcid is not None:
+                        resp.SetProperty("LCID", n.lcid)
+                    if n.codepage is not None:
+                        resp.SetProperty("CODEPAGE", n.codepage)
+                except Exception:
+                    pass
             elif isinstance(n, ScriptNode):
                 interp._current_vbs_src = n.code
                 interp._current_asp_path = cur_virt_path

@@ -331,6 +331,7 @@ Rules:
 - HTML-encode user output with `Server.HTMLEncode()`
 - Avoid `On Error Resume Next` in routing or page setup; fix the first real error directly
 - For dynamic routes, prefer splitting path segments over manual string-length math when extracting IDs or actions
+- Save `.asp` files as UTF-8. ASPPY is UTF-8 (codepage 65001) by default - do **not** set `Session.CodePage`, `Response.CodePage`, `Response.Charset` or `<%@ CODEPAGE %>` just to "make accents work"; they already work. Only set `Response.Charset` when a non-browser consumer genuinely needs legacy bytes (e.g. `windows-1252` for a CSV opened in Excel). This is an intentional break from IIS, which defaults to the host ANSI codepage.
 
 Dynamic route example:
 

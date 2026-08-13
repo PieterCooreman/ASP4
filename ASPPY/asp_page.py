@@ -39,6 +39,20 @@ class ExprNode:
 
 
 @dataclass
+class DirectiveNode:
+    """A page-level <%@ ... %> directive carrying LCID and/or CODEPAGE.
+
+    Kept as its own node rather than lowered into VBScript because a
+    synthesised assignment would sit in front of `Option Explicit`, which must
+    be the first statement of the page.
+    """
+    lcid: int | None
+    codepage: int | None
+    start_line: int = 0
+    start_col: int = 0
+
+
+@dataclass
 class IncludeNode:
     path: str  # absolute physical path
     virtual: str  # virtual path
@@ -57,6 +71,10 @@ from collections import OrderedDict as _OrderedDict
 _granular_ast_lock = _threading.RLock()
 _granular_ast_cache: _OrderedDict = _OrderedDict()
 _GRANULAR_CACHE_MAX = int(os.environ.get('ASP_PY_CACHE_SIZE', '500'))
+
+
+#: Attributes inside an ASP page directive: NAME=value / NAME="value".
+_DIRECTIVE_ATTR_RE = re.compile(r'([A-Za-z_]+)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s%]+)')
 
 
 def _hash_nodes(nodes) -> str:
@@ -391,7 +409,25 @@ def parse_asp_page(text: str) -> List[object]:
                 nodes.append(HtmlNode(html, html_start_line, html_start_col))
 
         if cur_is_directive:
-            # ASP directive like: <%@ Language="VBScript" %>
+            # ASP directive like: <%@ Language="VBScript" CODEPAGE=65001 LCID=1043 %>
+            #
+            # LCID and CODEPAGE are the page-level equivalents of Response.LCID
+            # and Response.CodePage; the executor applies them before running
+            # the page. LANGUAGE and any other attribute stay informational.
+            _lcid = _codepage = None
+            for _name, _value in _DIRECTIVE_ATTR_RE.findall(code_probe[1:]):
+                _key = _name.upper()
+                if _key not in ('LCID', 'CODEPAGE'):
+                    continue
+                _val = _value.strip().strip('"\'')
+                if not _val.isdigit():
+                    continue
+                if _key == 'LCID':
+                    _lcid = int(_val)
+                else:
+                    _codepage = int(_val)
+            if _lcid is not None or _codepage is not None:
+                nodes.append(DirectiveNode(_lcid, _codepage, block_line, block_col))
             prev_was_expr = False
             prev_was_code = False
             prev_was_directive = True
@@ -554,7 +590,16 @@ def build_vbscript_from_nodes(nodes) -> str:
         return '"' + s.replace('"', '""') + '"'
 
     out_lines = []
+    directive_lines = []
     for n in nodes:
+        if isinstance(n, DirectiveNode):
+            # Emitted as ordinary assignments, but injected after any leading
+            # Option Explicit (which must remain the first statement).
+            if n.lcid is not None:
+                directive_lines.append("Response.LCID = %d" % n.lcid)
+            if n.codepage is not None:
+                directive_lines.append("Response.CodePage = %d" % n.codepage)
+            continue
         if isinstance(n, ScriptNode):
             if n.code:
                 out_lines.append(n.code)
@@ -602,6 +647,17 @@ def build_vbscript_from_nodes(nodes) -> str:
                     out_lines.append("Response.Write " + " & ".join(chunk))
             continue
         raise Exception("Unknown ASP node")
+
+    if directive_lines:
+        insert_at = 0
+        for idx, line in enumerate(out_lines):
+            stripped = line.strip().lower()
+            if stripped.startswith('option explicit'):
+                insert_at = idx + 1
+                break
+            if stripped:
+                break
+        out_lines[insert_at:insert_at] = directive_lines
 
     return "\n".join(out_lines) + "\n"
 

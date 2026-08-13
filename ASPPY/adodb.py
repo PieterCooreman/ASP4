@@ -1706,6 +1706,10 @@ class ADOConnection:
         self.Mode: int = 0
         self.Provider: str = 'SQLite'
         self.DefaultDatabase: str = ''
+        # Stub collection so Connection.Properties reads as an empty collection
+        # instead of raising error 438. ASPPY has no OLE DB provider to
+        # enumerate; see ADOProperties.
+        self.Properties = ADOProperties()
         self.State: int = adStateClosed
         self._db_path: str = ''
         self._in_transaction: bool = False
@@ -1886,6 +1890,34 @@ class _EmptyCollection:
         return iter([])
 
 
+class ADOProperties:
+    """Provider-specific `Properties` collection.
+
+    ASPPY has no OLE DB provider to enumerate, so this collection is always
+    empty. That is exactly what IIS reports for an object with no live
+    connection (verified: `Command.Properties.Count` = 0 and
+    `TypeName(cmd.Properties)` = "Properties" on IIS for a Command with no
+    ActiveConnection). A *connected* Jet command reports roughly 88 provider
+    properties there, which ASPPY cannot reproduce - but returning an empty
+    collection lets scripts run instead of raising error 438.
+    """
+
+    def __vbs_typename__(self):
+        return 'Properties'
+
+    @property
+    def Count(self):
+        return 0
+
+    def __iter__(self):
+        return iter([])
+
+    def Item(self, key):
+        raise_runtime('ADO_UNSPECIFIED',
+                      "Item cannot be found in the collection corresponding to "
+                      "the requested name or ordinal")
+
+
 # ---------------------------------------------------------------------------
 # Command / Parameters
 # ---------------------------------------------------------------------------
@@ -1938,10 +1970,19 @@ class ADOCommand:
     def __init__(self, conn: Optional[ADOConnection] = None):
         self.ActiveConnection: Optional[ADOConnection] = conn
         self.CommandText: str = ''
-        self.CommandType: int = adCmdText
+        # IIS reports adCmdUnknown (8) for a freshly created Command, not
+        # adCmdText - verified against IIS.
+        self.CommandType: int = adCmdUnknown
         self.CommandTimeout: int = 30
         self.Prepared: bool = False
         self.Parameters = ADOParameters()
+        # A Command has no observable open state: IIS reports adStateClosed both
+        # before and after a synchronous Execute (adStateExecuting only shows
+        # during async execution, which a script can never catch). Verified
+        # against IIS, so this deliberately stays 0 rather than flipping to
+        # adStateOpen on Execute.
+        self.State: int = adStateClosed
+        self.Properties = ADOProperties()
 
     def CreateParameter(self, name='', type_=adVariant, direction=adParamInput,
                         size=0, value=None) -> ADOParameter:

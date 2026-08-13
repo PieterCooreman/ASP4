@@ -28,7 +28,8 @@ from .vb_constants import (
     vbLongTime,
     vbShortTime,
 )
-from .vb_runtime import VBScriptRuntimeError, VBScriptCOMError, vbs_cstr, vbs_get_lcid_info
+from .vb_runtime import VBScriptRuntimeError, VBScriptCOMError, vbs_cstr, vbs_get_lcid
+from . import vb_locale
 from .vm.values import VBNull, VBEmpty
 from decimal import Decimal as _Decimal
 
@@ -245,7 +246,10 @@ def Weekday(date, firstdayofweek=vbSunday):
     vb = ((py + 1) % 7) + 1
     fdw = int(_date_arg_number(firstdayofweek))
     if fdw in (vbUseSystemDayOfWeek, 0):
-        fdw = vbSunday
+        # vbUseSystemDayOfWeek resolves to the locale's first day of week, which
+        # is Monday across most of Europe and Saturday for ar-DZ - not a fixed
+        # Sunday. Verified against IIS for all 60 locales.
+        fdw = vb_locale.first_day_of_week(vbs_get_lcid())
     # Adjust so that fdw becomes 1
     return ((vb - fdw) % 7) + 1
 
@@ -254,22 +258,17 @@ def WeekdayName(weekday, abbreviate=False, firstdayofweek=vbSunday):
     wd = int(weekday)
     if wd < 1 or wd > 7:
         raise VBScriptRuntimeError("WeekdayName: weekday must be 1..7")
-    # Map 1..7 to names assuming 1=Sunday
-    names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    name = names[wd - 1]
-    return name[:3] if bool(abbreviate) else name
+    fdw = int(firstdayofweek) if firstdayofweek is not None else vbSunday
+    if fdw < 0 or fdw > 7:
+        raise VBScriptRuntimeError("WeekdayName: firstdayofweek must be 0..7")
+    return vb_locale.weekday_name(wd, bool(abbreviate), fdw, vbs_get_lcid())
 
 
 def MonthName(month, abbreviate=False):
     m = int(month)
     if m < 1 or m > 12:
         raise VBScriptRuntimeError("MonthName: month must be 1..12")
-    names = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-    ]
-    name = names[m - 1]
-    return name[:3] if bool(abbreviate) else name
+    return vb_locale.month_name(m, bool(abbreviate), vbs_get_lcid())
 
 
 def DateValue(s):
@@ -324,70 +323,27 @@ def FormatDateTime(date, namedformat=vbGeneralDate):
         return VBNull
     dt = _to_datetime(date)
     fmt = int(_date_arg_number(namedformat))
-    # Force deterministic US-like formats (ignoring host locale)
-    # Use English names for %A and %B manually or ensure strftime uses C locale?
-    # Python strftime depends on C locale.
-    # To be absolutely sure, we construct the string manually for Long Date.
-    
-    # 1033 (US) formats:
-    # Short Date: m/d/yyyy (e.g. 2/24/2026)
-    # Long Date: dddd, MMMM d, yyyy (e.g. Tuesday, February 24, 2026)
-    # Short Time: h:mm (24h or 12h? VBScript general date uses 12h? 1033 uses 12h usually? 
-    # Actually Python's default ISO is 24h. 
-    # Let's use strict patterns matching 1033 VBScript defaults roughly.
-    
+    lcid = vbs_get_lcid()
+
     if fmt == vbGeneralDate:
-        # VBScript vbGeneralDate shows only the parts that carry information:
-        # a value on the OA zero date (1899-12-30, e.g. Empty or TimeSerial)
-        # prints time-only, and a midnight value prints date-only.
-        if (dt.year, dt.month, dt.day) == (1899, 12, 30):
-            return _fmt_us_long_time(dt)
-        if (dt.hour, dt.minute, dt.second, dt.microsecond) == (0, 0, 0, 0):
-            return _fmt_us_short_date(dt)
-        # 2/24/2026 3:53:19 PM
-        return _fmt_us_short_date(dt) + " " + _fmt_us_long_time(dt)
+        # vbGeneralDate shows only the parts that carry information: a value on
+        # the OA zero date (1899-12-30, e.g. Empty or TimeSerial) prints
+        # time-only, and a midnight value prints date-only.
+        has_date = (dt.year, dt.month, dt.day) != (1899, 12, 30)
+        has_time = (dt.hour, dt.minute, dt.second, dt.microsecond) != (0, 0, 0, 0)
+        if not has_date and not has_time:
+            has_time = True
+        return vb_locale.general_date(dt, lcid, has_date, has_time)
     if fmt == vbLongDate:
-        # Tuesday, February 24, 2026
-        return _fmt_us_long_date(dt)
+        return vb_locale.long_date(dt, lcid)
     if fmt == vbShortDate:
-        # 2/24/2026
-        return _fmt_us_short_date(dt)
+        return vb_locale.short_date(dt, lcid)
     if fmt == vbLongTime:
-        # 3:53:19 PM
-        return _fmt_us_long_time(dt)
+        return vb_locale.long_time(dt, lcid)
     if fmt == vbShortTime:
-        # 15:53 (24-hour usually for Short Time in VBScript? Or 03:53 without seconds?)
-        # VBScript vbShortTime is usually HH:MM (24h) or hh:mm (12h)?
-        # 1033 Short Time is h:mm tt. 
-        # But let's check standard behavior. 
-        # Actually vbShortTime (4) usually prints 24-hour HH:MM.
-        return f"{dt.hour:02d}:{dt.minute:02d}"
-        
+        return vb_locale.short_time(dt, lcid)
+
     raise VBScriptRuntimeError("FormatDateTime: invalid namedformat")
-
-def _fmt_us_short_date(dt):
-    # m/d/yyyy
-    return f"{dt.month}/{dt.day}/{dt.year}"
-
-def _fmt_us_long_time(dt):
-    # h:mm:ss PM
-    h = dt.hour
-    ap = "AM"
-    if h >= 12:
-        ap = "PM"
-        if h > 12: h -= 12
-    if h == 0: h = 12
-    return f"{h}:{dt.minute:02d}:{dt.second:02d} {ap}"
-
-def _fmt_us_long_date(dt):
-    days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    # dt.weekday() is 0=Monday..6=Sunday. We need Sunday..Saturday
-    # (6+1)%7 = 0 (Sunday)
-    wd_idx = (dt.weekday() + 1) % 7
-    wd_name = days[wd_idx]
-    mo_name = months[dt.month - 1]
-    return f"{wd_name}, {mo_name} {dt.day}, {dt.year}"
 
 
 
@@ -564,48 +520,16 @@ def _parse_iso_datetime(s: str) -> _dt.datetime:
             hh, mi, se = _parse_time_parts(m.group("hh"), m.group("mi"), m.group("se"), m.group("ap"))
             return _dt.datetime(year, mon, day, hh, mi, se)
 
-        # Accept: MM/DD/YYYY [H:MM[:SS] [AM|PM]] (deterministic, US-style)
-        m = _re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?)?$", s)
+        # Accept a numeric date with any of the separators Windows uses, read in
+        # the current locale: "3/5/2024" is March 5th under en-US and 5 March
+        # under nl-NL. A leading four-digit component is always ISO.
+        m = _re.match(
+            r"^(\d{1,4})[/.\-](\d{1,2})[/.\-](\d{1,4})\.?"
+            r"(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?)?$", s)
         if m:
-            mo = int(m.group(1))
-            da = int(m.group(2))
-            yr = int(m.group(3))
-            hh = int(m.group(4) or 0)
-            mi = int(m.group(5) or 0)
-            se = int(m.group(6) or 0)
-            ap = (m.group(7) or "").upper()
-            if ap:
-                # 12-hour clock
-                if hh < 1 or hh > 12:
-                    raise VBScriptRuntimeError("Invalid time")
-                if ap == 'AM':
-                    hh = 0 if hh == 12 else hh
-                else:
-                    hh = 12 if hh == 12 else (hh + 12)
-            return _dt.datetime(yr, mo, da, hh, mi, se)
-
-        # Accept: D/M/YYYY or D-M-YYYY [H:MM[:SS] [AM|PM]] (day-first fallback)
-        m = _re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?)?$", s)
-        if m:
-            a = int(m.group(1))
-            b = int(m.group(2))
-            yr = int(m.group(3))
-            hh = int(m.group(4) or 0)
-            mi = int(m.group(5) or 0)
-            se = int(m.group(6) or 0)
-            ap = (m.group(7) or "").upper()
-            if ap:
-                if hh < 1 or hh > 12:
-                    raise VBScriptRuntimeError("Invalid time")
-                if ap == 'AM':
-                    hh = 0 if hh == 12 else hh
-                else:
-                    hh = 12 if hh == 12 else (hh + 12)
-            # Heuristic: prefer day-first; if day can't be month and month can, swap.
-            day = a
-            mon = b
-            if a <= 12 and b > 12:
-                mon, day = a, b
+            yr, mon, day = vb_locale.resolve_numeric_date(
+                (m.group(1), m.group(2), m.group(3)), vbs_get_lcid())
+            hh, mi, se = _parse_time_parts(m.group(4), m.group(5), m.group(6), m.group(7))
             return _dt.datetime(yr, mon, day, hh, mi, se)
     except Exception as e:
         raise VBScriptRuntimeError(str(e))

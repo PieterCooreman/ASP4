@@ -593,6 +593,9 @@ Response.Write Request.Files.Count
         <tr><td><code>Buffer</code></td><td>Enables/disables response buffering</td></tr>
         <tr><td><code>Cookies</code></td><td>Collection of cookies to send</td></tr>
         <tr><td><code>LCID</code></td><td>Locale identifier</td></tr>
+        <tr><td><code>ContentType</code></td><td>MIME type of the response (default <code>text/html</code>)</td></tr>
+        <tr><td><code>Charset</code></td><td>Character set of the response body. Defaults to <code>utf-8</code> - see <a href="#character-encoding">Character Encoding</a></td></tr>
+        <tr><td><code>CodePage</code></td><td>Codepage for this response. Defaults to <code>65001</code> (UTF-8), not the host ANSI codepage as under IIS</td></tr>
     </tbody>
 </table>
 <h3>Methods</h3>
@@ -620,6 +623,8 @@ Response.Write Request.Files.Count
         <tr><td><code>Timeout</code></td><td>Session timeout in minutes</td></tr>
         <tr><td><code>Contents</code></td><td>Collection of session variables</td></tr>
         <tr><td><code>StaticObjects</code></td><td>Collection of session-scoped objects</td></tr>
+        <tr><td><code>LCID</code></td><td>Locale identifier for the session</td></tr>
+        <tr><td><code>CodePage</code></td><td>Codepage for the session. Defaults to <code>65001</code> (UTF-8), not the host ANSI codepage as under IIS - see <a href="#character-encoding">Character Encoding</a></td></tr>
     </tbody>
 </table>
 <h3>Methods</h3>
@@ -1079,14 +1084,66 @@ ASPPY.ExecutePythonFile(path)    ' Executes a .py file (relative to docroot), re
     <li><code>UBound/LBound</code>: follow VBScript-like array allocation rules; uninitialized/invalid-array usage raises runtime errors.</li>
     <li><code>VBScript.RegExp.Replace</code>: supports VB-style replacement tokens (<code>$1</code>, <code>$&amp;</code>, <code>$`</code>, <code>$'</code>, <code>$$</code>).</li>
     <li><code>Request.Form</code>: parsed for <code>POST</code> only; non-POST bodies are available via <code>Request.BinaryRead</code>.</li>
-    <li>Date/number formatting and script-engine metadata helpers are implemented for compatibility and may differ from IIS in edge locale cases.</li>
+    <li>Date/number formatting is locale-aware across 60 locales and verified against live IIS; see <a href="#localization">Localization</a> for the supported list and the documented divergences.</li>
 </ul>
+<h2 id="localization">Localization</h2>
+<p>ASPPY implements the Classic ASP locale model for <strong>60 locales</strong>, driven by a generated table (<code>ASPPY/locale_data.json</code>) extracted from the Windows NLS data and validated field-by-field against live IIS output.</p>
+<h3>What is locale-aware</h3>
+<table>
+    <thead><tr><th>Area</th><th>Behaviour</th></tr></thead>
+    <tbody>
+        <tr><td><code>FormatNumber</code>, <code>FormatCurrency</code>, <code>FormatPercent</code></td><td>Decimal/group separators, group size, currency symbol and its position, per-currency decimal digits (ja-JP renders <code>&#165;1,234,568</code>, no decimals), and the locale negative/parenthesised patterns</td></tr>
+        <tr><td><code>FormatDateTime</code></td><td>All five named formats from the locale's own patterns. <code>vbShortTime</code> is always 24-hour but uses the locale time separator</td></tr>
+        <tr><td><code>MonthName</code>, <code>WeekdayName</code></td><td>Localised names, including the genitive month forms Slavic/Baltic/Finnic locales use in long dates (Polish <em>5 marca</em>, not <em>5 marzec</em>)</td></tr>
+        <tr><td><code>Weekday</code>, <code>DatePart("w")</code></td><td><code>vbUseSystemDayOfWeek</code> resolves to the locale first day - Monday across most of Europe, Saturday for ar-DZ</td></tr>
+        <tr><td><code>CDbl</code>, <code>CCur</code>, <code>CInt</code>, <code>CLng</code>, <code>IsNumeric</code></td><td>Locale number parsing. <code>CDbl("1,5")</code> is 15 under en-US (comma = group separator) and 1.5 under nl-BE; fr-FR rejects <code>"1.5"</code> with a type mismatch, exactly as IIS does</td></tr>
+        <tr><td><code>CDate</code>, <code>IsDate</code></td><td>Locale field order, so <code>"3/5/2024"</code> is March 5th under en-US and 5 March under nl-BE. A leading four-digit component is always read as ISO</td></tr>
+        <tr><td><code>StrComp(a, b, vbTextCompare)</code></td><td>Locale collation rather than a lowercase compare: <code>"stra&#223;e"</code> equals <code>"strasse"</code>, and accents act as a tiebreak</td></tr>
+        <tr><td><code>GetLocale</code> / <code>SetLocale</code></td><td>Numeric LCIDs and short names (<code>"nl-be"</code>, <code>"de"</code>) across all 60 locales</td></tr>
+        <tr><td><code>Session.LCID</code>, <code>Response.LCID</code>, <code>&lt;%@ LCID %&gt;</code></td><td>All three seed the script engine locale. <code>Session.LCID</code> is re-applied at the start of every request in the session, as under IIS</td></tr>
+    </tbody>
+</table>
+<h3>Deliberate divergences</h3>
+<ul>
+    <li><strong>Default locale.</strong> With no locale set, ASPPY uses LCID 1033 (en-US) rather than inheriting the host's system locale, so output is identical on every machine. Same reasoning as the UTF-8 default below.</li>
+    <li><strong><code>CStr(date)</code> / implicit date-to-string.</strong> While no locale has been selected, ASPPY keeps its ISO output (<code>2024-03-05 14:07:09</code>) instead of the IIS locale general date. This protects the very common pattern of concatenating a date straight into SQL. As soon as an app opts in via <code>Session.LCID</code>, <code>SetLocale</code> or <code>&lt;%@ LCID %&gt;</code>, full IIS formatting applies.</li>
+    <li><strong>Non-Gregorian calendars.</strong> ar-SA and th-TH render dates on the Gregorian calendar, so their era and year differ from IIS (which uses Hijri and the Buddhist era). Separators, names, currency and number formatting are correct for both. All other 58 locales match IIS exactly.</li>
+    <li><strong><code>CStr(True)</code></strong> returns <code>"True"</code>. IIS localises boolean literals via the OS <em>user</em> locale, which is a property of the host rather than of the script.</li>
+</ul>
+<h3>Supported locales</h3>
+<p>en-US, en-GB, en-AU, en-CA &middot; fr-FR, fr-BE, fr-CA, fr-CH &middot; de-DE, de-CH, de-AT &middot; nl-NL, nl-BE &middot; es-ES (both sort orders), es-MX &middot; it-IT, it-CH &middot; pt-PT, pt-BR &middot; ca-ES, gl-ES, eu-ES &middot; sv-SE, sv-FI, da-DK, fi-FI, nb-NO, nn-NO, is-IS &middot; pl-PL, cs-CZ, sk-SK, hu-HU, sl-SI, hr-HR, ro-RO, bg-BG, ru-RU, uk-UA, el-GR, tr-TR, et-EE, lv-LV, lt-LT &middot; ja-JP, ko-KR, zh-CN, zh-TW, zh-HK &middot; ar-SA, ar-DZ, he-IL, hi-IN, th-TH, id-ID, ms-MY, vi-VN, kk-KZ, uz-Latn-UZ.</p>
+<hr />
+<h2 id="character-encoding">Character Encoding</h2>
+<p><strong>ASPPY defaults to UTF-8 (codepage 65001) everywhere. This is an intentional break from IIS.</strong></p>
+<p>Classic ASP under IIS inherits the <em>system ANSI codepage</em> of the host machine - typically <code>1252</code> on a Western Windows server, <code>932</code> on a Japanese one. ASPPY does not, for three reasons:</p>
+<ul>
+    <li>ASPPY runs on Linux and macOS, where "the system ANSI codepage" has no meaningful equivalent - there is no coherent host default to inherit.</li>
+    <li>Modern consumers (browsers, <code>fetch</code>, JSON APIs, HTML5) assume UTF-8.</li>
+    <li>VBScript strings are Unicode internally. UTF-8 is the only encoding that round-trips them losslessly; legacy codepages silently substitute characters they cannot represent.</li>
+</ul>
+<table>
+    <thead><tr><th>Surface</th><th>ASPPY default</th><th>IIS default</th></tr></thead>
+    <tbody>
+        <tr><td><code>Session.CodePage</code> / <code>Response.CodePage</code></td><td><code>65001</code></td><td>system ANSI (e.g. <code>1252</code>)</td></tr>
+        <tr><td><code>Response.Charset</code></td><td><code>utf-8</code></td><td>unset - header omits <code>charset</code></td></tr>
+        <tr><td><code>.asp</code> source files</td><td>UTF-8, BOM-tolerant, falls back to <code>cp1252</code></td><td>BOM, else <code>@CODEPAGE</code>, else metabase</td></tr>
+        <tr><td><code>Request.Form</code> / <code>Request.QueryString</code></td><td>decoded as UTF-8</td><td>decoded per <code>Session.CodePage</code></td></tr>
+        <tr><td><code>Server.URLEncode</code></td><td>percent-encoded UTF-8</td><td>percent-encoded per current codepage</td></tr>
+    </tbody>
+</table>
+<h3>Migration impact</h3>
+<p>Pages served as <code>windows-1252</code> under IIS are served as UTF-8 by ASPPY and labelled as such in the <code>Content-Type</code> header, so browsers render them correctly with no source change. Legacy <code>.asp</code> files saved in <code>windows-1252</code> need no conversion - ASPPY detects and decodes them automatically.</p>
+<p>Intervention is only required where a <strong>non-browser</strong> consumer expects legacy bytes: CSV exports opened in Excel, fixed-format files for banking or EDI partners, or older integration endpoints that assume <code>iso-8859-1</code>. Set the encoding explicitly on those responses:</p>
+<pre><code class="language-asp">Response.Charset = "windows-1252"
+</code></pre>
 <h2>Compatibility Matrix</h2>
 <table>
     <thead><tr><th>Subsystem</th><th>Level</th><th>Notes</th></tr></thead>
     <tbody>
-        <tr><td>Core VBScript built-ins</td><td>Near</td><td>Broad coverage for common Classic ASP apps; edge coercion/locale behaviors can differ</td></tr>
-        <tr><td>Date/time and numeric formatting</td><td>Partial</td><td>Compatibility-oriented; locale-specific IIS parity not guaranteed</td></tr>
+        <tr><td>Character encoding / codepages</td><td>Intentional divergence</td><td>UTF-8 (65001) by default instead of the host ANSI codepage - see <a href="#character-encoding">Character Encoding</a></td></tr>
+        <tr><td>Core VBScript built-ins</td><td>Near</td><td>Broad coverage for common Classic ASP apps; edge coercion behaviors can differ</td></tr>
+        <tr><td>Date/time and numeric formatting</td><td>Full</td><td>Verified against live IIS across 60 locales; only the ar-SA/th-TH calendars differ - see <a href="#localization">Localization</a></td></tr>
+        <tr><td>Localization (LCID model)</td><td>Full</td><td>60 locales; <code>Session.LCID</code>, <code>Response.LCID</code>, <code>&lt;%@ LCID %&gt;</code>, <code>Get/SetLocale</code>, locale parsing and collation</td></tr>
         <tr><td>Request/Response/Server/Application/Session</td><td>Near</td><td>Classic object model implemented; some operational semantics differ from IIS hosting internals</td></tr>
         <tr><td><code>VBScript.RegExp</code></td><td>Near</td><td>Common API and VB-style replacement tokens supported</td></tr>
         <tr><td><code>Scripting.Dictionary</code></td><td>Near</td><td>Core collection behavior supported; COM-level quirks may differ</td></tr>
