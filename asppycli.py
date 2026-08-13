@@ -84,6 +84,10 @@ def render_file(asp_file, docroot=None, method="GET", query="", headers=None,
         exec_file_granular(phys, docroot, target_path, ctx.Interpreter)
 
     hdrs = dict(headers or {})
+    # Default Host header so Request.ServerVariables("SERVER_NAME") resolves
+    # the same way it does under the HTTP server / IIS (which always has Host).
+    if not any(k.lower() == "host" for k in hdrs):
+        hdrs["Host"] = "localhost"
     if body and method.upper() == "POST" and not any(
             k.lower() == "content-type" for k in hdrs):
         hdrs["Content-Type"] = "application/x-www-form-urlencoded"
