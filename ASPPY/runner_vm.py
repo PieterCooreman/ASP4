@@ -24,6 +24,7 @@ from . import vb_datetime, vb_constants
 from . import vb_array_funcs
 from . import vb_builtins
 from . import vb_json
+from . import vb_python as _vb_python
 from . import adodb as _adodb
 from .adodb import close_all_connections
 from . import vb_builtins_stub as _vb_builtins_stub
@@ -154,6 +155,18 @@ def _build_globals_env(ctx: ExecutionContext):
         return ctx.Server.CreateObject(vbs_cstr(progid))
     env['CREATEOBJECT'] = _create_object
     env['CreateObject'] = _create_object # legacy key if needed
+
+    # Publish this request's docroot for ASPPY.ExecutePythonFile, which resolves
+    # relative paths against the web root and sandboxes them there by default.
+    # This is the single choke point every entry point (server.py, asppycli.py,
+    # render_asp_vm) funnels through, so the thread-local always matches the
+    # request currently executing on this thread.
+    try:
+        _srv = ctx.Server
+        _vb_python.set_current_docroot(getattr(_srv, '_docroot', '') if _srv is not None else '')
+    except Exception:
+        pass
+
     
     try:
         app = ctx.Application

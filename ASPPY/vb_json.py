@@ -69,6 +69,18 @@ class ASPPYShim:
         setattr(self, name, value)
         return value
 
+    # NOTE: `code`/`path` are deliberately REQUIRED positional parameters. The
+    # VM invokes zero-arg host callables on bare member access
+    # (_maybe_invoke_zero_arg), so a default value here would make merely
+    # *naming* ASPPY.ExecutePython spawn a Python subprocess.
+    def ExecutePython(self, code):
+        from . import vb_python
+        return vb_python.ExecutePython(code)
+
+    def ExecutePythonFile(self, path):
+        from . import vb_python
+        return vb_python.ExecutePythonFile(path)
+
     def pop3(self):
         from . import pop3 as vb_pop3
         return vb_pop3.ASPPYPOP3()
