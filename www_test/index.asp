@@ -34,7 +34,8 @@ samples = Array( _
     Array("15-collections-advanced.asp","Collections (Advanced)","Multidim vs jagged arrays, ReDim Preserve rules, Filter, Dictionary maps, sort.", "data"), _
     Array("16-session-objects.asp","Objects in Session",   "Storing a Dictionary reference in Session with guarded pass/fail checks - plus the Application apartment-threading trap (ASP 0197).", "web"), _
     Array("17-python-bridge.asp","Python Bridge",         "ASPPY.ExecutePython / ExecutePythonFile: passing a Dictionary in as ASPPY_ARGS, per-call timeouts, and subprocess isolation.", "io"), _
-    Array("18-error-parity.asp","Error Parity",          "Err.Number asserted against values captured from live IIS 10: ReDim rules, default-property semantics, CBool, MapPath and HRESULT signedness.", "core") _
+    Array("18-error-parity.asp","Error Parity",          "Err.Number asserted against values captured from live IIS 10: ReDim rules, default-property semantics, CBool, MapPath and HRESULT signedness.", "core"), _
+    Array("19-msxml.asp",      "MSXML2",                "DOMDocument node model, Nothing semantics, XPath 1.0 and XSLT (via optional lxml), and the Byte() SafeArray.", "data") _
 )
 %>
 <h1>Classic ASP / VBScript &mdash; Working Samples</h1>

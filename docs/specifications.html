@@ -988,15 +988,32 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>StatusText</code></td><td>HTTP status text</td></tr>
         <tr><td><code>ResponseText</code></td><td>Response as text</td></tr>
         <tr><td><code>ResponseXML</code></td><td>Response as XML DOM</td></tr>
-        <tr><td><code>ResponseBody</code></td><td>Response as binary</td></tr>
-        <tr><td><code>Option</code></td><td>MSXML option</td></tr>
+        <tr><td><code>ResponseBody</code></td><td>Response as a <code>Byte()</code> SafeArray &mdash; see below</td></tr>
         <tr><td><code>Open(method, url[, async[, user[, password]]])</code></td><td>Opens request</td></tr>
         <tr><td><code>SetRequestHeader(header, value)</code></td><td>Sets request header</td></tr>
         <tr><td><code>Send([body])</code></td><td>Sends request</td></tr>
-        <tr><td><code>WaitForResponse([timeout])</code></td><td>Waits for response</td></tr>
+        <tr><td><code>SetTimeouts(resolve, connect, send, receive)</code></td><td>Receive timeout is used as the overall timeout</td></tr>
+        <tr><td><code>SetProxy(setting[, server[, bypass]])</code> / <code>SetProxyCredentials(user, pass)</code></td><td>Recorded; requests always go direct</td></tr>
+        <tr><td><code>SetOption(option, value)</code> / <code>GetOption(option)</code></td><td>Recorded and readable. Option 2 (ignore SSL cert errors) is deliberately not honoured</td></tr>
+        <tr><td><code>WaitForResponse([timeout])</code></td><td>Waits for response (sends are synchronous, so always already complete)</td></tr>
+        <tr><td><code>GetResponseHeader(name)</code> / <code>GetAllResponseHeaders()</code></td><td>Response headers</td></tr>
         <tr><td><code>Abort()</code></td><td>Aborts request</td></tr>
     </tbody>
 </table>
+<h4>Binary payloads are a <code>Byte()</code> SafeArray</h4>
+<p><code>ResponseBody</code>, <code>Request.BinaryRead</code> and <code>ADODB.Stream.Read</code> return a byte array, matching IIS exactly:</p>
+<table>
+    <thead><tr><th>Expression</th><th>Result</th></tr></thead>
+    <tbody>
+        <tr><td><code>IsArray(b)</code></td><td><code>True</code></td></tr>
+        <tr><td><code>TypeName(b)</code></td><td><code>"Byte()"</code></td></tr>
+        <tr><td><code>VarType(b)</code></td><td><code>8209</code> (<code>vbArray + vbByte</code>)</td></tr>
+        <tr><td><code>IsObject(b)</code></td><td><code>False</code></td></tr>
+        <tr><td><code>LBound(b)</code> / <code>UBound(b)</code></td><td><code>0</code> / <code>LenB(b) - 1</code></td></tr>
+        <tr><td><code>b(0)</code></td><td>the first byte, as an Integer</td></tr>
+    </tbody>
+</table>
+<p><code>objStream.Write http.ResponseBody</code> and <code>Response.BinaryWrite</code> accept it unchanged.</p>
 <h3>XMLHTTP</h3>
 <pre><code class="language-vbscript">Set http = Server.CreateObject("MSXML2.XMLHTTP")
 </code></pre>
@@ -1014,11 +1031,47 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>load(url)</code></td><td>Loads from URL</td></tr>
         <tr><td><code>loadXML(xml_string)</code></td><td>Loads from string</td></tr>
         <tr><td><code>save(destination)</code></td><td>Saves document</td></tr>
-        <tr><td><code>selectNodes(xpath)</code></td><td>Selects nodes</td></tr>
-        <tr><td><code>selectSingleNode(xpath)</code></td><td>Selects single node</td></tr>
+        <tr><td><code>selectNodes(xpath)</code></td><td>Selects nodes by XPath</td></tr>
+        <tr><td><code>selectSingleNode(xpath)</code></td><td>Selects the first matching node, else <code>Nothing</code></td></tr>
         <tr><td><code>getElementsByTagName(tagname)</code></td><td>Gets elements</td></tr>
+        <tr><td><code>transformNode(xsl)</code> / <code>transformNodeToObject(xsl, out)</code></td><td>XSLT 1.0 transform (needs <a href="#msxml-lxml">lxml</a>)</td></tr>
+        <tr><td><code>createElement</code>, <code>createTextNode</code>, <code>createCDATASection</code>, <code>createComment</code>, <code>createProcessingInstruction</code>, <code>createDocumentFragment</code>, <code>createEntityReference</code>, <code>createAttribute</code>, <code>createNode</code></td><td>Node factories, each reporting the MSXML <code>nodeType</code> (1, 3, 4, 8, 7, 11, 5, 2)</td></tr>
+        <tr><td><code>baseName</code>, <code>prefix</code>, <code>namespaceURI</code>, <code>parsed</code>, <code>dataType</code>, <code>definition</code>, <code>specified</code></td><td>Present on the document and on element, attribute and text nodes</td></tr>
+        <tr><td><code>getAttributeNode(name)</code>, <code>setAttribute</code>, <code>removeAttribute</code></td><td>Attribute access on element nodes</td></tr>
     </tbody>
 </table>
+
+<h4>Node model notes</h4>
+<ul>
+    <li><strong><code>Nothing</code>, not <code>Empty</code>.</strong> A lookup that finds nothing &mdash; <code>selectSingleNode</code>, <code>getAttributeNode</code>, <code>parentNode</code> at the document level &mdash; returns <code>Nothing</code>, so the standard <code>If Not n Is Nothing Then</code> guard works.</li>
+    <li><strong><code>childNodes</code> includes text.</strong> Text and CDATA appear as real nodes with <code>nodeType</code> 3 and 4, so <code>node.firstChild.nodeValue</code> reads an element's content and <code>Do While n.nodeType = 3 : Set n = n.nextSibling : Loop</code> terminates.</li>
+    <li><strong>Fragments splice.</strong> <code>appendChild(fragment)</code> inserts the fragment's children and discards the wrapper.</li>
+    <li><strong><code>save()</code></strong> writes anywhere inside the application root by default &mdash; <code>xmlDoc.save Server.MapPath("out.xml")</code> just works. Writing outside it requires <code>ASP_PY_XML_ALLOW_LOCAL=1</code>.</li>
+</ul>
+
+<h4 id="msxml-lxml">XPath, XSLT and the optional lxml package</h4>
+<p>Python's bundled XML parser has no XSLT engine and only a small XPath subset, so those features come from <strong>lxml</strong>, which is optional in the same way fpdf2, Pillow and bcrypt are:</p>
+<pre><code class="language-bash">pip install lxml</code></pre>
+<table>
+    <thead><tr><th>Feature</th><th>With lxml</th><th>Without</th></tr></thead>
+    <tbody>
+        <tr><td>XPath: <code>//a/b</code>, <code>[@x='y']</code>, <code>[n]</code></td><td>works</td><td>works</td></tr>
+        <tr><td>XPath: namespace prefixes (<code>//ns:Item</code>), axes, <code>text()</code>, <code>contains()</code>, unions, absolute paths</td><td>works</td><td><strong>raises</strong>, naming lxml</td></tr>
+        <tr><td><code>transformNode</code> / <code>transformNodeToObject</code></td><td>works</td><td><strong>raises</strong>, naming lxml</td></tr>
+        <tr><td>CDATA, comments and PIs survive load &rarr; save</td><td>yes</td><td>discarded on parse</td></tr>
+        <tr><td>Original namespace prefixes preserved on output</td><td>yes</td><td>rewritten as <code>ns0:</code></td></tr>
+    </tbody>
+</table>
+<p>An unsupported XPath <strong>raises rather than returning an empty node list</strong>. Silently returning zero matches &mdash; which is what the stdlib parser does for anything outside its subset, including <em>every</em> namespaced document &mdash; is far harder to diagnose than an error.</p>
+<p>Namespace prefixes in an XPath resolve from the document's own declarations, and from <code>setProperty "SelectionNamespaces", "xmlns:a='urn:x'"</code>.</p>
+
+<h4>Deliberate divergences</h4>
+<ul>
+    <li><strong>External DTDs are never fetched.</strong> MSXML downloads the DTD named in a <code>DOCTYPE</code> and validates against it; ASPPY does not touch the network while parsing. A document MSXML rejects because the remote DTD failed to validate will parse here. Internal DTD subsets are accepted by both.</li>
+    <li><strong>Entities are not expanded.</strong> <code>&lt;!ENTITY x SYSTEM "file:///..."&gt;</code> stays literal instead of inlining the file, so the classic XXE read does not work.</li>
+    <li><strong>TLS verification cannot be turned off.</strong> <code>setOption 2</code> (<code>SXH_OPTION_IGNORE_SERVER_SSL_CERT_ERROR_FLAGS</code>) is recorded and readable via <code>getOption</code>, but certificate and hostname checks stay on.</li>
+    <li><strong>Requests to localhost and private networks are blocked</strong> unless <code>ASP_PY_ALLOW_LOCALHOST=1</code> / <code>ASP_PY_ALLOW_PRIVATE_NETS=1</code>. See <a href="#runtime-env">Runtime Environment Variables</a>.</li>
+</ul>
 <h2>CDO.Message</h2>
 <pre><code class="language-vbscript">Set msg = Server.CreateObject("CDO.Message")
 </code></pre>
@@ -1075,7 +1128,7 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>Logout/Close()</code></td><td>Closes connection</td></tr>
     </tbody>
 </table>
-<h2>Runtime Environment Variables</h2>
+<h2 id="runtime-env">Runtime Environment Variables</h2>
 <table>
     <thead><tr><th>Variable</th><th>Description</th></tr></thead>
     <tbody>
@@ -1088,7 +1141,7 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>ASP_PY_HTTP_ALLOW_HOSTS</code></td><td>Comma-separated HTTP host allowlist for MSXML</td></tr>
         <tr><td><code>ASP_PY_ALLOW_LOCALHOST</code></td><td>Allows MSXML HTTP access to localhost</td></tr>
         <tr><td><code>ASP_PY_ALLOW_PRIVATE_NETS</code></td><td>Allows MSXML HTTP access to private subnets</td></tr>
-        <tr><td><code>ASP_PY_XML_ALLOW_LOCAL</code></td><td>Allows DOMDocument local file loading</td></tr>
+        <tr><td><code>ASP_PY_XML_ALLOW_LOCAL</code></td><td>Allows <code>DOMDocument.load()</code> from a local file, and <code>save()</code> <em>outside</em> the application root. Saving inside the root needs no flag.</td></tr>
         <tr><td><code>ASP_PY_CDO_DISABLE_SEND</code></td><td>Disables SMTP send in <code>CDO.Message</code></td></tr>
         <tr><td><code>ASP_PY_CDO_ALLOW_OUTSIDE_DOCROOT</code></td><td>Allows CDO attachments outside docroot</td></tr>
         <tr><td><code>ASP_PY_ALLOW_PYTHON</code></td><td>Enables <code>ASPPY.ExecutePython</code> (set to <code>1</code>)</td></tr>
