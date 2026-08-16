@@ -72,6 +72,12 @@ adUseClient = 3
 adStateOpen = 1
 adStateClosed = 0
 
+# SchemaEnum (the subset OpenSchema supports)
+adSchemaColumns = 4
+adSchemaIndexes = 12
+adSchemaTables = 20
+adSchemaPrimaryKeys = 28
+
 # IsolationLevelEnum (subset)
 adXactUnspecified = -1
 adXactReadUncommitted = 256
@@ -299,6 +305,52 @@ def parse_connection_string(conn_str: str) -> ParsedConnectionString:
         data_source=data_source,
         errors=[],
     )
+
+
+def _schema_criteria(criteria) -> list:
+    """Normalise the OpenSchema Criteria argument to a list of restrictions.
+
+    ADO takes an array whose positions line up with the rowset's restriction
+    columns; Empty/Null entries mean "no restriction". A bare string is
+    accepted too, since scripts often pass one.
+    """
+    from .vm.values import VBArray, VBEmpty, VBNull, VBNothing
+    if criteria is None or criteria in (VBEmpty, VBNull, VBNothing):
+        return []
+    vals = []
+    if isinstance(criteria, VBArray):
+        try:
+            for i in range(criteria.ubound(1) + 1):
+                vals.append(criteria.__vbs_index_get__(i))
+        except Exception:
+            return []
+    elif isinstance(criteria, (list, tuple)):
+        vals = list(criteria)
+    else:
+        vals = [criteria]
+    out = []
+    for v in vals:
+        if v is None or v in (VBEmpty, VBNull, VBNothing):
+            out.append(None)
+        else:
+            out.append(vbs_cstr(v))
+    return out
+
+
+def _sql_type_to_ado(sql_type) -> int:
+    """Map a SQLite declared column type to a DataTypeEnum value."""
+    t = str(sql_type or '').upper()
+    if 'INT' in t:
+        return adInteger
+    if any(k in t for k in ('CHAR', 'CLOB', 'TEXT')):
+        return adVarChar
+    if 'BLOB' in t or not t:
+        return adVarBinary
+    if any(k in t for k in ('REAL', 'FLOA', 'DOUB')):
+        return adDouble
+    if any(k in t for k in ('DATE', 'TIME')):
+        return adDate
+    return adVarChar
 
 
 def _commit_unless_in_transaction(conn, db) -> None:
@@ -1911,6 +1963,162 @@ class ADOConnection:
                     except Exception:
                         pass
             self._in_transaction = False
+
+    def OpenSchema(self, query_type, criteria=None, schema_id=None):
+        """Return schema information as a Recordset (SchemaEnum).
+
+        Supported: adSchemaTables (20), adSchemaColumns (4),
+        adSchemaIndexes (12) and adSchemaPrimaryKeys (28) - the four that
+        Classic ASP actually uses to enumerate a database. Column names and
+        order follow the OLE DB schema rowsets, so `rs("TABLE_NAME")` works.
+
+        `criteria` is an array of restriction values, positionally matched to
+        the rowset's restriction columns; Empty entries mean "no restriction".
+        """
+        if not self._is_open:
+            raise_runtime('ADO_OBJECT_CLOSED')
+        try:
+            qt = int(query_type)
+        except Exception:
+            raise_runtime('ADO_ARGS_WRONG_TYPE', "OpenSchema: invalid QueryType")
+
+        crit = _schema_criteria(criteria)
+        if qt == adSchemaTables:
+            cols, rows = self._schema_tables(crit)
+        elif qt == adSchemaColumns:
+            cols, rows = self._schema_columns(crit)
+        elif qt == adSchemaIndexes:
+            cols, rows = self._schema_indexes(crit)
+        elif qt == adSchemaPrimaryKeys:
+            cols, rows = self._schema_primary_keys(crit)
+        else:
+            raise_runtime(
+                'ADO_ARGS_WRONG_TYPE',
+                "OpenSchema: QueryType %d is not supported (adSchemaTables=20, "
+                "adSchemaColumns=4, adSchemaIndexes=12, adSchemaPrimaryKeys=28)" % qt)
+
+        rs = ADORecordset(self)
+        rs._set_col_names(list(cols), [adVarChar] * len(cols))
+        rs._rows = [tuple(r) for r in rows]
+        rs._base_rows = list(rs._rows)
+        rs._cur_idx = 0
+        rs._is_open = True
+        rs.State = adStateOpen
+        rs.CursorType = adOpenStatic
+        return rs
+
+    # --- schema rowset builders -----------------------------------------
+    def _schema_user_tables(self):
+        """[(name, type)] for the current provider, user objects only."""
+        out = []
+        if self._provider_kind == 'sqlite':
+            db = _conn_or_raise(self)
+            cur = db.cursor()
+            cur.execute(
+                "SELECT name, type FROM sqlite_master "
+                "WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' "
+                "ORDER BY type DESC, name")
+            for name, kind in cur.fetchall():
+                out.append((str(name), 'VIEW' if kind == 'view' else 'TABLE'))
+            return out
+        # pyodbc-backed providers (Access, ODBC, SQL Server, ...)
+        db = _conn_or_raise(self)
+        cur = db.cursor()
+        for row in cur.tables():
+            kind = str(getattr(row, 'table_type', '') or '').upper()
+            name = str(getattr(row, 'table_name', '') or '')
+            if not name or kind.startswith('SYSTEM'):
+                continue
+            out.append((name, kind or 'TABLE'))
+        return out
+
+    def _schema_tables(self, crit):
+        cols = ['TABLE_CATALOG', 'TABLE_SCHEMA', 'TABLE_NAME', 'TABLE_TYPE',
+                'TABLE_GUID', 'DESCRIPTION', 'TABLE_PROPID',
+                'DATE_CREATED', 'DATE_MODIFIED']
+        want_name = crit[2] if len(crit) > 2 else None
+        want_type = crit[3] if len(crit) > 3 else None
+        rows = []
+        for name, kind in self._schema_user_tables():
+            if want_name and name.lower() != want_name.lower():
+                continue
+            if want_type and kind.lower() != want_type.lower():
+                continue
+            rows.append([None, None, name, kind, None, None, None, None, None])
+        return cols, rows
+
+    def _schema_columns(self, crit):
+        cols = ['TABLE_CATALOG', 'TABLE_SCHEMA', 'TABLE_NAME', 'COLUMN_NAME',
+                'COLUMN_GUID', 'COLUMN_PROPID', 'ORDINAL_POSITION',
+                'COLUMN_HASDEFAULT', 'COLUMN_DEFAULT', 'COLUMN_FLAGS',
+                'IS_NULLABLE', 'DATA_TYPE', 'CHARACTER_MAXIMUM_LENGTH']
+        want_table = crit[2] if len(crit) > 2 else None
+        rows = []
+        db = _conn_or_raise(self)
+        for name, _kind in self._schema_user_tables():
+            if want_table and name.lower() != want_table.lower():
+                continue
+            if self._provider_kind == 'sqlite':
+                cur = db.cursor()
+                cur.execute('PRAGMA table_info("%s")' % name.replace('"', '""'))
+                for cid, cname, ctype, notnull, dflt, _pk in cur.fetchall():
+                    rows.append([None, None, name, str(cname), None, None,
+                                 int(cid) + 1, dflt is not None, dflt, 0,
+                                 not bool(notnull), _sql_type_to_ado(ctype), None])
+            else:
+                cur = db.cursor()
+                for i, c in enumerate(cur.columns(table=name)):
+                    rows.append([None, None, name, str(getattr(c, 'column_name', '')),
+                                 None, None, int(getattr(c, 'ordinal_position', i + 1)),
+                                 False, None, 0,
+                                 str(getattr(c, 'is_nullable', '')).upper() != 'NO',
+                                 adVarChar, getattr(c, 'column_size', None)])
+        return cols, rows
+
+    def _schema_indexes(self, crit):
+        cols = ['TABLE_CATALOG', 'TABLE_SCHEMA', 'INDEX_NAME', 'TABLE_NAME',
+                'UNIQUE', 'PRIMARY_KEY', 'ORDINAL_POSITION', 'COLUMN_NAME']
+        want_table = crit[4] if len(crit) > 4 else (crit[2] if len(crit) > 2 else None)
+        rows = []
+        if self._provider_kind != 'sqlite':
+            return cols, rows
+        db = _conn_or_raise(self)
+        for name, kind in self._schema_user_tables():
+            if kind != 'TABLE':
+                continue
+            if want_table and name.lower() != want_table.lower():
+                continue
+            cur = db.cursor()
+            cur.execute('PRAGMA index_list("%s")' % name.replace('"', '""'))
+            for idx in cur.fetchall():
+                iname, unique = str(idx[1]), bool(idx[2])
+                c2 = db.cursor()
+                c2.execute('PRAGMA index_info("%s")' % iname.replace('"', '""'))
+                for seq, _cid, cname in c2.fetchall():
+                    rows.append([None, None, iname, name, unique,
+                                 iname.startswith('sqlite_autoindex'),
+                                 int(seq) + 1, str(cname)])
+        return cols, rows
+
+    def _schema_primary_keys(self, crit):
+        cols = ['PK_TABLE_CATALOG', 'PK_TABLE_SCHEMA', 'PK_TABLE_NAME',
+                'COLUMN_NAME', 'ORDINAL', 'PK_NAME']
+        want_table = crit[2] if len(crit) > 2 else None
+        rows = []
+        if self._provider_kind != 'sqlite':
+            return cols, rows
+        db = _conn_or_raise(self)
+        for name, kind in self._schema_user_tables():
+            if kind != 'TABLE':
+                continue
+            if want_table and name.lower() != want_table.lower():
+                continue
+            cur = db.cursor()
+            cur.execute('PRAGMA table_info("%s")' % name.replace('"', '""'))
+            for _cid, cname, _ct, _nn, _df, pk in cur.fetchall():
+                if pk:
+                    rows.append([None, None, name, str(cname), int(pk), None])
+        return cols, rows
 
     @property
     def Errors(self):

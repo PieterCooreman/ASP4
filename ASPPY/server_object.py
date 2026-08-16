@@ -164,6 +164,12 @@ class WshEnvironment:
         from .vb_runtime import VBLong
         return VBLong(len(self._d))
 
+    @property
+    def Length(self):
+        # IWshEnvironment exposes both; Length is the IWshCollection spelling.
+        from .vb_runtime import VBLong
+        return VBLong(len(self._d))
+
     def Item(self, name=None):
         if name is None:
             return ""
@@ -186,6 +192,336 @@ class WshEnvironment:
 
     def __vbs_typename__(self):
         return "IWshEnvironment"
+
+
+def _lnk_string_data(text: str) -> bytes:
+    """A StringData block: UTF-16LE character count, then the characters."""
+    s = str(text or "")
+    return len(s).to_bytes(2, 'little') + s.encode('utf-16-le')
+
+
+def _lnk_hotkey(text: str) -> int:
+    """"CTRL+ALT+T" -> the HotKeyFlags word used in the ShellLinkHeader."""
+    mods = {'SHIFT': 0x01, 'CTRL': 0x02, 'CONTROL': 0x02, 'ALT': 0x04}
+    lo = hi = 0
+    for part in str(text or "").upper().replace(' ', '').split('+'):
+        if not part:
+            continue
+        if part in mods:
+            hi |= mods[part]
+        elif len(part) == 1:
+            lo = ord(part)
+        elif part.startswith('F') and part[1:].isdigit():
+            n = int(part[1:])
+            if 1 <= n <= 24:
+                lo = 0x6F + n            # VK_F1 = 0x70
+    return (hi << 8) | lo
+
+
+def _shell_target_idlist(target: str) -> bytes:
+    """Serialised LinkTargetIDList for `target`, or b"" if unavailable.
+
+    Windows resolves a shortcut's target from the IDList, NOT from the
+    LinkInfo path - a .lnk carrying only LinkInfo opens as a link but reports
+    an empty target and will not launch. Rather than hand-assemble ITEMIDLIST
+    structures (which Windows rejects if anything is slightly off), the list is
+    built by the shell itself through ctypes, so the bytes are exactly what
+    Explorer would have written. Requires Windows and an existing target;
+    otherwise the link falls back to LinkInfo only.
+    """
+    if os.name != 'nt':
+        return b""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        shell32 = ctypes.windll.shell32
+        shell32.SHParseDisplayName.argtypes = [
+            wintypes.LPCWSTR, ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_void_p), ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong)]
+        shell32.ILGetSize.argtypes = [ctypes.c_void_p]
+        shell32.ILGetSize.restype = ctypes.c_uint
+        shell32.ILFree.argtypes = [ctypes.c_void_p]
+
+        pidl = ctypes.c_void_p()
+        attrs = ctypes.c_ulong(0)
+        hr = shell32.SHParseDisplayName(
+            str(target), None, ctypes.byref(pidl), 0, ctypes.byref(attrs))
+        if hr != 0 or not pidl:
+            return b""
+        try:
+            size = shell32.ILGetSize(pidl)
+            if not size:
+                return b""
+            buf = (ctypes.c_char * size).from_address(pidl.value)
+            return bytes(buf)
+        finally:
+            shell32.ILFree(pidl)
+    except Exception:
+        return b""
+
+
+def _write_shell_link(path: str, target: str, arguments: str, working_dir: str,
+                      description: str, icon_location: str, icon_index: int,
+                      window_style: int, hotkey: str) -> None:
+    """Write a Windows Shell Link (.lnk) file.
+
+    Built to the [MS-SHLLINK] layout rather than through the Shell COM object,
+    so it works the same way on a non-Windows host. The link carries a LinkInfo
+    block with the target's local path plus the optional StringData sections;
+    the LinkTargetIDList is omitted, which Windows accepts.
+    """
+    HAS_LINK_INFO = 0x00000002
+    HAS_NAME = 0x00000004
+    HAS_RELATIVE_PATH = 0x00000008
+    HAS_WORKING_DIR = 0x00000010
+    HAS_ARGUMENTS = 0x00000020
+    HAS_ICON_LOCATION = 0x00000040
+    IS_UNICODE = 0x00000080
+
+    HAS_LINK_TARGET_IDLIST = 0x00000001
+
+    target = str(target or "")
+    idlist = _shell_target_idlist(target)
+    flags = HAS_LINK_INFO | IS_UNICODE
+    if idlist:
+        flags |= HAS_LINK_TARGET_IDLIST
+    if description:
+        flags |= HAS_NAME
+    if working_dir:
+        flags |= HAS_WORKING_DIR
+    if arguments:
+        flags |= HAS_ARGUMENTS
+    if icon_location:
+        flags |= HAS_ICON_LOCATION
+
+    header = bytearray()
+    header += (0x4C).to_bytes(4, 'little')                       # HeaderSize
+    header += bytes.fromhex('01140200000000C000000000000046')[:0]  # placeholder
+    # LinkCLSID {00021401-0000-0000-C000-000000000046}
+    header += (0x00021401).to_bytes(4, 'little')
+    header += (0).to_bytes(2, 'little') + (0).to_bytes(2, 'little')
+    header += bytes((0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46))
+    header += flags.to_bytes(4, 'little')                        # LinkFlags
+    header += (0x00000080).to_bytes(4, 'little')                 # FILE_ATTRIBUTE_NORMAL
+    header += b'\x00' * 24                                       # 3 x FILETIME
+    header += (0).to_bytes(4, 'little')                          # FileSize
+    header += int(icon_index).to_bytes(4, 'little', signed=True)  # IconIndex
+    header += int(window_style or 1).to_bytes(4, 'little')       # ShowCommand
+    header += _lnk_hotkey(hotkey).to_bytes(2, 'little')          # HotKey
+    header += b'\x00' * 2                                        # Reserved1
+    header += b'\x00' * 4                                        # Reserved2
+    header += b'\x00' * 4                                        # Reserved3
+
+    # LinkInfo with a VolumeID and a LocalBasePath (ANSI). Setting the
+    # VolumeIDAndLocalBasePath flag REQUIRES a VolumeID structure - without one
+    # Windows ignores the path and TargetPath reads back empty.
+    base = target.encode('mbcs', errors='replace') if os.name == 'nt' \
+        else target.encode('utf-8', errors='replace')
+
+    vol = bytearray()
+    vol += (17).to_bytes(4, 'little')                 # VolumeIDSize
+    vol += (3).to_bytes(4, 'little')                  # DriveType = DRIVE_FIXED
+    vol += (0).to_bytes(4, 'little')                  # DriveSerialNumber
+    vol += (16).to_bytes(4, 'little')                 # VolumeLabelOffset
+    vol += b'\x00'                                    # empty volume label
+
+    hdr_len = 28
+    vol_off = hdr_len
+    local_base_off = vol_off + len(vol)
+    common_path_off = local_base_off + len(base) + 1
+    total = common_path_off + 1
+
+    li = bytearray()
+    li += total.to_bytes(4, 'little')                 # LinkInfoSize
+    li += hdr_len.to_bytes(4, 'little')               # LinkInfoHeaderSize
+    li += (0x00000001).to_bytes(4, 'little')          # VolumeIDAndLocalBasePath
+    li += vol_off.to_bytes(4, 'little')               # VolumeIDOffset
+    li += local_base_off.to_bytes(4, 'little')        # LocalBasePathOffset
+    li += (0).to_bytes(4, 'little')                   # CommonNetworkRelativeLink
+    li += common_path_off.to_bytes(4, 'little')       # CommonPathSuffixOffset
+    li += vol
+    li += base + b'\x00'
+    li += b'\x00'                                     # empty CommonPathSuffix
+
+    out = bytearray(header)
+    if idlist:
+        out += len(idlist).to_bytes(2, 'little') + idlist
+    out += li
+    if description:
+        out += _lnk_string_data(description)
+    if working_dir:
+        # RELATIVE_PATH is not emitted; WORKING_DIR is what scripts read back.
+        out += _lnk_string_data(working_dir)
+    if arguments:
+        out += _lnk_string_data(arguments)
+    if icon_location:
+        out += _lnk_string_data(icon_location)
+    out += (0).to_bytes(4, 'little')                  # terminal block
+
+    with open(path, 'wb') as f:
+        f.write(bytes(out))
+
+
+class WshShortcut:
+    """WScript.Shell.CreateShortcut() result for a .lnk path (IWshShortcut)."""
+
+    def __init__(self, full_name: str):
+        self.FullName = full_name
+        self.TargetPath = ""
+        self.Arguments = ""
+        self.Description = ""
+        self.WorkingDirectory = ""
+        self.IconLocation = ",0"
+        self.Hotkey = ""
+        self.WindowStyle = 1
+        self.RelativePath = ""
+        # If the file already exists, ADO-style scripts expect CreateShortcut
+        # to load it. Only the fields written below are recovered.
+        self._load()
+
+    def _load(self):
+        # Reading a .lnk back is not implemented; the properties keep their
+        # defaults, which is what a freshly created shortcut reports anyway.
+        return
+
+    def _icon_parts(self):
+        loc = vbs_cstr(self.IconLocation or "")
+        if ',' in loc:
+            head, _, tail = loc.rpartition(',')
+            try:
+                return head.strip(), int(tail.strip() or 0)
+            except ValueError:
+                return loc.strip(), 0
+        return loc.strip(), 0
+
+    def Save(self):
+        path = vbs_cstr(self.FullName)
+        if not path:
+            raise_runtime('INVALID_PROC_CALL', "WshShortcut.Save: no FullName")
+        icon_path, icon_idx = self._icon_parts()
+        try:
+            _write_shell_link(
+                path,
+                vbs_cstr(self.TargetPath),
+                vbs_cstr(self.Arguments),
+                vbs_cstr(self.WorkingDirectory),
+                vbs_cstr(self.Description),
+                icon_path,
+                icon_idx,
+                int(self.WindowStyle or 1),
+                vbs_cstr(self.Hotkey),
+            )
+        except Exception as e:
+            raise_runtime('ADO_UNSPECIFIED', f"WshShortcut.Save: {e}")
+
+    def __vbs_typename__(self):
+        return "IWshShortcut"
+
+
+class WshUrlShortcut:
+    """WScript.Shell.CreateShortcut() result for a .url path (IWshURLShortcut).
+
+    A .url is a plain INI file, so this is exact rather than approximate.
+    """
+
+    def __init__(self, full_name: str):
+        self.FullName = full_name
+        self.TargetPath = ""
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.isfile(self.FullName):
+                with open(self.FullName, 'r', encoding='utf-8', errors='replace') as f:
+                    for line in f:
+                        if line.strip().lower().startswith('url='):
+                            self.TargetPath = line.split('=', 1)[1].strip()
+                            break
+        except Exception:
+            pass
+
+    def Save(self):
+        path = vbs_cstr(self.FullName)
+        if not path:
+            raise_runtime('INVALID_PROC_CALL', "WshUrlShortcut.Save: no FullName")
+        try:
+            with open(path, 'w', encoding='utf-8', newline='\r\n') as f:
+                f.write("[InternetShortcut]\n")
+                f.write("URL=%s\n" % vbs_cstr(self.TargetPath))
+        except Exception as e:
+            raise_runtime('ADO_UNSPECIFIED', f"WshUrlShortcut.Save: {e}")
+
+    def __vbs_typename__(self):
+        return "IWshURLShortcut"
+
+
+class WshSpecialFolders:
+    """WScript.Shell.SpecialFolders (IWshCollection).
+
+    Indexing with an unknown name returns "" rather than raising, which is what
+    WSH does. Under a service account many per-user folders are legitimately
+    empty, and scripts rely on that being a value rather than an error.
+    """
+
+    _NAMES = ("AllUsersDesktop", "AllUsersStartMenu", "AllUsersPrograms",
+              "AllUsersStartup", "Desktop", "Favorites", "Fonts", "MyDocuments",
+              "NetHood", "PrintHood", "Programs", "Recent", "SendTo",
+              "StartMenu", "Startup", "Templates", "System", "Temp",
+              "AppData", "ProgramFiles", "Windows")
+
+    def _resolve(self, name: str) -> str:
+        n = str(name or "").strip().lower()
+        env = {k.upper(): v for k, v in os.environ.items()}
+        win = env.get('SYSTEMROOT') or env.get('WINDIR') or ''
+        prof = env.get('USERPROFILE') or ''
+        appdata = env.get('APPDATA') or ''
+        table = {
+            'windows': win,
+            'system': os.path.join(win, 'System32') if win else '',
+            'fonts': os.path.join(win, 'Fonts') if win else '',
+            'temp': env.get('TEMP') or env.get('TMP') or '',
+            'appdata': appdata,
+            'programfiles': env.get('PROGRAMFILES') or '',
+            'desktop': os.path.join(prof, 'Desktop') if prof else '',
+            'mydocuments': os.path.join(prof, 'Documents') if prof else '',
+            'favorites': os.path.join(prof, 'Favorites') if prof else '',
+            'recent': os.path.join(appdata, r'Microsoft\Windows\Recent') if appdata else '',
+            'sendto': os.path.join(appdata, r'Microsoft\Windows\SendTo') if appdata else '',
+            'startmenu': os.path.join(appdata, r'Microsoft\Windows\Start Menu') if appdata else '',
+            'programs': os.path.join(appdata, r'Microsoft\Windows\Start Menu\Programs') if appdata else '',
+            'startup': os.path.join(appdata, r'Microsoft\Windows\Start Menu\Programs\Startup') if appdata else '',
+            'templates': os.path.join(appdata, r'Microsoft\Windows\Templates') if appdata else '',
+        }
+        val = table.get(n, '')
+        # Only report a folder that is really there, like WSH does.
+        return val if val and os.path.isdir(val) else ('' if n in table else '')
+
+    @property
+    def Count(self):
+        return len(self._NAMES)
+
+    @property
+    def Length(self):
+        return len(self._NAMES)
+
+    def Item(self, index=None):
+        if index is None:
+            return ""
+        if isinstance(index, (int, float)) and not isinstance(index, bool):
+            i = int(index)
+            return self._resolve(self._NAMES[i]) if 0 <= i < len(self._NAMES) else ""
+        return self._resolve(vbs_cstr(index))
+
+    def __vbs_index_get__(self, index):
+        return self.Item(index)
+
+    def __iter__(self):
+        return iter([self._resolve(n) for n in self._NAMES])
+
+    def __vbs_typename__(self):
+        return "IWshCollection"
 
 
 class WScriptShell:
@@ -251,6 +587,80 @@ class WScriptShell:
             raise_runtime('INVALID_PROC_CALL',
                           "WScript.Shell.CurrentDirectory: path not found")
 
+    @property
+    def SpecialFolders(self):
+        return WshSpecialFolders()
+
+    def CreateShortcut(self, path=None):
+        """Return a WshShortcut (.lnk) or WshUrlShortcut (.url).
+
+        WSH picks the object from the file extension and raises for anything
+        else; the file is not written until Save is called.
+        """
+        p = vbs_cstr(path)
+        if not p:
+            raise_runtime('INVALID_PROC_CALL',
+                          "WScript.Shell.CreateShortcut: path is required")
+        p = os.path.abspath(p)
+        ext = os.path.splitext(p)[1].lower()
+        if ext == '.url':
+            return WshUrlShortcut(p)
+        if ext == '.lnk':
+            return WshShortcut(p)
+        raise_runtime('INVALID_PROC_CALL',
+                      "WScript.Shell.CreateShortcut: path must end in .lnk or .url")
+
+    def RegRead(self, name=None):
+        """Read a registry value. Windows only; a missing key raises, as in WSH.
+
+        A name ending in '\\' reads the key's default value.
+        """
+        key_path = vbs_cstr(name)
+        if not key_path:
+            raise_runtime('INVALID_PROC_CALL',
+                          "WScript.Shell.RegRead: name is required")
+        if os.name != 'nt':
+            raise_runtime('COMPONENT_CANT_CREATE',
+                          "WScript.Shell.RegRead is only available on Windows")
+        import winreg
+
+        roots = {
+            'HKEY_CLASSES_ROOT': winreg.HKEY_CLASSES_ROOT, 'HKCR': winreg.HKEY_CLASSES_ROOT,
+            'HKEY_CURRENT_USER': winreg.HKEY_CURRENT_USER, 'HKCU': winreg.HKEY_CURRENT_USER,
+            'HKEY_LOCAL_MACHINE': winreg.HKEY_LOCAL_MACHINE, 'HKLM': winreg.HKEY_LOCAL_MACHINE,
+            'HKEY_USERS': winreg.HKEY_USERS, 'HKU': winreg.HKEY_USERS,
+            'HKEY_CURRENT_CONFIG': winreg.HKEY_CURRENT_CONFIG, 'HKCC': winreg.HKEY_CURRENT_CONFIG,
+        }
+        head, _, rest = key_path.replace('/', '\\').partition('\\')
+        root = roots.get(head.upper())
+        if root is None:
+            raise_runtime('INVALID_PROC_CALL',
+                          f"WScript.Shell.RegRead: invalid root key '{head}'")
+
+        if rest.endswith('\\'):          # trailing slash = the default value
+            sub, value_name = rest.rstrip('\\'), ''
+        else:
+            sub, _, value_name = rest.rpartition('\\')
+
+        try:
+            with winreg.OpenKey(root, sub) as k:
+                data, kind = winreg.QueryValueEx(k, value_name)
+        except OSError:
+            raise_runtime('ADO_UNSPECIFIED',
+                          f"WScript.Shell.RegRead: unable to open registry key {key_path}")
+        if kind == winreg.REG_MULTI_SZ:
+            from .vm.values import VBArray
+            items = list(data or [])
+            arr = VBArray(len(items) - 1, allocated=True, dynamic=True)
+            for i, v in enumerate(items):
+                arr.__vbs_index_set__(i, str(v))
+            return arr
+        if kind == winreg.REG_BINARY:
+            return bytes(data or b'')
+        if kind in (winreg.REG_DWORD, winreg.REG_QWORD):
+            return int(data)
+        return str(data)
+
     def Run(self, *_args, **_kwargs):
         self._unsupported('Run')
 
@@ -268,6 +678,12 @@ class WScriptShell:
             return self.ExpandEnvironmentStrings
         if up == 'ENVIRONMENT':
             return self.Environment
+        if up == 'SPECIALFOLDERS':
+            return self.SpecialFolders
+        if up == 'CREATESHORTCUT':
+            return self.CreateShortcut
+        if up == 'REGREAD':
+            return self.RegRead
         if up == 'RUN':
             return self.Run
         if up == 'EXEC':
@@ -1756,8 +2172,19 @@ class Drive:
     fallbacks so coverage code keeps working cross-platform.
     """
 
+    # FSO's Drive object reads as its Path in a value context, so
+    # `"Drive=" & f.Drive` yields "Drive=C:" as it does on IIS.
+    __vbs_default__ = 'Path'
+
     def __init__(self, path: str):
-        self.Path = path
+        # Path is the drive spec WITHOUT a trailing separator ("C:", not
+        # "C:\"); RootFolder is what carries the backslash.
+        p = str(path or "")
+        if os.name == 'nt' and len(p) >= 2 and p[1] == ':':
+            p = p[:2]
+        elif len(p) > 1:
+            p = p.rstrip('\\/') or p
+        self.Path = p
 
     def _root(self) -> str:
         p = str(self.Path)
@@ -2021,7 +2448,9 @@ class File:
                 if GetShortPathNameW(p, buf, 260):
                     s = buf.value
                     if s:
-                        return s
+                        # ShortName is the 8.3 NAME; ShortPath is the full
+                        # short path. GetShortPathName returns the latter.
+                        return os.path.basename(s)
         except Exception:
             pass
         return os.path.basename(self.Path)
@@ -2218,7 +2647,9 @@ class Folder:
                 if GetShortPathNameW(p, buf, 260):
                     s = buf.value
                     if s:
-                        return s
+                        # ShortName is the 8.3 NAME; ShortPath is the full
+                        # short path. GetShortPathName returns the latter.
+                        return os.path.basename(s)
         except Exception:
             pass
         return os.path.basename(self.Path)
