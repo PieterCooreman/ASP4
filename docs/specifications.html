@@ -875,6 +875,10 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>State</code></td><td>Connection state</td></tr>
         <tr><td><code>CommandTimeout</code></td><td>Command timeout</td></tr>
         <tr><td><code>CursorLocation</code></td><td>Cursor location</td></tr>
+        <tr><td><code>Version</code></td><td>ADO library version, <code>"10.0"</code> (what IIS on Windows 10 reports)</td></tr>
+        <tr><td><code>IsolationLevel</code></td><td><code>adXactReadCommitted</code> (4096)</td></tr>
+        <tr><td><code>Attributes</code></td><td>ConnectOptionEnum bitmask, 0</td></tr>
+        <tr><td><code>Properties</code></td><td>Provider property collection &mdash; present so scripts run, but always empty (see the note below)</td></tr>
         <tr><td><code>Open([connection_string])</code></td><td>Opens connection</td></tr>
         <tr><td><code>Close()</code></td><td>Closes connection</td></tr>
         <tr><td><code>Execute(sql[, records_affected[, options]])</code></td><td>Executes SQL</td></tr>
@@ -932,8 +936,13 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>Parameters</code></td><td>Parameters collection</td></tr>
         <tr><td><code>CreateParameter(...)</code></td><td>Creates a parameter object</td></tr>
         <tr><td><code>Execute(...)</code></td><td>Executes command and returns a recordset</td></tr>
+        <tr><td><code>State</code></td><td>ObjectStateEnum: <code>adStateClosed</code> (0) / <code>adStateOpen</code> (1)</td></tr>
+        <tr><td><code>Properties</code></td><td>Provider property collection (empty, see below)</td></tr>
     </tbody>
 </table>
+<p><code>Parameter</code> objects returned by <code>CreateParameter</code> expose <code>Name</code>, <code>Type</code>, <code>Direction</code>, <code>Size</code>, <code>Value</code>, <code>Precision</code>, <code>NumericScale</code>, <code>Attributes</code> and <code>Properties</code>.</p>
+<h4>The <code>Properties</code> collections</h4>
+<p><code>Connection</code>, <code>Command</code>, <code>Recordset</code>, <code>Field</code> and <code>Parameter</code> all expose a <code>Properties</code> collection so that <code>obj.Properties.Count</code> runs instead of raising error 438. It is always <strong>empty</strong>: those entries are OLE DB provider properties, and ASPPY talks to SQLite and ODBC directly rather than through a provider. IIS reports 14 on an unopened <code>Connection</code>, around 94 once it is opened against Jet, and 88 on a connected <code>Command</code>. Anything that enumerates them, or reads a specific provider property by name, will not find it.</p>
 <h2>ADODB.Parameter / Parameters</h2>
 <table>
     <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
@@ -968,14 +977,28 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>SaveToFile(filename[, options])</code></td><td>Saves to file</td></tr>
         <tr><td><code>Read([count])</code></td><td>Reads bytes</td></tr>
         <tr><td><code>ReadText([count])</code></td><td>Reads text</td></tr>
-        <tr><td><code>Write(data)</code></td><td>Writes bytes</td></tr>
-        <tr><td><code>WriteText(string)</code></td><td>Writes text</td></tr>
+        <tr><td><code>Write(data)</code></td><td>Writes bytes (needs a <code>Byte()</code> array, not a string)</td></tr>
+        <tr><td><code>WriteText(string[, options])</code></td><td>Writes text. <code>options</code> is a StreamWriteEnum: <code>adWriteChar</code> (0, default) or <code>adWriteLine</code> (1), which appends <code>LineSeparator</code></td></tr>
         <tr><td><code>CopyTo(dest_stream[, count])</code></td><td>Copies to another stream</td></tr>
-        <tr><td><code>SetEOS()</code></td><td>Sets EOS</td></tr>
+        <tr><td><code>SetEOS()</code></td><td>Makes the current position the end of the stream, discarding everything after it</td></tr>
         <tr><td><code>SkipLine()</code></td><td>Skips line</td></tr>
         <tr><td><code>Flush()</code></td><td>Flushes buffer</td></tr>
     </tbody>
 </table>
+
+<h4 id="stream-bom">Byte order marks, Size and Position</h4>
+<p>A text stream is measured in <strong>bytes</strong>, and ADO writes a byte order mark for the Unicode encodings. Verified against IIS by writing 16 characters plus one LF and reading the buffer back as binary:</p>
+<table>
+    <thead><tr><th><code>Charset</code></th><th><code>Size</code></th><th>First bytes</th></tr></thead>
+    <tbody>
+        <tr><td><code>utf-8</code></td><td>20</td><td><code>EF BB BF 48</code> &mdash; 3-byte BOM</td></tr>
+        <tr><td><code>Unicode</code> (UTF-16LE, the default)</td><td>36</td><td><code>FF FE 48 00</code> &mdash; 2-byte BOM</td></tr>
+        <tr><td><code>windows-1252</code>, <code>iso-8859-1</code></td><td>17</td><td><code>48 65 6C 6C</code> &mdash; no BOM</td></tr>
+    </tbody>
+</table>
+<p>The BOM appears only once there is content: an open but empty stream has <code>Size</code> 0. <code>Size</code>, <code>Position</code>, <code>Read</code>, <code>CopyTo</code>, <code>SaveToFile</code> and switching <code>Type</code> to binary all share the same byte view, so at end of stream <code>Position</code> equals <code>Size</code>, and the file written by <code>SaveToFile</code> is byte-for-byte what <code>Read</code> returns.</p>
+<p>This matters in practice: <code>ADODB.Stream</code> plus <code>SaveToFile</code> is the usual way Classic ASP produces UTF-8 CSV and XML, and consumers &mdash; Excel above all &mdash; rely on the BOM being there.</p>
+<p><strong>Known limitation.</strong> <code>ReadText</code> and <code>SkipLine</code> still index the buffer by character internally. For single-byte charsets and for ASCII text that is indistinguishable from the byte offset; it can differ for multi-byte content in the middle of a stream.</p>
 <h2>MSXML2 Objects</h2>
 <h3>ServerXMLHTTP</h3>
 <pre><code class="language-vbscript">Set http = Server.CreateObject("MSXML2.ServerXMLHTTP")

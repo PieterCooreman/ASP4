@@ -271,9 +271,13 @@ End If
 <thead><tr><th>Check</th><th>IIS</th><th>ASPPY</th><th>Result</th></tr></thead>
 <tbody>
 <%
+' windows-1252 rather than utf-8 on purpose: ADO writes a byte order mark for
+' the Unicode encodings, so a utf-8 stream would start EF BB BF and the byte
+' assertions below would be about the BOM instead of the payload. See
+' 20-ado-stream.asp for the BOM behaviour itself.
 Dim st, bytes
 Set st = Server.CreateObject("ADODB.Stream")
-st.Type = 2 : st.Charset = "utf-8" : st.Open
+st.Type = 2 : st.Charset = "windows-1252" : st.Open
 st.WriteText "ABC"
 st.Position = 0 : st.Type = 1 : st.Position = 0
 bytes = st.Read()

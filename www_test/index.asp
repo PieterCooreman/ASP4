@@ -35,7 +35,9 @@ samples = Array( _
     Array("16-session-objects.asp","Objects in Session",   "Storing a Dictionary reference in Session with guarded pass/fail checks - plus the Application apartment-threading trap (ASP 0197).", "web"), _
     Array("17-python-bridge.asp","Python Bridge",         "ASPPY.ExecutePython / ExecutePythonFile: passing a Dictionary in as ASPPY_ARGS, per-call timeouts, and subprocess isolation.", "io"), _
     Array("18-error-parity.asp","Error Parity",          "Err.Number asserted against values captured from live IIS 10: ReDim rules, default-property semantics, CBool, MapPath and HRESULT signedness.", "core"), _
-    Array("19-msxml.asp",      "MSXML2",                "DOMDocument node model, Nothing semantics, XPath 1.0 and XSLT (via optional lxml), and the Byte() SafeArray.", "data") _
+    Array("19-msxml.asp",      "MSXML2",                "DOMDocument node model, Nothing semantics, XPath 1.0 and XSLT (via optional lxml), and the Byte() SafeArray.", "data"), _
+    Array("20-ado-stream.asp", "ADODB.Stream",          "Byte order marks, Size/Position as byte offsets, SetEOS truncation, and ADO Connection/Command/Parameter members.", "data"), _
+    Array("21-ado-sqlite.asp", "ADODB + SQLite",        "The full SQLite lifecycle: auto-creating the .db, CRUD, recordsets, GetRows, parameters, transactions, BLOBs and reopening.", "data") _
 )
 %>
 <h1>Classic ASP / VBScript &mdash; Working Samples</h1>
