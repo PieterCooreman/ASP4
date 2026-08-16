@@ -262,6 +262,27 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
     </tbody>
 </table>
 
+<h3>PascalCase aliases</h3>
+<p>The method names above mirror <a href="https://pypi.org/project/fpdf2/">fpdf2</a>, so its documentation applies unchanged. Because that reads oddly in VBScript, every multi-word method also answers to its PascalCase name &mdash; use whichever you prefer:</p>
+<table>
+    <thead><tr><th>VBScript style</th><th>fpdf2 style</th></tr></thead>
+    <tbody>
+        <tr><td><code>AddPage</code></td><td><code>add_page</code></td></tr>
+        <tr><td><code>SetMargins</code></td><td><code>set_margins</code></td></tr>
+        <tr><td><code>SetAutoPageBreak</code></td><td><code>set_auto_page_break</code></td></tr>
+        <tr><td><code>SetFont</code></td><td><code>set_font</code></td></tr>
+        <tr><td><code>SetTextColor</code> / <code>SetDrawColor</code> / <code>SetFillColor</code></td><td><code>set_text_color</code> / <code>set_draw_color</code> / <code>set_fill_color</code></td></tr>
+        <tr><td><code>SetLineWidth</code></td><td><code>set_line_width</code></td></tr>
+        <tr><td><code>SetXY</code></td><td><code>set_xy</code></td></tr>
+        <tr><td><code>FillPage</code></td><td><code>fill_page</code></td></tr>
+        <tr><td><code>MultiCell</code></td><td><code>multi_cell</code></td></tr>
+        <tr><td><code>WriteHtml</code></td><td><code>write_html</code></td></tr>
+    </tbody>
+</table>
+<p>The single-word methods need no alias: member lookup is case-insensitive, so <code>pdf.Cell</code>, <code>pdf.Image</code>, <code>pdf.Ln</code>, <code>pdf.Text</code> and <code>pdf.Output</code> already work.</p>
+<p>Misspell one and the error names the closest match, e.g. <code>Unknown member: SETMARGINZ on PdfDoc (did you mean 'SetMargins'?)</code>.</p>
+
+
 <h3>Sample Code</h3>
 <pre><code class="language-vbscript">&lt;%
 Dim pdf

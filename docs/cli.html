@@ -305,8 +305,30 @@ Set-Cookie: ASP_PY_SESSIONID=4ba3049be4de42228f842e494f41e5ce; Path=/</code></pr
             <td><code>--show-headers</code></td>
             <td>Print the HTTP status line and response headers to stderr (keeps stdout clean for the body).</td>
         </tr>
+        <tr>
+            <td><code>--session NAME=VALUE</code></td>
+            <td>Preload a <code>Session</code> variable before the page runs (repeatable). Lets you render a page behind a login without replaying the login.</td>
+        </tr>
     </tbody>
 </table>
+
+<h3>Testing pages behind a login</h3>
+<p>Each run gets a fresh session, so a login POST cannot carry over to the next invocation. Instead, set the variable your auth check reads:</p>
+<pre><code class="language-bash">python asppycli.py www/servicedeck/api.asp --docroot www \
+    --query "action=services" --session authed=True</code></pre>
+<p>Values are typed the way VBScript would type the literal:</p>
+<table>
+    <thead><tr><th>Argument</th><th>Stored as</th></tr></thead>
+    <tbody>
+        <tr><td><code>--session authed=True</code></td><td>Boolean <code>True</code></td></tr>
+        <tr><td><code>--session uid=42</code></td><td>Integer <code>42</code></td></tr>
+        <tr><td><code>--session rate=1.5</code></td><td>Double <code>1.5</code></td></tr>
+        <tr><td><code>--session name=Pieter</code></td><td>String <code>"Pieter"</code></td></tr>
+        <tr><td><code>--session e=Empty</code> / <code>--session n=Null</code></td><td><code>Empty</code> / <code>Null</code></td></tr>
+        <tr><td><code>--session flag:s=True</code></td><td>String <code>"True"</code> &mdash; the <code>:s</code> suffix forces a string</td></tr>
+    </tbody>
+</table>
+<p>Variables are applied after <code>Session_OnStart</code>, so they override anything <code>global.asa</code> sets. Only scalars can be injected; a <code>Session</code> entry holding an object reference has to be built by the page itself.</p>
 
 <h2>Exit Codes</h2>
 <p>Designed for scripts: check the exit code before parsing any output.</p>

@@ -465,7 +465,7 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
         <tr><td><code>CreateObject(progid)</code></td><td>Creates an instance of a COM object</td></tr>
         <tr><td><code>HTMLEncode(string)</code></td><td>Encodes HTML characters</td></tr>
         <tr><td><code>URLEncode(string)</code></td><td>URL-encodes a string</td></tr>
-        <tr><td><code>MapPath(path)</code></td><td>Maps a virtual path to a physical path</td></tr>
+        <tr><td><code>MapPath(path)</code></td><td>Maps a virtual path to a physical path. Never appends a trailing separator, even when <code>path</code> has one &mdash; <code>MapPath("data/x/")</code> and <code>MapPath("data/x")</code> both return <code>...\data\x</code>, matching IIS, which cannot know whether the target is a file or a folder because it never touches the filesystem. So <code>Server.MapPath("data/x/") &amp; "f.txt"</code> silently yields <code>...\data\xf.txt</code>; put the filename inside the call instead: <code>Server.MapPath("data/x/f.txt")</code>. An empty path raises (see <a href="#error-parity">Runtime Error Parity</a>).</td></tr>
         <tr><td><code>Execute(path)</code></td><td>Executes an ASP file</td></tr>
         <tr><td><code>Transfer(path)</code></td><td>Transfers execution to another ASP file</td></tr>
         <tr><td><code>GetLastError()</code></td><td>Returns the last error object</td></tr>
@@ -657,6 +657,22 @@ Response.Write Request.Files.Count
 <h2>ASPPY Object</h2>
 <p>The ASPPY object provides additional functionality beyond classic ASP.</p>
 <p>It is available as global <code>ASPPY</code> in script scope.</p>
+
+<h3 id="naming-rule">How members are named</h3>
+<p>Member access is always case-insensitive, so casing never matters. The <em>shape</em> of a name follows one rule:</p>
+<blockquote><p><strong>Objects that exist on IIS use PascalCase. Wrappers around a third-party library keep that library's own names, so its documentation transfers unchanged.</strong></p></blockquote>
+<table>
+    <thead><tr><th>Surface</th><th>Convention</th><th>Example</th></tr></thead>
+    <tbody>
+        <tr><td><code>Response</code>, <code>Request</code>, <code>Server</code>, <code>Session</code>, <code>Application</code>, ADODB, FSO, CDO, <code>Scripting.Dictionary</code>, <code>VBScript.RegExp</code></td><td>PascalCase, exactly as IIS</td><td><code>Response.BinaryWrite</code></td></tr>
+        <tr><td><code>MSXML2.*</code></td><td>camelCase &mdash; the real MSXML COM API is camelCase</td><td><code>doc.selectSingleNode</code></td></tr>
+        <tr><td><code>ASPPY.Image</code></td><td>lowercase &mdash; mirrors Pillow</td><td><code>img.thumbnail</code></td></tr>
+        <tr><td><code>ASPPY.Pdf</code></td><td>snake_case &mdash; mirrors fpdf2 (PascalCase aliases also provided, see <a href="pdf.html">PDF</a>)</td><td><code>pdf.set_margins</code> / <code>pdf.SetMargins</code></td></tr>
+        <tr><td><code>ASPPY.JSON</code>, <code>.Zip</code>, <code>.Crypto</code>, <code>ExecutePython</code></td><td>PascalCase &mdash; no upstream API to mirror</td><td><code>ASPPY.JSON.Encode</code></td></tr>
+    </tbody>
+</table>
+<p>If a member name is wrong, error 438 names the closest match rather than leaving you to guess: <code>Unknown member: SETMARGINZ on PdfDoc (did you mean 'SetMargins'?)</code>.</p>
+<p>Members beginning with <code>_</code> are host-side internals. VBScript identifiers cannot start with an underscore, so they are unreachable from script and, like on IIS, raise 438.</p>
 <h3>JSON</h3>
 <pre><code class="language-vbscript">ASPPY.JSON.Encode(value[, pretty])  ' Returns JSON string
 ASPPY.JSON.Decode(json_string)      ' Returns VBScript value
@@ -1080,9 +1096,32 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>ASP_PY_PYTHON_ROOT</code></td><td>Sandbox root for <code>ExecutePythonFile</code></td></tr>
     </tbody>
 </table>
+<h2 id="error-parity">Runtime Error Parity</h2>
+<p><code>Err.Number</code> is the contract ASPPY holds itself to: it is checked case by case against a live IIS 10 / VBScript 10.8 installation, because it is locale-independent and it is what real code branches on (<code>If Err.Number = 9 Then</code>). Behaviours verified against IIS include:</p>
+<table>
+    <thead><tr><th>Expression</th><th><code>Err.Number</code></th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td><code>ReDim a(-1)</code></td><td><code>0</code></td><td>Legal. Creates an EMPTY dynamic array with <code>UBound = -1</code>, the same object <code>Array()</code> and <code>Split("")</code> return. This is the idiomatic empty growable list, and <code>ReDim Preserve a(UBound(a) + 1)</code> grows it.</td></tr>
+        <tr><td><code>ReDim a(-2)</code></td><td><code>7</code></td><td>Out of memory. Only <code>-1</code> is a valid empty upper bound; anything lower asks for a negative element count.</td></tr>
+        <tr><td><code>Dim a(4)</code> then <code>ReDim a(9)</code></td><td><code>10</code></td><td>This array is fixed or temporarily locked. An array declared with explicit bounds cannot be resized - use <code>Dim a()</code>.</td></tr>
+        <tr><td><code>Dim a()</code> then <code>UBound(a)</code></td><td><code>9</code></td><td>Subscript out of range. An un-<code>ReDim</code>'d dynamic array has no dimensions yet. (Contrast with <code>ReDim a(-1)</code> above.)</td></tr>
+        <tr><td><code>obj + 1</code>, <code>obj &amp; ""</code>, <code>obj = 1</code></td><td><code>450</code></td><td>Wrong number of arguments. An operator reads the object's DEFAULT property first; a <code>Scripting.Dictionary</code>'s default is <code>Item(key)</code>, which needs an argument.</td></tr>
+        <tr><td><code>rs.Fields("id") + 1</code></td><td><code>0</code></td><td>Works: <code>ADODB.Field</code>'s default property is <code>Value</code>. Likewise <code>Request.QueryString</code> used without an index yields the raw query string, and <code>Request.Cookies("x")</code> yields the cookie value.</td></tr>
+        <tr><td>Operator on an object with no default property</td><td><code>438</code></td><td>Object doesn't support this property or method.</td></tr>
+        <tr><td><code>CBool("xyz")</code>, <code>CBool("")</code></td><td><code>13</code></td><td>Type mismatch. <code>CBool</code> accepts only <code>True</code>/<code>False</code> or a number. Implicit truthiness (<code>If "abc" Then</code>) is separate and does not raise.</td></tr>
+        <tr><td><code>Server.MapPath("")</code></td><td><code>-2147467259</code></td><td>An empty path is rejected; it does not resolve to the application root.</td></tr>
+    </tbody>
+</table>
+<p><code>Err.Number</code> is a signed 32-bit <strong>Long</strong>, so an HRESULT such as <code>0x80004005</code> reports as <code>-2147467259</code> - never as <code>2147500037</code>. This holds for <code>Err.Raise &amp;H80004005</code> too.</p>
+<h3>Deliberate divergences</h3>
+<ul>
+    <li><strong><code>Err.Description</code> text.</strong> IIS <em>localises</em> descriptions - a Dutch server returns <code>"Het subscript valt buiten het bereik"</code> for error 9 - so there is no single IIS string to match. ASPPY always emits English, and appends diagnostic detail IIS omits (<code>Subscript out of range: ARR(9), UBound = 2</code>; <code>Unknown member: SETMARGINZ on PdfDoc (did you mean 'SetMargins'?)</code>). Branch on <code>Err.Number</code>, never on description text.</li>
+    <li><strong><code>Server.MapPath("../")</code>.</strong> IIS resolves paths that escape the web root and returns them. ASPPY refuses, because on IIS the result is only safe thanks to filesystem ACLs that ASPPY cannot rely on. This is a hardening, and the one case where ASPPY is deliberately stricter than IIS.</li>
+    <li><strong>Host-object internals.</strong> ASPPY's objects are Python classes, so they have members the COM originals do not. Every such member is prefixed with <code>_</code>, which VBScript identifiers cannot name, so <code>Response.finalize_headers</code> and <code>Session.CodePage_</code> raise error 438 exactly as they do on IIS.</li>
+</ul>
 <h2>VBScript Compatibility Notes</h2>
 <ul>
-    <li><code>UBound/LBound</code>: follow VBScript-like array allocation rules; uninitialized/invalid-array usage raises runtime errors.</li>
+    <li><code>UBound/LBound</code>: follow VBScript-like array allocation rules; uninitialized/invalid-array usage raises runtime errors. See <a href="#error-parity">Runtime Error Parity</a> for the exact <code>ReDim</code> / empty-array rules.</li>
     <li><code>VBScript.RegExp.Replace</code>: supports VB-style replacement tokens (<code>$1</code>, <code>$&amp;</code>, <code>$`</code>, <code>$'</code>, <code>$$</code>).</li>
     <li><code>Request.Form</code>: parsed for <code>POST</code> only; non-POST bodies are available via <code>Request.BinaryRead</code>.</li>
     <li>Date/number formatting is locale-aware across 60 locales and verified against live IIS; see <a href="#localization">Localization</a> for the supported list and the documented divergences.</li>
