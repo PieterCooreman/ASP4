@@ -174,6 +174,40 @@ class PdfDoc:
         return p
 
 
+# PascalCase aliases.
+#
+# The method names above mirror fpdf2, so its documentation transfers to
+# VBScript unchanged - but `pdf.SetMargins` is what a VBScript author actually
+# writes, and member lookup is case-insensitive, NOT underscore-insensitive, so
+# it used to fail with error 438. Both spellings now work; the aliases are
+# generated rather than typed out so they can never drift from the real methods.
+#
+# Done here rather than in the VM: making member resolution underscore-blind
+# would change lookup for all ~700 host members (and would collide with real
+# COM names), to fix one class.
+_PDF_ALIASES = {
+    'AddPage': 'add_page',
+    'SetMargins': 'set_margins',
+    'SetAutoPageBreak': 'set_auto_page_break',
+    'SetFont': 'set_font',
+    'SetTextColor': 'set_text_color',
+    'SetDrawColor': 'set_draw_color',
+    'SetFillColor': 'set_fill_color',
+    'SetLineWidth': 'set_line_width',
+    'SetXY': 'set_xy',
+    'FillPage': 'fill_page',
+    'MultiCell': 'multi_cell',
+    'WriteHtml': 'write_html',
+}
+# The single-word methods (cell, image, ln, output, text) need no alias:
+# member lookup is already case-insensitive, so pdf.Cell finds cell.
+
+for _alias, _target in _PDF_ALIASES.items():
+    assert not hasattr(PdfDoc, _alias), f"PdfDoc alias {_alias} collides with a real member"
+    setattr(PdfDoc, _alias, getattr(PdfDoc, _target))
+del _alias, _target
+
+
 class PdfShim:
     def New(self, orientation="P", unit="mm", format="A4"):
         return PdfDoc(orientation=orientation, unit=unit, format=format)

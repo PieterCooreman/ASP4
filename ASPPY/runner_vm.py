@@ -213,7 +213,7 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
     # within the same request (IIS Classic ASP behavior).
     if request is not None:
         try:
-            request.Cookies.attach_response(resp)
+            request.Cookies._attach_response(resp)
         except Exception:
             pass
 
@@ -229,8 +229,8 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
     vbs_set_lcid(0)
     if session is not None:
         try:
-            if getattr(session, 'LCID_', 0):
-                vbs_set_lcid(session.LCID_)
+            if getattr(session, '_lcid', 0):
+                vbs_set_lcid(session._lcid)
         except Exception:
             pass
     
@@ -345,7 +345,7 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
             resp.Flush()
         except Exception: pass
         try:
-            resp.finalize_headers()
+            resp._finalize_headers()
         except Exception: pass
 
     res.body = bytes(body_out)

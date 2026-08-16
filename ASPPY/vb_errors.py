@@ -47,7 +47,14 @@ COMPILATION_ERRORS = {
 RUNTIME_ERRORS = {
     'INVALID_PROC_CALL': ErrorDef(5, '800A0005', "Invalid procedure call or argument"),
     'OVERFLOW': ErrorDef(6, '800A0006', "Overflow"),
+    # Raised by `ReDim a(n)` when n < -1. Only -1 is a valid "empty" upper
+    # bound (0 elements); anything lower asks for a negative element count,
+    # which IIS reports as Out of memory rather than Subscript out of range.
+    'OUT_OF_MEMORY': ErrorDef(7, '800A0007', "Out of memory"),
     'SUBSCRIPT_OUT_OF_RANGE': ErrorDef(9, '800A0009', "Subscript out of range"),
+    # Raised by ReDim on an array declared with explicit bounds (`Dim a(4)`),
+    # which is fixed-size and cannot be resized.
+    'ARRAY_FIXED': ErrorDef(10, '800A000A', "This array is fixed or temporarily locked"),
     'DIVISION_BY_ZERO': ErrorDef(11, '800A000B', "Division by zero"),
     'TYPE_MISMATCH': ErrorDef(13, '800A000D', "Type mismatch"),
     'INVALID_USE_OF_NULL': ErrorDef(94, '800A005E', "Invalid use of Null"),
@@ -93,7 +100,18 @@ class VBScriptError(Exception):
                 if self.error_def.hex_code == '800A01F4': # Var undefined
                     self.description = f"Variable is undefined: '{extra_info}'"
                 else:
-                    self.description = f"{self.description}: {extra_info}"
+                    # Callers sometimes pass detail that already starts with
+                    # the base text (an IndexError message from VBArray, say).
+                    # Strip it so the description does not read
+                    # "Subscript out of range: Subscript out of range: ...".
+                    detail = str(extra_info)
+                    prefix = self.description + ": "
+                    if detail.startswith(prefix):
+                        detail = detail[len(prefix):]
+                    elif detail == self.description:
+                        detail = ""
+                    if detail:
+                        self.description = f"{self.description}: {detail}"
 
         # Location info (populated by runtime/parser)
         self.file = ""

@@ -27,32 +27,22 @@ class SessionContents:
         self._d.clear()
 
     def Item(self, key):
+        # A MISSING key reads as Empty; a key explicitly set to Null reads back
+        # as Null, exactly as on IIS. (This used to flatten Null to Empty, so
+        # `Session("x") = Null` then `IsNull(Session("x"))` was False here and
+        # True on IIS.)
         from .vm.values import VBEmpty
         v = self._d.get(self._norm(key), VBEmpty)
-        try:
-            from .vm.values import VBNull, VBNothing
-            if v is None or v in (VBEmpty, VBNull, VBNothing):
-                return VBEmpty
-        except Exception:
-            if v is None:
-                return VBEmpty
+        if v is None:
+            return VBEmpty
         return v
 
     def __vbs_index_get__(self, key):
         return self.Item(key)
 
     def __vbs_index_set__(self, key, value):
-        v = value
-        try:
-            from .vm.values import VBEmpty, VBNull, VBNothing
-        except Exception:
-            VBEmpty = None
-            VBNull = None
-            VBNothing = None
-        if v is None or v in (VBEmpty, VBNothing):
-            v = VBEmpty
-        elif v is VBNull:
-            v = VBNull
+        from .vm.values import VBEmpty
+        v = VBEmpty if value is None else value
         self._d[self._norm(key)] = v
 
     def __iter__(self):
@@ -73,9 +63,9 @@ class Session:
         self._static_objects = {}
         from ASPPY.application import StaticObjectsCollection
         self.StaticObjects = StaticObjectsCollection(self._static_objects)
-        self.LCID_ = 0
+        self._lcid = 0
         # ASPPY renders as UTF-8, so 65001 is the default code page.
-        self.CodePage_ = 65001
+        self._code_page = 65001
 
     @property
     def SessionID(self):
@@ -105,7 +95,7 @@ class Session:
 
     @property
     def CodePage(self):
-        return self.CodePage_
+        return self._code_page
 
     @CodePage.setter
     def CodePage(self, value):
@@ -113,13 +103,13 @@ class Session:
         # ASPPY still emits UTF-8 regardless: the code page is not used to
         # re-encode output, it is remembered for compatibility only.
         try:
-            self.CodePage_ = int(value)
+            self._code_page = int(value)
         except Exception:
             pass
 
     @property
     def LCID(self):
-        return self.LCID_
+        return self._lcid
 
     @LCID.setter
     def LCID(self, value):
@@ -127,12 +117,12 @@ class Session:
         # and is re-applied at the start of every later request in this session
         # (see runner_vm), matching how IIS seeds the script engine locale.
         try:
-            self.LCID_ = int(value)
+            self._lcid = int(value)
         except Exception:
             return
         try:
             from .vb_runtime import vbs_set_lcid
-            vbs_set_lcid(self.LCID_)
+            vbs_set_lcid(self._lcid)
         except Exception:
             pass
 

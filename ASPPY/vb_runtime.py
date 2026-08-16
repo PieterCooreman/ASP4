@@ -254,6 +254,12 @@ def vbs_cstr(value) -> str:
 
 
 def vbs_cbool(value) -> bool:
+    """Lenient Boolean coercion, as used for implicit truthiness.
+
+    `If "abc" Then` does not raise on IIS, so this never raises. The CBool()
+    BUILTIN is stricter (Type mismatch on an unconvertible string) - see
+    vb_builtins.CBool.
+    """
     if value is VBEmpty or value is VBNull or value is VBNothing or value is None:
         return False
     if isinstance(value, bool):

@@ -566,7 +566,7 @@ class Response:
     def IsClientConnected(self):
         return True
 
-    def finalize_headers(self):
+    def _finalize_headers(self):
         # Content-Type with charset — use already-stored values directly to
         # avoid repeated .lower() allocations on the hot path.
         ct = self._content_type or "text/html"
@@ -599,7 +599,7 @@ class Response:
         for (hn, hv) in self._extra_headers:
             self._res.headers.append((hn, hv))
         for c in self._cookies.values():
-            self._res.headers.append(("Set-Cookie", c.to_set_cookie_header()))
+            self._res.headers.append(("Set-Cookie", c._to_set_cookie_header()))
 
         # Final guard on every header, whatever produced it. A NUL is never a
         # legal header character: emitting one yields a malformed response that
@@ -642,14 +642,14 @@ class ResponseCookie:
         self.Secure = False
         self.HttpOnly = False
 
-    def vbs_get_prop(self, name: str):
+    def _vbs_get_prop(self, name: str):
         n = str(name).upper()
         for attr in ("EXPIRES", "DOMAIN", "PATH", "SECURE", "HTTPONLY", "HASKEYS"):
             if attr == n:
                 return getattr(self, attr.title() if attr not in ("HTTPONLY", "HASKEYS") else ("HttpOnly" if attr == "HTTPONLY" else "HasKeys"))
         raise AttributeError(name)
 
-    def vbs_set_prop(self, name: str, value):
+    def _vbs_set_prop(self, name: str, value):
         n = str(name).upper()
         if n == "EXPIRES":
             self.Expires = value
@@ -700,7 +700,7 @@ class ResponseCookie:
     def __str__(self):
         return vbs_cstr(self.Value)
 
-    def to_set_cookie_header(self) -> str:
+    def _to_set_cookie_header(self) -> str:
         name = self.Name
         if self.HasKeys:
             # Encode keys as querystring

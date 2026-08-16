@@ -747,6 +747,10 @@ def _normalize_param(v: Any) -> Any:
 class ADOField:
     """Represents one column in a Recordset row."""
 
+    # ADODB.Field's default property is Value, so `rs.Fields("id") + 1` and
+    # `rs.Fields("n") & ""` work without writing .Value on IIS.
+    __vbs_default__ = 'Value'
+
     def __init__(self, name: str, value: Any, col_type: int = adVariant,
                  defined_size: int = 0, owner: 'ADORecordset | None' = None):
         self.Name = name
@@ -1522,13 +1526,15 @@ class ADORecordset:
         self._cur_idx = i
         self._invalidate_fields_cache()
 
-        # Empty result => empty VBArray
+        # Empty result => empty VBArray. dynamic=True: a GetRows() result is a
+        # resizable array in VBScript, so ReDim Preserve on it must not raise
+        # error 10 ("This array is fixed or temporarily locked").
         if not row_indices or not col_indices:
-            return VBArray(-1)
+            return VBArray(-1, allocated=True, dynamic=True)
 
         field_count = len(col_indices)
         row_count = len(row_indices)
-        arr = VBArray([field_count - 1, row_count - 1])
+        arr = VBArray([field_count - 1, row_count - 1], allocated=True, dynamic=True)
         # Fill column-major: flat index = fi + ri * field_count
         items = arr._items
         for ri, row_idx in enumerate(row_indices):

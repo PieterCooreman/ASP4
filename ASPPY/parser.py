@@ -80,6 +80,16 @@ _RESERVED_DIM_NAMES = {
 }
 
 
+# Zero-argument VBScript functions that may be written without parentheses.
+# A bare mention is parsed as a call, so `x = ScriptEngine` yields "VBScript"
+# rather than a reference to the function itself.
+_NO_PAREN_FUNCS = {
+    'NOW', 'DATE', 'TIME', 'TIMER', 'RND',
+    'SCRIPTENGINE', 'SCRIPTENGINEMAJORVERSION',
+    'SCRIPTENGINEMINORVERSION', 'SCRIPTENGINEBUILDVERSION',
+}
+
+
 class Parser:
     def __init__(self, text: str):
         self.lexer = Lexer(text)
@@ -1430,11 +1440,13 @@ class Parser:
             elif upper == "FALSE":
                 expr = BoolLit(False)
             else:
-                # Support common no-parentheses functions:
+                # Support the zero-argument functions VBScript lets you call
+                # without parentheses:
                 # - Date/time: Now, Date, Time, Timer
-                # - Random: Rnd
+                # - Random:    Rnd
+                # - Engine:    ScriptEngine, ScriptEngine*Version
                 # Only when not immediately followed by parentheses (to avoid double-call on Now()).
-                if upper in ("NOW", "DATE", "TIME", "TIMER", "RND") and self.tok.kind != "LPAREN":
+                if upper in _NO_PAREN_FUNCS and self.tok.kind != "LPAREN":
                     expr = CallExpr(Ident(name), [])
                 else:
                     expr = Ident(name)

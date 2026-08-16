@@ -57,15 +57,11 @@ class ApplicationContents:
         self._d.clear()
 
     def Item(self, key):
+        # Missing key -> Empty; a stored Null reads back as Null, like IIS.
         from .vm.values import VBEmpty
         v = self._d.get(key, VBEmpty)
-        try:
-            from .vm.values import VBNull, VBNothing
-            if v is None or v in (VBEmpty, VBNull, VBNothing):
-                return VBEmpty
-        except Exception:
-            if v is None:
-                return VBEmpty
+        if v is None:
+            return VBEmpty
         return v
 
     def __vbs_index_get__(self, key):

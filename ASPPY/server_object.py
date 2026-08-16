@@ -260,7 +260,7 @@ class WScriptShell:
     def __vbs_typename__(self):
         return "IWshShell3"
 
-    def vbs_get_prop(self, name: str):
+    def _vbs_get_prop(self, name: str):
         up = str(name).upper()
         if up == 'CURRENTDIRECTORY':
             return self.CurrentDirectory
@@ -277,7 +277,7 @@ class WScriptShell:
         raise_runtime('OBJECT_NOT_SUPPORT',
                       f"WScript.Shell does not support this property or method: {name}")
 
-    def vbs_set_prop(self, name: str, value):
+    def _vbs_set_prop(self, name: str, value):
         if str(name).upper() == 'CURRENTDIRECTORY':
             self.CurrentDirectory = value
             return
@@ -610,6 +610,10 @@ class Server:
         if path is VBNull:
             raise VBScriptCOMError(94, "Invalid use of Null")
         p = str(path)
+        # IIS parity: an empty path is rejected with E_FAIL (Err.Number
+        # -2147467259), it does NOT quietly resolve to the application root.
+        if p.strip() == "":
+            raise VBScriptCOMError(-2147467259, "Unspecified error")
         # Remove querystring
         p = p.split('?', 1)[0]
         if p.startswith('~'):
@@ -820,7 +824,7 @@ class Server:
                 res.status_message = 'Internal Server Error'
                 resp.Write('Error during ASP execution: ' + str(e) + '\n')
                 resp.Flush()
-                resp.finalize_headers()
+                resp._finalize_headers()
                 res.body = bytes(body_out)
                 return ASPPYRunResult(target_v, res.status_code, res.status_message, str(e))
             finally:
@@ -829,7 +833,7 @@ class Server:
                 except Exception:
                     pass
                 try:
-                    resp.finalize_headers()
+                    resp._finalize_headers()
                 except Exception:
                     pass
                 res.body = bytes(body_out)

@@ -13,9 +13,16 @@ class NameValueCollection:
     - Count, Key(i) are provided for basic compatibility
     """
 
-    def __init__(self, mapping=None):
+    # Used WITHOUT an index (`Response.Write Request.QueryString`), IIS returns
+    # the collection's raw text - the whole query string or form body - so that
+    # is this object's default property. Names a PRIVATE attribute on purpose:
+    # `.Raw` would add a member IIS does not have.
+    __vbs_default__ = '_raw'
+
+    def __init__(self, mapping=None, raw=""):
         # mapping: dict[str, list[str]]
         self._m = mapping or {}
+        self._raw = raw or ""
         # case-insensitive key map
         self._kmap = {}
         for k in self._m.keys():
@@ -225,7 +232,7 @@ class Request:
         # the command line) would later be joined onto other absolute paths.
         self._docroot = os.path.abspath(str(docroot)) if docroot else ""
 
-        self._query = NameValueCollection(_parse_qs(self._query_string))
+        self._query = NameValueCollection(_parse_qs(self._query_string), self._query_string)
         self._form = NameValueCollection({})
         self._cookies = CookiesCollection(_parse_cookie_header(self._headers.get('cookie', '')))        
         self._server_vars = ServerVariablesCollection(_build_server_vars(self))
@@ -247,7 +254,7 @@ class Request:
                     txt = self._body.decode('utf-8', errors='replace')
             except Exception:
                 txt = ''
-            self._form = NameValueCollection(_parse_qs(txt))
+            self._form = NameValueCollection(_parse_qs(txt), txt)
             return
 
         if ctype.startswith('multipart/form-data'):
@@ -452,6 +459,11 @@ class Request:
 
 
 class CookieIn:
+    # `Request.Cookies("x")` with no sub-key reads as the cookie's VALUE on
+    # IIS, so `If Request.Cookies("visits") = "" Then` works. Private attribute
+    # name: the COM object has no `.Value` member.
+    __vbs_default__ = '_value'
+
     def __init__(self, name: str, value: str, keys=None):
         self.Name = name
         self._value = value or ""
@@ -514,7 +526,7 @@ class CookiesCollection:
         # same request, like IIS Classic ASP does.
         self._resp = None
 
-    def attach_response(self, resp):
+    def _attach_response(self, resp):
         self._resp = resp
 
     # The ASPPY session cookie is infrastructure (IIS also hides its

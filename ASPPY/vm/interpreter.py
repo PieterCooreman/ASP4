@@ -132,6 +132,42 @@ def _icase_real_name(obj, name_upper):
     return _icase_attr_cache[cache_key].get(name_upper)
 
 
+def _unknown_member(obj, name: str) -> str:
+    """Message for error 438, with a "did you mean" hint where one is obvious.
+
+    Member names are resolved case-insensitively but NOT underscore- or
+    style-insensitively, so `pdf.SetMargins` cannot find `set_margins` and the
+    page dies at runtime with no clue what the right spelling is. The candidate
+    list is the mapping _icase_getattr already built, so this costs nothing
+    until an error actually happens.
+
+    Members starting with '_' are omitted: they are host-side internals that a
+    VBScript identifier cannot name anyway.
+    """
+    base = f"Unknown member: {name} on {type(obj).__name__}"
+    try:
+        wanted = name.upper()
+        mapping = _icase_attr_cache.get(id(type(obj)))
+        if mapping is None:
+            mapping = {a.upper(): a for a in dir(obj)}
+        names = [real for up, real in mapping.items() if not real.startswith('_')]
+        if not names:
+            return base
+        # Style-insensitive match first (SETMARGINS -> set_margins), then a
+        # general near-miss for ordinary typos.
+        squashed = wanted.replace('_', '')
+        hits = [n for n in names if n.upper().replace('_', '') == squashed]
+        if not hits:
+            import difflib
+            hits = difflib.get_close_matches(wanted, [n.upper() for n in names], n=1, cutoff=0.8)
+            hits = [n for n in names if n.upper() in hits]
+        if hits:
+            return f"{base} (did you mean '{hits[0]}'?)"
+    except Exception:
+        pass
+    return base
+
+
 def _maybe_attr(obj: Any, name: str):
     return getattr(obj, name, None)
 
@@ -161,6 +197,11 @@ def _maybe_invoke_zero_arg(callable_obj):
 def _to_int32(v: int) -> int:
     v = int(v) & 0xFFFFFFFF
     return v - 0x100000000 if (v & 0x80000000) else v
+
+
+# E_FAIL, the HRESULT IIS reports for an unclassified engine/COM failure.
+# Stored signed because Err.Number is a VBScript Long (see _record_err).
+_E_FAIL = _to_int32(0x80004005)  # -2147467259
 
 
 
@@ -357,7 +398,7 @@ class VBClassInstance:
             if procs is None and self._can_access_private(interp):
                 procs = self._cls.private_props.get(up)
             if procs is None:
-                raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
+                raise_runtime('OBJECT_NOT_SUPPORT', self._unknown_member_msg(name))
             getp = procs.get('GET')
             if getp is None:
                 raise VBScriptRuntimeError("Property get not defined")
@@ -382,7 +423,27 @@ class VBClassInstance:
                               f"Object doesn't support this property or method: {name}")
             return self._fields.get(up, VBEmpty)
 
-        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
+        raise_runtime('OBJECT_NOT_SUPPORT', self._unknown_member_msg(name))
+
+    def _unknown_member_msg(self, name: str) -> str:
+        """Error 438 text for a class instance, with a near-miss hint."""
+        base = f"Unknown member: {name} on class {self._cls.name}"
+        try:
+            # Public props, methods AND fields - a mistyped public field is
+            # just as common as a mistyped method.
+            names = (set(self._cls.public_props)
+                     | set(self._cls.public_methods)
+                     | (set(self._cls.all_fields) - set(self._cls.private_fields)))
+            names = sorted(names)
+            if not names:
+                return base
+            import difflib
+            hits = difflib.get_close_matches(name.upper(), names, n=1, cutoff=0.7)
+            if hits:
+                return f"{base} (did you mean '{hits[0]}'?)"
+        except Exception:
+            pass
+        return base
 
     def vbs_get_member(self, interp: Any, name: str):
         """Get a member value.
@@ -404,7 +465,7 @@ class VBClassInstance:
             if procs is None and self._can_access_private(interp):
                 procs = self._cls.private_props.get(up)
             if procs is None:
-                raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
+                raise_runtime('OBJECT_NOT_SUPPORT', self._unknown_member_msg(name))
 
             k = 'SET' if is_set else 'LET'
             p = procs.get(k)
@@ -423,7 +484,7 @@ class VBClassInstance:
             self._fields[up] = value
             return
 
-        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {name}")
+        raise_runtime('OBJECT_NOT_SUPPORT', self._unknown_member_msg(name))
 
 
 class _BoundMethod:
@@ -563,7 +624,7 @@ class VBInterpreter:
             if isinstance(obj, VBClassInstance):
                 return obj.vbs_get_member(self, expr.name)
             obj_any = cast(Any, obj)
-            get_prop = _maybe_attr(obj_any, 'vbs_get_prop')
+            get_prop = _maybe_attr(obj_any, '_vbs_get_prop')
             if get_prop is not None:
                 return _maybe_invoke_zero_arg(get_prop(expr.name))
             # Basic Python attribute fallback (only for explicit host objects)
@@ -573,7 +634,7 @@ class VBInterpreter:
             _icase_val = _icase_getattr(obj, expr.name.upper())
             if _icase_val is not _ICASE_MISSING:
                 return _maybe_invoke_zero_arg(_icase_val)
-            raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {expr.name} on {type(obj).__name__}")
+            raise_runtime('OBJECT_NOT_SUPPORT', _unknown_member(obj, expr.name))
         if isinstance(expr, Index):
             obj = self.eval_expr(expr.obj)
             if isinstance(obj, _ByRef):
@@ -999,7 +1060,7 @@ class VBInterpreter:
         if isinstance(obj, VBClassInstance):
             return obj.vbs_get_member(self, expr.name)
         obj_any = cast(Any, obj)
-        get_prop = _maybe_attr(obj_any, 'vbs_get_prop')
+        get_prop = _maybe_attr(obj_any, '_vbs_get_prop')
         if get_prop is not None:
             return _maybe_invoke_zero_arg(get_prop(expr.name))
         # Member access on a plain SCALAR is "Object required" (424) on IIS:
@@ -1020,7 +1081,7 @@ class VBInterpreter:
         _icase_val = _icase_getattr(obj, expr.name.upper())
         if _icase_val is not _ICASE_MISSING:
             return _maybe_invoke_zero_arg(_icase_val)
-        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {expr.name} on {type(obj).__name__}")
+        raise_runtime('OBJECT_NOT_SUPPORT', _unknown_member(obj, expr.name))
 
     def _eval_index(self, expr):
         obj = self.eval_expr(expr.obj)
@@ -1230,8 +1291,10 @@ class VBInterpreter:
         raise_runtime('OBJECT_NOT_SUPPORT', f"Not callable: {expr.name}")
 
     def _eval_concat(self, expr):
-        left = self.eval_expr(expr.left)
-        right = self.eval_expr(expr.right)
+        # _operand: an object goes through its default property first, exactly
+        # as IIS does. Without it `dict & ""` quietly produced a string here.
+        left = self._operand(self.eval_expr(expr.left))
+        right = self._operand(self.eval_expr(expr.right))
         if expr.op == '&':
             if isinstance(left, (bytes, bytearray)) or isinstance(right, (bytes, bytearray)):
                 lb = left if isinstance(left, (bytes, bytearray)) else vbs_cstr(left).encode('latin-1', errors='replace')
@@ -1247,7 +1310,7 @@ class VBInterpreter:
         return _vb_plus(left, right)
 
     def _eval_unaryop(self, expr):
-        v = _scalarize(self.eval_expr(expr.expr))
+        v = self._operand(self.eval_expr(expr.expr))
         if expr.op == '-':
             # VBScript: -Null => Null (Null propagates through arithmetic).
             if v is VBNull:
@@ -1274,8 +1337,8 @@ class VBInterpreter:
     def _eval_binaryop(self, expr):
         op = expr.op.upper()
         if op in ('AND', 'OR', 'XOR', 'EQV', 'IMP'):
-            l = _scalarize(self.eval_expr(expr.left))
-            r = _scalarize(self.eval_expr(expr.right))
+            l = self._operand(self.eval_expr(expr.left))
+            r = self._operand(self.eval_expr(expr.right))
             # VBScript uses three-valued logic for Null:
             #   Null And True  => Null      Null And False => False
             #   Null Or  True  => True      Null Or  False => Null
@@ -1358,8 +1421,8 @@ class VBInterpreter:
                 raise_runtime('TYPE_MISMATCH')
             return l is r
 
-        l = _scalarize(self.eval_expr(expr.left))
-        r = _scalarize(self.eval_expr(expr.right))
+        l = self._operand(self.eval_expr(expr.left))
+        r = self._operand(self.eval_expr(expr.right))
         if expr.op in ('=', '<>', '<', '<=', '>', '>='):
             return _compare(expr.op, l, r)
 
@@ -1453,6 +1516,38 @@ class VBInterpreter:
             self._record_err(e)
             return True
 
+    def _operand(self, v):
+        """Coerce a value to a scalar for an operator, the way IIS does.
+
+        VBScript reads an object's DEFAULT property before applying an
+        operator. Verified against IIS 10 / VBScript 10.8:
+
+          * parameterless default property (ADODB.Field.Value, a class's
+            ``[default] Property Get``)      -> that value is used
+          * default property that takes an argument (Scripting.Dictionary,
+            whose default is ``Item(key)``)  -> error 450
+          * no default property at all       -> error 438
+
+        Before this, `dict + 1` gave 13 and `dict & ""` silently produced a
+        string, so code that IIS rejects ran cleanly on ASPPY.
+        """
+        v = _scalarize(v)
+        if v is None or isinstance(v, _VALUE_TYPES) or isinstance(v, (_Sentinel, VBArray)):
+            return v
+        if isinstance(v, VBClassInstance):
+            dp = v._cls.default_prop_get
+            if dp is None:
+                raise_runtime('OBJECT_NOT_SUPPORT')
+            if len(dp.params) != 0:
+                raise_runtime('WRONG_NUM_ARGS')
+            return _scalarize(self._invoke_class_proc(v, dp, []))
+        dname = getattr(v.__class__, '__vbs_default__', None)
+        if dname:
+            return _scalarize(getattr(v, dname))
+        if getattr(v.__class__, '__vbs_index_get__', None) is not None:
+            raise_runtime('WRONG_NUM_ARGS')
+        raise_runtime('OBJECT_NOT_SUPPORT')
+
     def _record_err(self, e):
         """Populate the Err object from an exception (On Error Resume Next)."""
         if getattr(self.ctx, 'Err', None) is None:
@@ -1466,13 +1561,16 @@ class VBInterpreter:
                 desc = e.description
                 src = getattr(e, 'source_snippet', '')
             elif isinstance(e, VBScriptCOMError):
-                number = int(getattr(e, 'number', 2147500037))
+                number = int(getattr(e, 'number', _E_FAIL))
                 desc = str(getattr(e, 'description', str(e)))
                 src = str(getattr(e, 'source', ''))
             else:
-                number = 2147500037
+                number = _E_FAIL
                 desc = str(e)
-            self.ctx.Err.Number = number
+            # Err.Number is a signed 32-bit Long on IIS: an HRESULT such as
+            # 0x80004005 reads as -2147467259, never as 2147500037. Normalise
+            # so `If Err.Number = -2147467259` behaves the same on both.
+            self.ctx.Err.Number = _to_int32(number)
             self.ctx.Err.Description = desc
             # Err.Raise may supply its own Source; only fill in the engine
             # default when the raiser did not set one.
@@ -1527,7 +1625,7 @@ class VBInterpreter:
             # not the VBScript "value" behavior of zero-arg Functions.
             return obj._vbs_get_member_raw(self, expr.name) # expr.name is upper from parser
         obj_any = cast(Any, obj)
-        get_prop = _maybe_attr(obj_any, 'vbs_get_prop')
+        get_prop = _maybe_attr(obj_any, '_vbs_get_prop')
         if get_prop is not None:
             return get_prop(expr.name)
         if hasattr(obj, expr.name):
@@ -1538,7 +1636,7 @@ class VBInterpreter:
             return _icase_val
         # Use error 438 (800A01B6) like IIS, so On Error Resume Next records a
         # meaningful Err.Number instead of 0.
-        raise_runtime('OBJECT_NOT_SUPPORT', f"Unknown member: {expr.name} on {type(obj).__name__}")
+        raise_runtime('OBJECT_NOT_SUPPORT', _unknown_member(obj, expr.name))
 
     def exec_stmt(self, stmt):
         # Error suppression wrapper (On Error Resume Next)
@@ -1707,8 +1805,8 @@ class VBInterpreter:
                 if isinstance(obj, VBClassInstance):
                     obj.vbs_set_member(self, tgt.name, val, is_set=False)
                     return
-                if hasattr(obj, 'vbs_set_prop'):
-                    obj.vbs_set_prop(tgt.name, val)
+                if hasattr(obj, '_vbs_set_prop'):
+                    obj._vbs_set_prop(tgt.name, val)
                     return
                 # case-insensitive setattr for host objects
                 _real_name = _icase_real_name(obj, tgt.name.upper())
@@ -1779,8 +1877,8 @@ class VBInterpreter:
                 if isinstance(obj, VBClassInstance):
                     obj.vbs_set_member(self, tgt.name, val, is_set=True)
                     return
-                if hasattr(obj, 'vbs_set_prop'):
-                    obj.vbs_set_prop(tgt.name, val)
+                if hasattr(obj, '_vbs_set_prop'):
+                    obj._vbs_set_prop(tgt.name, val)
                     return
                 _real_name2 = _icase_real_name(obj, tgt.name.upper())
                 if _real_name2 is not None:
@@ -1882,12 +1980,25 @@ class VBInterpreter:
                 else:
                     self.env[key] = VBArray([-1], allocated=False, dynamic=True)
             arr = cast(VBArray, self._get_var(key))
+            # IIS parity: `Dim a(4)` is a FIXED-size array and cannot be
+            # ReDim'd (error 10). Only `Dim a()` / an undeclared name / an
+            # array built by Array() or a previous ReDim is resizable.
+            # (read the private flag rather than adding a public method: every
+            # public VBArray attribute is reachable from VBScript via the
+            # case-insensitive member lookup)
+            if isinstance(arr, VBArray) and not getattr(arr, '_dynamic', True):
+                raise_runtime('ARRAY_FIXED')
             ubs = []
             for b in stmt.bounds:
                 ub = _try_number(self.eval_expr(b))
                 if ub is None:
                     raise VBScriptRuntimeError("ReDim bound must be numeric")
-                ubs.append(int(ub))
+                ub = int(ub)
+                # IIS parity: -1 means "empty" (0 elements) and is legal;
+                # anything below that is a negative element count -> error 7.
+                if ub < -1:
+                    raise_runtime('OUT_OF_MEMORY')
+                ubs.append(ub)
             arr.redim(ubs, preserve=bool(stmt.preserve))
             return
 
@@ -2810,7 +2921,7 @@ class VBInterpreter:
                 if isinstance(o2, VBClassInstance):
                     return o2.vbs_get_member(self, mem_name)
                 o2_any = cast(Any, o2)
-                get_prop = getattr(o2_any, 'vbs_get_prop', None)
+                get_prop = getattr(o2_any, '_vbs_get_prop', None)
                 if get_prop is not None:
                     return get_prop(mem_name)
                 _iv = _icase_getattr(o2_any, mem_name.upper())
@@ -2822,7 +2933,7 @@ class VBInterpreter:
                 if isinstance(o2, VBClassInstance):
                     return o2.vbs_set_member(self, mem_name, v, is_set=False)
                 o2_any = cast(Any, o2)
-                set_prop = getattr(o2_any, 'vbs_set_prop', None)
+                set_prop = getattr(o2_any, '_vbs_set_prop', None)
                 if set_prop is not None:
                     return set_prop(mem_name, v)
                 _rn2 = _icase_real_name(o2_any, mem_name.upper())
@@ -3024,6 +3135,13 @@ def _scalarize(v):
     if hook is not None:
         return hook(v)
     return v
+
+
+# VBScript VALUE types. Anything reaching an operator that is not one of these
+# (and not an array or a sentinel) is a COM object, and IIS reads its DEFAULT
+# property before the operator runs - see VBInterpreter._operand.
+_VALUE_TYPES = (int, float, str, bool, bytes, bytearray, _Decimal,
+                _dt.datetime, _dt.date, _dt.time, _dt.timedelta)
 
 
 def _plus_str_to_number(s):

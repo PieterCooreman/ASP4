@@ -82,7 +82,7 @@ def Split(expression, delimiter=" ", count=-1, compare=0):
     if cnt < 0:
         parts = s.split(d)
     else:
-        if cnt == 0: return VBArray([-1])
+        if cnt == 0: return VBArray([-1], allocated=True, dynamic=True)
         parts = s.split(d, cnt - 1)
     arr = VBArray(len(parts)-1, allocated=True, dynamic=True)
     for i, p in enumerate(parts):
@@ -304,7 +304,9 @@ def Filter(inputstrings, value, include=True, compare=0):
         raise_runtime('INVALID_USE_OF_NULL')
     if not IsArray(inputstrings): raise_runtime('TYPE_MISMATCH')
     arr = inputstrings
-    if not arr._allocated: return VBArray([-1])
+    # dynamic=True throughout: arrays returned by Split/Filter are resizable in
+    # VBScript, so a later ReDim Preserve on the result must not raise error 10.
+    if not arr._allocated: return VBArray([-1], allocated=True, dynamic=True)
     res = []
     val_s = vbs_cstr(value)
     inc = vbs_cbool(include)
@@ -312,7 +314,7 @@ def Filter(inputstrings, value, include=True, compare=0):
         s = vbs_cstr(item)
         match = (val_s.lower() in s.lower()) if int(_to_int(compare)) == 1 else (val_s in s)
         if match == inc: res.append(item)
-    out = VBArray([len(res)-1] if res else [-1])
+    out = VBArray([len(res)-1] if res else [-1], allocated=True, dynamic=True)
     for i, r in enumerate(res): out._items[i] = r
     return out
 
@@ -407,6 +409,19 @@ def CStr(expr):
 
 def CBool(expr):
     if expr is VBNull: raise_runtime('INVALID_USE_OF_NULL')
+    # IIS parity: CBool is stricter than implicit truthiness. A string is
+    # accepted only as True/False or as a number; anything else - including
+    # the EMPTY string - is Type mismatch (13). `If "abc" Then` still does not
+    # raise, because that path goes through the lenient vbs_cbool().
+    e = _scalarize(expr)
+    if isinstance(e, str) and not isinstance(e, bool):
+        v = e.strip().lower()
+        if v in ("true", "false"):
+            return v == "true"
+        try:
+            return _to_decimal(e) != 0
+        except Exception:
+            raise_runtime('TYPE_MISMATCH')
     return vbs_cbool(expr)
 
 def Hex(number):
