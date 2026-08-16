@@ -803,9 +803,9 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>DateCreated</code></td><td>Creation date</td></tr>
         <tr><td><code>DateLastAccessed</code></td><td>Last access date</td></tr>
         <tr><td><code>DateLastModified</code></td><td>Last modified date</td></tr>
-        <tr><td><code>Drive</code></td><td>Drive letter</td></tr>
+        <tr><td><code>Drive</code></td><td>The <code>Drive</code> OBJECT. Its default property is <code>Path</code>, so <code>"" &amp; f.Drive</code> gives <code>C:</code> (no trailing separator); <code>f.Drive.RootFolder.Path</code> gives <code>C:\</code></td></tr>
         <tr><td><code>ParentFolder</code></td><td>Parent folder</td></tr>
-        <tr><td><code>ShortName</code></td><td>8.3 name</td></tr>
+        <tr><td><code>ShortName</code></td><td>8.3 NAME only, no path (contrast <code>ShortPath</code>)</td></tr>
         <tr><td><code>ShortPath</code></td><td>8.3 path</td></tr>
         <tr><td><code>Attributes</code></td><td>File attributes</td></tr>
         <tr><td><code>Copy(destination[, overwrite])</code></td><td>Copies file</td></tr>
@@ -824,7 +824,7 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>DateCreated</code></td><td>Creation date</td></tr>
         <tr><td><code>DateLastAccessed</code></td><td>Last access date</td></tr>
         <tr><td><code>DateLastModified</code></td><td>Last modified date</td></tr>
-        <tr><td><code>Drive</code></td><td>Drive letter</td></tr>
+        <tr><td><code>Drive</code></td><td>The <code>Drive</code> OBJECT. Its default property is <code>Path</code>, so <code>"" &amp; f.Drive</code> gives <code>C:</code> (no trailing separator); <code>f.Drive.RootFolder.Path</code> gives <code>C:\</code></td></tr>
         <tr><td><code>IsRootFolder</code></td><td>True if root</td></tr>
         <tr><td><code>Files</code></td><td>Files collection</td></tr>
         <tr><td><code>SubFolders</code></td><td>Subfolders collection</td></tr>
@@ -882,6 +882,7 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>Open([connection_string])</code></td><td>Opens connection</td></tr>
         <tr><td><code>Close()</code></td><td>Closes connection</td></tr>
         <tr><td><code>Execute(sql[, records_affected[, options]])</code></td><td>Executes SQL</td></tr>
+        <tr><td><code>OpenSchema(queryType[, criteria])</code></td><td>Schema rowsets &mdash; see below</td></tr>
         <tr><td><code>BeginTrans()</code></td><td>Begins transaction</td></tr>
         <tr><td><code>CommitTrans()</code></td><td>Commits transaction</td></tr>
         <tr><td><code>RollbackTrans()</code></td><td>Rolls back transaction</td></tr>
@@ -924,6 +925,22 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>Resync</code></td><td>Resyncs with database</td></tr>
     </tbody>
 </table>
+<h4>OpenSchema</h4>
+<p>Returns schema information as a Recordset, with the OLE DB rowset column names, so <code>rs("TABLE_NAME")</code> works as it does on IIS. Supported <code>SchemaEnum</code> values:</p>
+<table>
+    <thead><tr><th>Constant</th><th>Value</th><th>Columns</th></tr></thead>
+    <tbody>
+        <tr><td><code>adSchemaTables</code></td><td>20</td><td><code>TABLE_CATALOG</code>, <code>TABLE_SCHEMA</code>, <code>TABLE_NAME</code>, <code>TABLE_TYPE</code>, &hellip;</td></tr>
+        <tr><td><code>adSchemaColumns</code></td><td>4</td><td><code>TABLE_NAME</code>, <code>COLUMN_NAME</code>, <code>ORDINAL_POSITION</code>, <code>IS_NULLABLE</code>, <code>DATA_TYPE</code>, &hellip;</td></tr>
+        <tr><td><code>adSchemaIndexes</code></td><td>12</td><td><code>INDEX_NAME</code>, <code>TABLE_NAME</code>, <code>UNIQUE</code>, <code>PRIMARY_KEY</code>, <code>COLUMN_NAME</code> (SQLite only)</td></tr>
+        <tr><td><code>adSchemaPrimaryKeys</code></td><td>28</td><td><code>PK_TABLE_NAME</code>, <code>COLUMN_NAME</code>, <code>ORDINAL</code> (SQLite only)</td></tr>
+    </tbody>
+</table>
+<pre><code class="language-vbscript">Set rs = conn.OpenSchema(20)                              ' every table
+Set rs = conn.OpenSchema(20, Array(Empty, Empty, "widget"))  ' one table
+Set rs = conn.OpenSchema(4,  Array(Empty, Empty, "widget"))  ' its columns
+</code></pre>
+<p><code>criteria</code> is an array of restriction values positionally matched to the rowset's restriction columns; <code>Empty</code> entries mean "no restriction". Any other <code>queryType</code> raises rather than returning an empty recordset. System tables are excluded.</p>
 <h2>ADODB.Command</h2>
 <pre><code class="language-vbscript">Set cmd = Server.CreateObject("ADODB.Command")
 </code></pre>
@@ -1094,6 +1111,28 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
     <li><strong>Entities are not expanded.</strong> <code>&lt;!ENTITY x SYSTEM "file:///..."&gt;</code> stays literal instead of inlining the file, so the classic XXE read does not work.</li>
     <li><strong>TLS verification cannot be turned off.</strong> <code>setOption 2</code> (<code>SXH_OPTION_IGNORE_SERVER_SSL_CERT_ERROR_FLAGS</code>) is recorded and readable via <code>getOption</code>, but certificate and hostname checks stay on.</li>
     <li><strong>Requests to localhost and private networks are blocked</strong> unless <code>ASP_PY_ALLOW_LOCALHOST=1</code> / <code>ASP_PY_ALLOW_PRIVATE_NETS=1</code>. See <a href="#runtime-env">Runtime Environment Variables</a>.</li>
+</ul>
+<h2>WScript.Shell</h2>
+<pre><code class="language-vbscript">Set wsh = Server.CreateObject("WScript.Shell")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ExpandEnvironmentStrings(s)</code></td><td>Expands <code>%NAME%</code>. Unknown placeholders are preserved, as in WSH</td></tr>
+        <tr><td><code>Environment([scope])</code></td><td><code>SYSTEM</code> / <code>USER</code> / <code>VOLATILE</code> / <code>PROCESS</code> collection, with <code>Count</code>, <code>Length</code> and <code>Item</code></td></tr>
+        <tr><td><code>CurrentDirectory</code></td><td>Read/write</td></tr>
+        <tr><td><code>SpecialFolders</code></td><td>Collection; <code>sf("Windows")</code>, <code>"System"</code>, <code>"Fonts"</code>, <code>"Temp"</code>, <code>"Desktop"</code>, &hellip; An unknown or unavailable name yields <code>""</code> rather than raising</td></tr>
+        <tr><td><code>CreateShortcut(path)</code></td><td><code>.lnk</code> &rarr; <code>IWshShortcut</code>, <code>.url</code> &rarr; <code>IWshURLShortcut</code>. Any other extension raises</td></tr>
+        <tr><td><code>RegRead(name)</code></td><td>Reads a registry value (Windows only). <code>HKLM</code>/<code>HKCU</code>/<code>HKCR</code>/<code>HKU</code>/<code>HKCC</code> and their long forms; a trailing <code>\</code> reads the key's default value. <code>REG_MULTI_SZ</code> comes back as an array, <code>REG_BINARY</code> as a <code>Byte()</code></td></tr>
+        <tr><td><code>Run</code>, <code>Exec</code></td><td><strong>Not implemented</strong> &mdash; raise a catchable 429, see below</td></tr>
+    </tbody>
+</table>
+<p><code>IWshShortcut</code> exposes <code>TargetPath</code>, <code>Arguments</code>, <code>WorkingDirectory</code>, <code>Description</code>, <code>IconLocation</code>, <code>WindowStyle</code>, <code>Hotkey</code>, <code>FullName</code> and <code>Save</code>. <code>IWshURLShortcut</code> exposes <code>TargetPath</code>, <code>FullName</code> and <code>Save</code>, and re-opening an existing <code>.url</code> reads its target back.</p>
+<p>The <code>.lnk</code> writer builds a real <a href="https://learn.microsoft.com/openspecs/windows_protocols/ms-shllink/">[MS-SHLLINK]</a> file &mdash; header, <code>LinkTargetIDList</code>, <code>LinkInfo</code> and the string blocks &mdash; rather than calling the Shell COM object, so the same code path runs on a non-Windows host. Shortcuts written by ASPPY were verified by reading them back through Windows' own <code>WScript.Shell</code>: every property round-trips and Explorer resolves the target. On a non-Windows host the <code>LinkTargetIDList</code> is omitted (it is produced by the Windows shell), which leaves a link Windows can parse but not resolve.</p>
+<h4>Deliberate divergences</h4>
+<ul>
+    <li><strong><code>Run</code> and <code>Exec</code> are not implemented.</strong> They execute arbitrary shell commands from a web request, which contradicts the sandboxing ASPPY applies elsewhere &mdash; <code>FileSystemObject</code> is confined to the docroot, and <code>ADODB.Stream</code> to <code>ASP_PY_ADO_ROOT</code>. They raise ActiveX error 429, which <code>On Error Resume Next</code> can detect, rather than failing silently.</li>
+    <li><strong><code>RegWrite</code> and <code>RegDelete</code> are not implemented</strong> for the same reason. <code>RegRead</code> is available because it cannot change machine state.</li>
 </ul>
 <h2>CDO.Message</h2>
 <pre><code class="language-vbscript">Set msg = Server.CreateObject("CDO.Message")

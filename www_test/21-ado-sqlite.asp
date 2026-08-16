@@ -233,6 +233,78 @@ Expect "BLOB first byte", 66, AscB(MidB(back, 1, 1))
 </tbody>
 </table>
 
+<h2>OpenSchema</h2>
+<p>
+  Schema rowsets, with OLE DB column names so <code>rs("TABLE_NAME")</code>
+  works. This is how ADO code enumerates a database, and it gates
+  <code>Recordset.Open</code> in conformance suites.
+</p>
+<table>
+<thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead>
+<tbody>
+<%
+Const adSchemaColumns = 4
+Const adSchemaIndexes = 12
+Const adSchemaTables = 20
+Const adSchemaPrimaryKeys = 28
+
+Dim schemaNames, foundWidget, foundBlobs
+Set rs = conn.OpenSchema(adSchemaTables)
+Expect "OpenSchema(adSchemaTables) opens", 1, rs.State
+Expect "  ... TABLE_NAME column present", "TABLE_NAME", rs.Fields("TABLE_NAME").Name
+schemaNames = "" : foundWidget = 0 : foundBlobs = 0
+Do While Not rs.EOF
+    schemaNames = schemaNames & rs("TABLE_NAME") & ";"
+    If rs("TABLE_NAME") = "widget" Then foundWidget = 1
+    If rs("TABLE_NAME") = "blobs" Then foundBlobs = 1
+    rs.MoveNext
+Loop
+rs.Close
+Expect "  ... lists the widget table", 1, foundWidget
+Expect "  ... lists the blobs table", 1, foundBlobs
+
+' Restriction array: position 3 is TABLE_NAME.
+Set rs = conn.OpenSchema(adSchemaTables, Array(Empty, Empty, "widget"))
+Dim nFiltered : nFiltered = 0
+Do While Not rs.EOF
+    nFiltered = nFiltered + 1
+    rs.MoveNext
+Loop
+rs.Close
+Expect "criteria restricts to one table", 1, nFiltered
+
+Set rs = conn.OpenSchema(adSchemaColumns, Array(Empty, Empty, "widget"))
+Dim colList : colList = ""
+Do While Not rs.EOF
+    colList = colList & rs("COLUMN_NAME") & ","
+    rs.MoveNext
+Loop
+rs.Close
+Expect "adSchemaColumns lists widget columns", "id,name,qty,price,note,", colList
+
+Set rs = conn.OpenSchema(adSchemaPrimaryKeys, Array(Empty, Empty, "widget"))
+Expect "adSchemaPrimaryKeys finds the PK", "id", rs("COLUMN_NAME")
+rs.Close
+
+conn.Execute "CREATE INDEX ix_widget_name ON widget(name)"
+Set rs = conn.OpenSchema(adSchemaIndexes)
+Dim foundIx : foundIx = 0
+Do While Not rs.EOF
+    If rs("INDEX_NAME") = "ix_widget_name" Then foundIx = 1
+    rs.MoveNext
+Loop
+rs.Close
+Expect "adSchemaIndexes finds the index", 1, foundIx
+
+On Error Resume Next
+Set rs = conn.OpenSchema(999)
+Expect "unsupported QueryType raises", -1, CLng(Err.Number <> 0)
+Err.Clear
+On Error GoTo 0
+%>
+</tbody>
+</table>
+
 <h2>Close and reopen keeps the data</h2>
 <table>
 <thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead>
