@@ -14,6 +14,7 @@ Examples:
     python asppycli.py www_test/07-request-form.asp --method POST --body "name=Jeff&lang=vbscript"
     python asppycli.py www_test/index.asp --query "id=42" --show-headers
     python asppycli.py www_starter/default.asp --path /contacts/1/edit
+    python asppycli.py www/servicedeck/api.asp --docroot www --query "action=services" --session authed=True
 
 Exit codes:
     0  page rendered with HTTP status < 400
@@ -33,6 +34,7 @@ if _project_root not in sys.path:
 from ASPPY.http_request import Request
 from ASPPY.http_response import ResponseEndException
 from ASPPY.server_object import Server
+from ASPPY.vm.values import VBEmpty, VBNull
 from ASPPY.runner_vm import render_asp_vm, exec_file_granular
 from ASPPY.server import (
     _find_app_root,
@@ -43,13 +45,56 @@ from ASPPY.server import (
 )
 
 
+def parse_session_var(text):
+    """Parse a --session "name=value" pair into (name, typed_value).
+
+    Session values are Variants, so the literal is typed the way VBScript would
+    type it: True/False -> Boolean, a bare number -> Number, Empty/Null -> the
+    matching sentinel, anything else -> String. `name:s=value` forces String,
+    which is how you store "True" as text.
+    """
+    name, sep, raw = text.partition("=")
+    if not sep:
+        raise ValueError(f'expected "name=value", got {text!r}')
+    name = name.strip()
+    force_str = False
+    if name.lower().endswith(":s"):
+        name, force_str = name[:-2].strip(), True
+    if not name:
+        raise ValueError(f'missing session variable name in {text!r}')
+
+    if force_str:
+        return name, raw
+    low = raw.strip().lower()
+    if low == "true":
+        return name, True
+    if low == "false":
+        return name, False
+    if low == "empty":
+        return name, VBEmpty
+    if low == "null":
+        return name, VBNull
+    try:
+        return name, int(raw.strip())
+    except ValueError:
+        pass
+    try:
+        return name, float(raw.strip())
+    except ValueError:
+        pass
+    return name, raw
+
+
 def render_file(asp_file, docroot=None, method="GET", query="", headers=None,
-                body=b"", virtual_path=None):
+                body=b"", virtual_path=None, session_vars=None):
     """Render one .asp file and return a RenderResult (status, headers, body).
 
     Reuses server.py's global.asa loading, application/session stores and
     Request/Server construction - same code paths as the HTTP server, just
     without the socket.
+
+    `session_vars` is a mapping pre-loaded into Session before the page runs,
+    so an authenticated route can be rendered offline without replaying a login.
     """
     asp_file = os.path.abspath(asp_file)
     if not os.path.isfile(asp_file):
@@ -113,6 +158,11 @@ def render_file(asp_file, docroot=None, method="GET", query="", headers=None,
     if is_new:
         _init_session_from_global_asa(app_root, app_store, sess)
 
+    # Seed Session AFTER Session_OnStart, so an injected value wins over a
+    # default the global.asa may have set.
+    for k, v in (session_vars or {}).items():
+        sess.Contents.__vbs_index_set__(k, v)
+
     last_error = {"exc": None, "asp": None}
     srv = Server(
         docroot,
@@ -167,7 +217,21 @@ def main(argv=None):
                          "front-controller routing, e.g. --path /contacts/1)")
     ap.add_argument("--show-headers", action="store_true",
                     help="print HTTP status line and response headers to stderr")
+    ap.add_argument("--session", action="append", default=[], metavar="NAME=VALUE",
+                    help='preload a Session variable so protected pages can be '
+                         'rendered without logging in, e.g. --session authed=True '
+                         '(repeatable). True/False, numbers, Empty and Null are '
+                         'typed as VBScript would type them; use NAME:s=VALUE to '
+                         'force a string.')
     args = ap.parse_args(argv)
+
+    session_vars = {}
+    for sv in args.session:
+        try:
+            name, value = parse_session_var(sv)
+        except ValueError as e:
+            ap.error(f"invalid --session {sv!r}: {e}")
+        session_vars[name] = value
 
     headers = {}
     for h in args.header:
@@ -190,6 +254,7 @@ def main(argv=None):
             headers=headers,
             body=body,
             virtual_path=args.path,
+            session_vars=session_vars,
         )
     except (FileNotFoundError, ValueError) as e:
         print(f"asppycli: error: {e}", file=sys.stderr)
