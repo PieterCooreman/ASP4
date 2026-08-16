@@ -72,14 +72,16 @@ class ASPPYShim:
     # NOTE: `code`/`path` are deliberately REQUIRED positional parameters. The
     # VM invokes zero-arg host callables on bare member access
     # (_maybe_invoke_zero_arg), so a default value here would make merely
-    # *naming* ASPPY.ExecutePython spawn a Python subprocess.
-    def ExecutePython(self, code):
+    # *naming* ASPPY.ExecutePython spawn a Python subprocess. `args` and
+    # `timeout` may safely default because the first parameter still makes a
+    # bare zero-arg call raise TypeError.
+    def ExecutePython(self, code, args=None, timeout=None):
         from . import vb_python
-        return vb_python.ExecutePython(code)
+        return vb_python.ExecutePython(code, args, timeout)
 
-    def ExecutePythonFile(self, path):
+    def ExecutePythonFile(self, path, args=None, timeout=None):
         from . import vb_python
-        return vb_python.ExecutePythonFile(path)
+        return vb_python.ExecutePythonFile(path, args, timeout)
 
     def pop3(self):
         from . import pop3 as vb_pop3

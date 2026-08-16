@@ -262,15 +262,56 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
     </thead>
     <tbody>
         <tr>
-            <td><code>ASPPY.ExecutePython(code)</code></td>
+            <td><code>ASPPY.ExecutePython(code [, args] [, timeout])</code></td>
             <td>Execute inline Python source. The <code>code</code> parameter is a VBScript string containing valid Python. Returns the value passed to <code>ASPPY_RETURN</code> as a string, or <code>""</code> if <code>ASPPY_RETURN</code> is never called.</td>
         </tr>
         <tr>
-            <td><code>ASPPY.ExecutePythonFile(path)</code></td>
+            <td><code>ASPPY.ExecutePythonFile(path [, args] [, timeout])</code></td>
             <td>Execute a <code>.py</code> file. Relative paths resolve against the web root (docroot). The file must be inside the <code>ASP_PY_PYTHON_ROOT</code> sandbox. Uses the same <code>ASPPY_RETURN</code> convention.</td>
         </tr>
     </tbody>
 </table>
+
+<h3>Optional arguments</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Argument</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>args</code></td>
+            <td>Any JSON-encodable VBScript value &mdash; a string, number, boolean, <code>Array</code>, <code>Scripting.Dictionary</code>, or any nesting of those. The Python side receives it as the built-in <code>ASPPY_ARGS</code>, already decoded into plain Python objects (a Dictionary becomes a <code>dict</code>, an Array becomes a <code>list</code>). Omit it, or pass <code>Empty</code>/<code>Null</code>, and <code>ASPPY_ARGS</code> is <code>None</code>.</td>
+        </tr>
+        <tr>
+            <td><code>timeout</code></td>
+            <td>Timeout in seconds for this call only, overriding <code>ASP_PY_PYTHON_TIMEOUT</code>. Use it when one page mixes quick calls with a slow one &mdash; a package install or a long report &mdash; that should not be capped at the global default. Must be greater than zero.</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>Pass <code>args</code> and you no longer have to build Python source as a VBScript string just to inject parameters. The .py file stays a normal module you can lint, diff and run from a console:</p>
+
+<pre><code class="language-vbscript">Dim params, result, data
+Set params = Server.CreateObject("Scripting.Dictionary")
+params("op") = "report"
+params("month") = 3
+
+' 180-second budget for this call only; other calls keep the default.
+result = ASPPY.ExecutePythonFile(Server.MapPath("bridge.py"), params, 180)
+Set data = ASPPY.json.Decode(result)</code></pre>
+
+<pre><code class="language-python"># bridge.py
+import json
+
+def main(p):
+    return {"ok": True, "op": p.get("op"), "month": p.get("month")}
+
+ASPPY_RETURN(json.dumps(main(ASPPY_ARGS or {})))</code></pre>
+
+<p>The payload travels through a temporary file rather than the command line or the environment, so there is no practical size limit on <code>args</code>.</p>
 
 <h2>The ASPPY_RETURN Convention</h2>
 <p>Inside every Python snippet or file, use the built-in <code>ASPPY_RETURN(value)</code> function to return a string to VBScript:</p>
@@ -306,7 +347,7 @@ ASPPY_RETURN(json.dumps(data))</code></pre>
         <tr>
             <td><code>ASP_PY_PYTHON_TIMEOUT</code></td>
             <td><code>30</code></td>
-            <td>Maximum seconds a Python snippet may run before it is killed and an error is returned.</td>
+            <td>Default maximum seconds a Python snippet may run before it is killed and an error is returned. A single call can override this by passing a <code>timeout</code> argument.</td>
         </tr>
         <tr>
             <td><code>ASP_PY_PYTHON_ROOT</code></td>

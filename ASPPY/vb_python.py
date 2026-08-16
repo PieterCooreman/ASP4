@@ -5,17 +5,36 @@ spawns an isolated subprocess running the same interpreter that hosts ASPPY
 (``sys.executable``); the snippet hands a string back to VBScript by calling
 the injected builtin ``ASPPY_RETURN(value)``.
 
+Both methods take the same two optional arguments::
+
+    ASPPY.ExecutePython(code [, args] [, timeout])
+    ASPPY.ExecutePythonFile(path [, args] [, timeout])
+
+``args``     Any JSON-encodable VBScript value (string, number, boolean,
+             Array, Scripting.Dictionary, or a nesting of those). It arrives
+             in the snippet as the injected builtin ``ASPPY_ARGS``, already
+             decoded into plain Python objects. Omit it (or pass Empty/Null)
+             and ``ASPPY_ARGS`` is ``None``. This is what makes
+             ExecutePythonFile usable for real work: the .py file lives on
+             disk as a normal, lintable module instead of being rebuilt as a
+             VBScript string on every request.
+``timeout``  Per-call timeout in seconds, overriding ASP_PY_PYTHON_TIMEOUT.
+             Needed when one page mixes fast polling calls with a slow one
+             (e.g. a package install) that must not be capped at the global
+             default.
+
 Security: disabled by default. ``ASP_PY_ALLOW_PYTHON=1`` must be set in the
 server environment, otherwise every call raises a VBScript runtime error.
 
 Environment variables:
     ASP_PY_ALLOW_PYTHON    Set to 1 to enable the feature (default: disabled).
-    ASP_PY_PYTHON_TIMEOUT  Max seconds a snippet may run (default: 30).
+    ASP_PY_PYTHON_TIMEOUT  Default max seconds a snippet may run (default: 30).
     ASP_PY_PYTHON_ROOT     Sandbox root for ExecutePythonFile (default: docroot).
 
-Note: ``subprocess`` and ``tempfile`` are imported lazily inside _run() so that
-merely importing this module (which happens for every request through the
-ASPPY shim) stays cheap for the vast majority of pages that never call it.
+Note: ``subprocess``, ``tempfile`` and ``json`` are imported lazily (inside
+_run() / _write_args_file()) so that merely importing this module - which
+happens for every request through the ASPPY shim - stays cheap for the vast
+majority of pages that never call it.
 """
 
 from __future__ import annotations
@@ -41,11 +60,12 @@ _END = "\x03ASPPY_RETURN\x03"
 # lives in a separate bootstrap, never prepended to the user's code).
 _INLINE_NAME = "<asppy>"
 
-# Bootstrap executed via `python -c`. It installs ASPPY_RETURN as a builtin,
-# then compiles and runs the target file as __main__.
+# Bootstrap executed via `python -c`. It installs ASPPY_RETURN and ASPPY_ARGS
+# as builtins, then compiles and runs the target file as __main__.
 #   argv[1] = physical path of the file to execute
 #   argv[2] = display name used for compile()/tracebacks
 #   argv[3] = directory to place on sys.path[0] ("" for none)
+#   argv[4] = path of a JSON file holding ASPPY_ARGS ("" for none)
 _BOOTSTRAP = r'''
 import builtins, os, sys
 
@@ -84,12 +104,30 @@ def ASPPY_RETURN(value=""):
 builtins.ASPPY_RETURN = ASPPY_RETURN
 
 _target, _display, _syspath = sys.argv[1], sys.argv[2], sys.argv[3]
+_argsfile = sys.argv[4] if len(sys.argv) > 4 else ""
 
 # `python -c` puts '' (the cwd) on sys.path, which would let a stray json.py or
 # platform.py sitting in the web root shadow the stdlib. Drop it and use only
 # the explicit directory we were given.
 while sys.path and sys.path[0] in ("", ".", os.getcwd()):
     del sys.path[0]
+
+# Load the stdlib json now, while sys.path is still clean, and decode
+# ASPPY_ARGS with it. Two consequences, both deliberate:
+#   * a json.py sitting next to the target script cannot hijack the decode;
+#   * because the stdlib module is now in sys.modules, the target script's own
+#     `import json` also gets the stdlib one. That differs from plain
+#     `python script.py`, but the docroot can contain web-uploaded files, so
+#     the defensive reading wins - and it is done unconditionally so the
+#     behaviour never depends on whether args happened to be supplied.
+import json as _json
+
+ASPPY_ARGS = None
+if _argsfile:
+    with open(_argsfile, "r", encoding="utf-8") as _af:
+        ASPPY_ARGS = _json.load(_af)
+builtins.ASPPY_ARGS = ASPPY_ARGS
+
 if _syspath:
     sys.path.insert(0, _syspath)
 
@@ -102,6 +140,7 @@ _globals = {
     "__file__": _display,
     "__builtins__": builtins,
     "ASPPY_RETURN": ASPPY_RETURN,
+    "ASPPY_ARGS": ASPPY_ARGS,
 }
 exec(compile(_src, _display, "exec"), _globals)
 '''
@@ -160,6 +199,84 @@ def _ensure_enabled(method: str) -> None:
         )
 
 
+def _is_omitted(value) -> bool:
+    """True when VBScript did not really supply this optional argument.
+
+    ``None`` is what the VM passes for an elided slot (``Foo(a, , c)``);
+    Empty/Null/Nothing are what an uninitialised or cleared variable holds.
+    """
+    return value is None or value is VBEmpty or value is VBNull or value is VBNothing
+
+
+def _resolve_timeout(override, method: str) -> float:
+    """Per-call timeout in seconds, falling back to ASP_PY_PYTHON_TIMEOUT."""
+    if _is_omitted(override):
+        return _timeout_seconds()
+    try:
+        secs = float(override)
+    except (TypeError, ValueError):
+        try:
+            secs = float(vbs_cstr(override).strip())
+        except Exception:
+            raise VBScriptRuntimeError(
+                f"ASPPY.{method}: timeout must be a number of seconds"
+            )
+    # `not (secs > 0)` also rejects NaN, which would make subprocess.run hang.
+    if not (secs > 0):
+        raise VBScriptRuntimeError(f"ASPPY.{method}: timeout must be greater than 0")
+    if secs == float("inf"):
+        raise VBScriptRuntimeError(
+            f"ASPPY.{method}: timeout must be a finite number of seconds"
+        )
+    return secs
+
+
+def _write_args_file(value, method: str) -> str:
+    """Serialise the optional `args` value to a temp JSON file for the child.
+
+    Returns the file's path, or "" when no args were supplied (caller must
+    unlink whatever it gets back). A file rather than argv or the environment:
+    argv is capped at 32767 chars on Windows and the environment block has its
+    own limit, whereas a params payload is caller-controlled and unbounded.
+    """
+    if _is_omitted(value):
+        return ""
+
+    # Imported here (not at module scope) both to keep the common no-args path
+    # cheap and because vb_json pulls in server_object, which would otherwise
+    # create an import cycle through the ASPPY shim.
+    import json
+    import tempfile
+
+    from . import vb_json
+
+    try:
+        payload = vb_json._to_json_value(value)
+    except Exception as e:
+        raise VBScriptRuntimeError(f"ASPPY.{method}: args are not JSON-encodable: {e}")
+
+    fd, tmp = tempfile.mkstemp(prefix="asppy_args_", suffix=".json", text=False)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(payload, f, ensure_ascii=False)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return tmp
+
+
+def _unlink_quietly(path: str) -> None:
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
 def _require_string(value, method: str, what: str) -> str:
     if value is None or value is VBEmpty or value is VBNull or value is VBNothing:
         raise VBScriptRuntimeError(f"ASPPY.{method}: {what} is required")
@@ -214,7 +331,15 @@ def _error_summary(stderr: str, display_name: str = "") -> str:
     return f"{summary} ({frame})"
 
 
-def _run(method: str, target_path: str, display_name: str, sys_path_dir: str, cwd: str) -> str:
+def _run(
+    method: str,
+    target_path: str,
+    display_name: str,
+    sys_path_dir: str,
+    cwd: str,
+    args_path: str = "",
+    timeout: float = 0.0,
+) -> str:
     import subprocess
 
     env = dict(os.environ)
@@ -232,9 +357,11 @@ def _run(method: str, target_path: str, display_name: str, sys_path_dir: str, cw
         target_path,
         display_name,
         sys_path_dir or "",
+        args_path or "",
     ]
 
-    timeout = _timeout_seconds()
+    if not timeout:
+        timeout = _timeout_seconds()
     try:
         proc = subprocess.run(
             argv,
@@ -250,7 +377,7 @@ def _run(method: str, target_path: str, display_name: str, sys_path_dir: str, cw
     except subprocess.TimeoutExpired:
         raise VBScriptRuntimeError(
             f"ASPPY.{method}: Python code timed out after {timeout:g} second(s) "
-            "(raise ASP_PY_PYTHON_TIMEOUT to allow more)"
+            "(pass a timeout argument, or raise ASP_PY_PYTHON_TIMEOUT, to allow more)"
         )
     except FileNotFoundError:
         raise VBScriptRuntimeError(
@@ -274,10 +401,16 @@ def _run(method: str, target_path: str, display_name: str, sys_path_dir: str, cw
     return payload if payload is not None else ""
 
 
-def ExecutePython(code) -> str:
-    """Execute inline Python source and return the ASPPY_RETURN value."""
+def ExecutePython(code, args=None, timeout=None) -> str:
+    """Execute inline Python source and return the ASPPY_RETURN value.
+
+    `args` is exposed to the snippet as the builtin ASPPY_ARGS; `timeout`
+    overrides ASP_PY_PYTHON_TIMEOUT for this call only. Both are optional.
+    """
     _ensure_enabled("ExecutePython")
     src = _require_string(code, "ExecutePython", "Python code")
+    secs = _resolve_timeout(timeout, "ExecutePython")
+    args_path = _write_args_file(args, "ExecutePython")
 
     import tempfile
 
@@ -291,18 +424,21 @@ def ExecutePython(code) -> str:
             f.write(src.replace("\r\n", "\n").replace("\r", "\n"))
         # No sys.path entry: an inline snippet has no "own directory", and
         # exposing the docroot would let web-uploaded .py files be imported.
-        return _run("ExecutePython", tmp, _INLINE_NAME, "", cwd)
+        return _run("ExecutePython", tmp, _INLINE_NAME, "", cwd, args_path, secs)
     finally:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        _unlink_quietly(tmp)
+        _unlink_quietly(args_path)
 
 
-def ExecutePythonFile(path) -> str:
-    """Execute a .py file (relative paths resolve against the docroot)."""
+def ExecutePythonFile(path, args=None, timeout=None) -> str:
+    """Execute a .py file (relative paths resolve against the docroot).
+
+    `args` is exposed to the script as the builtin ASPPY_ARGS; `timeout`
+    overrides ASP_PY_PYTHON_TIMEOUT for this call only. Both are optional.
+    """
     _ensure_enabled("ExecutePythonFile")
     raw = _require_string(path, "ExecutePythonFile", "path")
+    secs = _resolve_timeout(timeout, "ExecutePythonFile")
 
     # Two distinct roots, per the documented contract: relative paths resolve
     # against the web root, while the sandbox that the resolved file must sit
@@ -342,6 +478,12 @@ def ExecutePythonFile(path) -> str:
         raise VBScriptRuntimeError(f"ASPPY.ExecutePythonFile: not a file: {raw}")
 
     script_dir = os.path.dirname(phys)
-    # The script's own folder goes on sys.path (like `python script.py`) so it
-    # can import sibling helper modules.
-    return _run("ExecutePythonFile", phys, phys, script_dir, script_dir)
+    args_path = _write_args_file(args, "ExecutePythonFile")
+    try:
+        # The script's own folder goes on sys.path (like `python script.py`) so
+        # it can import sibling helper modules.
+        return _run(
+            "ExecutePythonFile", phys, phys, script_dir, script_dir, args_path, secs
+        )
+    finally:
+        _unlink_quietly(args_path)

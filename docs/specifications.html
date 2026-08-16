@@ -735,10 +735,11 @@ ASPPY.ImageEnhance.Contrast(img)     ' Contrast enhancer
 ASPPY.Crypto.Verify(password, hashed)     ' Verifies password against hash
 </code></pre>
 <h3>ExecutePython</h3>
-<pre><code class="language-vbscript">ASPPY.ExecutePython(code)        ' Executes inline Python source, returns ASPPY_RETURN value as string
-ASPPY.ExecutePythonFile(path)    ' Executes a .py file (relative to docroot), returns ASPPY_RETURN value
+<pre><code class="language-vbscript">ASPPY.ExecutePython(code [, args] [, timeout])       ' Executes inline Python source, returns ASPPY_RETURN value as string
+ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (relative to docroot), returns ASPPY_RETURN value
 </code></pre>
-<p>Enable with environment variable <code>ASP_PY_ALLOW_PYTHON=1</code>. Each call spawns an isolated Python subprocess. The Python snippet uses <code>ASPPY_RETURN(value)</code> to return a string to VBScript. See the <a href="python.html">ASPPY.ExecutePython</a> page for full documentation, samples, and environment variables.</p>
+<p>Enable with environment variable <code>ASP_PY_ALLOW_PYTHON=1</code>. Each call spawns an isolated Python subprocess. The Python snippet uses <code>ASPPY_RETURN(value)</code> to return a string to VBScript.</p>
+<p>Both optional arguments work the same way on either method. <code>args</code> takes any JSON-encodable value (string, number, boolean, <code>Array</code>, <code>Scripting.Dictionary</code>, or a nesting of those) and the Python side reads it as the built-in <code>ASPPY_ARGS</code>, already decoded &mdash; it is <code>None</code> when the argument is omitted. <code>timeout</code> is a per-call limit in seconds that overrides <code>ASP_PY_PYTHON_TIMEOUT</code>. See the <a href="python.html">ASPPY.ExecutePython</a> page for full documentation, samples, and environment variables.</p>
 <hr />
 <h1>COM Objects</h1>
 <h2>Scripting.Dictionary</h2>
