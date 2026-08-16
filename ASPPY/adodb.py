@@ -72,6 +72,13 @@ adUseClient = 3
 adStateOpen = 1
 adStateClosed = 0
 
+# IsolationLevelEnum (subset)
+adXactUnspecified = -1
+adXactReadUncommitted = 256
+adXactReadCommitted = 4096
+adXactRepeatableRead = 65536
+adXactSerializable = 1048576
+
 adEditNone = 0
 adEditInProgress = 1
 adEditAdd = 2
@@ -292,6 +299,22 @@ def parse_connection_string(conn_str: str) -> ParsedConnectionString:
         data_source=data_source,
         errors=[],
     )
+
+
+def _commit_unless_in_transaction(conn, db) -> None:
+    """Commit a statement, unless an explicit BeginTrans is in progress.
+
+    The SQLite connection runs in autocommit mode (isolation_level = None), so
+    every statement commits itself and this call is normally a no-op. Inside an
+    explicit `BEGIN` it is NOT a no-op: an unconditional commit here ends the
+    transaction, and a later RollbackTrans then has nothing left to undo.
+    """
+    if getattr(conn, '_in_transaction', False):
+        return
+    try:
+        db.commit()
+    except Exception:
+        pass
 
 
 def _resolve_sqlite_path(info: ParsedConnectionString, docroot: str) -> Optional[str]:
@@ -1359,7 +1382,7 @@ class ADORecordset:
             qtable = self._quote_ident(self._table_name) if self._table_name else ''
             try:
                 cur.execute(f"INSERT INTO {qtable} ({qcols}) VALUES ({ph})", vals)
-                db.commit()
+                _commit_unless_in_transaction(conn, db)
                 last_id = getattr(cur, 'lastrowid', None)
                 # Refresh row with new pk
                 if self._pk_col and last_id is not None:
@@ -1423,7 +1446,7 @@ class ADORecordset:
                         # Row changed or deleted?
                         pass
 
-                db.commit()
+                _commit_unless_in_transaction(conn, db)
 
                 # Update memory row directly since we can't reliably re-fetch without PK
                 row_list = list(self._rows[self._cur_idx])
@@ -1467,7 +1490,7 @@ class ADORecordset:
             qtable = self._quote_ident(self._table_name)
             qpk = self._quote_ident(self._pk_col)
             cur.execute(f"DELETE FROM {qtable} WHERE {qpk}=?", (pk_val,))
-            db.commit()
+            _commit_unless_in_transaction(conn, db)
             rows = list(self._rows)
             rows.pop(self._cur_idx)
             self._rows = rows
@@ -1716,6 +1739,16 @@ class ADOConnection:
         # instead of raising error 438. ASPPY has no OLE DB provider to
         # enumerate; see ADOProperties.
         self.Properties = ADOProperties()
+        # ADO library version. IIS on Windows 10 reports "10.0" (msado15.dll);
+        # scripts read it for feature detection, so an empty string is worse
+        # than a plausible value.
+        self.Version: str = '10.0'
+        # IsolationLevelEnum. adXactReadCommitted (4096) is what IIS reports
+        # for a Jet/ACE connection and is the level SQLite gives us too.
+        self.IsolationLevel: int = adXactReadCommitted
+        # ConnectOptionEnum bitmask: neither adXactCommitRetaining nor
+        # adXactAbortRetaining, matching IIS (0).
+        self.Attributes: int = 0
         self.State: int = adStateClosed
         self._db_path: str = ''
         self._in_transaction: bool = False
@@ -1808,7 +1841,7 @@ class ADOConnection:
                         rs._detect_pk(self, stmt)
                     recordsets.append(rs)
                 else:
-                    db.commit()
+                    _commit_unless_in_transaction(self, db)
             if recordsets:
                 rs0 = recordsets[0]
                 rs0._next_recordsets = recordsets[1:]
@@ -1938,6 +1971,12 @@ class ADOParameter:
         self.Value = value
         self.Precision = 0
         self.NumericScale = 0
+        # ParameterAttributesEnum bitmask. IIS reports 0 for a parameter built
+        # with CreateParameter and never appended to a connected Command.
+        self.Attributes = 0
+        # Provider-specific property collection; empty without a live provider,
+        # which is also what IIS reports here (Count = 0).
+        self.Properties = ADOProperties()
 
 
 class ADOParameters:
@@ -2034,7 +2073,7 @@ class ADOCommand:
                 rs.State = adStateOpen
                 return rs
             else:
-                db.commit()
+                _commit_unless_in_transaction(conn, db)
                 return ADORecordset(conn)
         except Exception as e:
             try:

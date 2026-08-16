@@ -1101,11 +1101,13 @@ class ADODBStream:
                 # Type change behaves like ADO.Stream.
                 self._buf_text = ""
             elif old_t == self.adTypeText and new_t == self.adTypeBinary:
-                cs = vbs_cstr(getattr(self, 'Charset', '') or 'utf-8')
-                try:
-                    self._buf_bin = bytearray(vbs_cstr(self._buf_text).encode(cs, errors='replace'))
-                except Exception:
-                    self._buf_bin = bytearray(vbs_cstr(self._buf_text).encode('utf-8', errors='replace'))
+                # The binary view of a text stream is exactly what it would
+                # write out, BOM included - switching Type is how ADO scripts
+                # inspect the encoded bytes. This used to re-encode without the
+                # BOM, so the byte view disagreed with Size and SaveToFile.
+                if vbs_cstr(self._buf_text):
+                    self._buf_bin = bytearray(self._text_bytes_for_io())
+                    self._buf_text = ""
         except Exception:
             pass
 
@@ -1117,8 +1119,46 @@ class ADODBStream:
     def CharSet(self, v):
         self.Charset = v
 
+    def _text_is_authoritative(self) -> bool:
+        """True when the character buffer, not the byte buffer, holds the data."""
+        if self._type == self.adTypeBinary:
+            return False
+        return not (len(self._buf_bin) > 0 and not self._buf_text)
+
+    def _char_to_byte(self, nchars: int) -> int:
+        """Character index in the text buffer -> ADO byte offset (BOM included)."""
+        txt = vbs_cstr(self._buf_text)
+        n = max(0, min(int(nchars), len(txt)))
+        if not txt or n == 0:
+            # Byte 0 and the first byte after the BOM both denote character 0;
+            # ADO reports the start of the stream as 0, so prefer that.
+            return 0
+        enc, bom = self._encoding_and_bom()
+        try:
+            return len(bom) + len(txt[:n].encode(enc, errors='replace'))
+        except Exception:
+            return len(bom) + len(txt[:n].encode('utf-8', errors='replace'))
+
+    def _byte_to_char(self, nbytes: int) -> int:
+        """ADO byte offset -> character index in the text buffer."""
+        raw = self._text_bytes_for_io()
+        if not raw:
+            return 0
+        enc, bom = self._encoding_and_bom()
+        n = max(0, min(int(nbytes), len(raw)))
+        body = raw[len(bom):n] if n > len(bom) else b""
+        try:
+            return len(body.decode(enc, errors='ignore'))
+        except Exception:
+            return len(body.decode('utf-8', errors='ignore'))
+
     @property
     def Position(self):
+        # ADO reports Position in BYTES, so at end-of-stream it equals Size.
+        # Internally _pos indexes the character buffer for text streams, hence
+        # the translation here (and in the setter).
+        if self._text_is_authoritative():
+            return self._char_to_byte(self._pos)
         return int(self._pos)
 
     @Position.setter
@@ -1126,8 +1166,12 @@ class ADODBStream:
         n = int(v)
         if n < 0:
             n = 0
-        # For legacy upload scripts using text-mode streams with binary data:
-        # freeASPUpload passes position that's 2 bytes too high. Adjust.
+        if self._text_is_authoritative():
+            self._pos = self._byte_to_char(n)
+            return
+        # Legacy upload scripts (freeASPUpload) drive a TEXT-mode stream that
+        # actually holds bytes, and pass a position 2 too high; Size adds the
+        # matching +2 for that same case. Left exactly as it was.
         if n > 0 and self._type == self.adTypeText and len(self._buf_bin) > 0 and (not self._buf_text):
             n -= 2
             if n < 0:
@@ -1147,17 +1191,10 @@ class ADODBStream:
             return len(self._buf_bin)
         if self._type == self.adTypeBinary:
             return len(self._buf_bin)
-        # Text stream: IIS/ADO often reports Size as character count + 2.
-        try:
-            cs = vbs_cstr(getattr(self, 'Charset', '') or '').strip().lower()
-        except Exception:
-            cs = ''
-        if cs in ('unicode', 'utf-16', 'utf16', 'utf-16le', 'utf-16-le'):
-            return len(vbs_cstr(self._buf_text)) + 2
-        try:
-            return len(vbs_cstr(self._buf_text).encode(vbs_cstr(self.Charset) or 'utf-8', errors='replace'))
-        except Exception:
-            return len(vbs_cstr(self._buf_text).encode('utf-8', errors='replace'))
+        # Text stream: ADO reports the length in BYTES of what the stream would
+        # write out, BOM included. (This used to approximate it as character
+        # count + 2, which was only ever right for UTF-16 ASCII text.)
+        return len(self._text_bytes_for_io())
 
     @property
     def EOS(self):
@@ -1188,29 +1225,45 @@ class ADODBStream:
         s = vbs_cstr(ls)
         return s or "\r\n"
 
-    def _text_bytes_for_io(self) -> bytes:
-        """Encode text buffer to bytes for IO-like operations (CopyTo, SaveToFile).
+    def _encoding_and_bom(self) -> tuple:
+        """Python codec and byte-order mark for the current Charset.
 
-        ADO.Stream text-to-bytes conversion can include a BOM for Unicode.
+        ADO writes a BOM for the Unicode encodings and nothing for single-byte
+        code pages. Verified against IIS by writing 16 characters plus one LF
+        and reading the buffer back as binary:
+
+            Charset         Size   first bytes
+            utf-8            20    EF BB BF 48   <- 3-byte BOM
+            Unicode          36    FF FE 48 00   <- 2-byte BOM, UTF-16LE
+            windows-1252     17    48 65 6C 6C   <- no BOM
         """
-        txt = vbs_cstr(self._buf_text)
         cs = vbs_cstr(getattr(self, 'Charset', '') or 'Unicode').strip()
         cs_l = cs.lower()
         if cs_l in ('unicode', 'utf-16', 'utf16', 'utf-16le', 'utf-16-le'):
-            enc = 'utf-16-le'
-            bom = b"\xff\xfe"
-        elif cs_l in ('utf-8', 'utf8'):
-            enc = 'utf-8'
-            bom = b""
-        elif cs_l in ('iso-8859-1', 'latin1', 'latin-1'):
-            enc = 'latin-1'
-            bom = b""
-        elif cs_l in ('windows-1252', 'cp1252'):
-            enc = 'cp1252'
-            bom = b""
-        else:
-            enc = cs or 'utf-8'
-            bom = b""
+            return 'utf-16-le', b"\xff\xfe"
+        if cs_l in ('utf-8', 'utf8'):
+            return 'utf-8', b"\xef\xbb\xbf"
+        if cs_l in ('iso-8859-1', 'latin1', 'latin-1'):
+            return 'latin-1', b""
+        if cs_l in ('windows-1252', 'cp1252'):
+            return 'cp1252', b""
+        return (cs or 'utf-8'), b""
+
+    def _text_bytes_for_io(self) -> bytes:
+        """The text buffer as ADO would hand it out: BOM + encoded text.
+
+        This is the single byte view used by Size, SaveToFile and CopyTo, so
+        the three cannot disagree. SaveToFile used to re-encode without any
+        BOM, which meant a UTF-8 file written through ADODB.Stream - the usual
+        way legacy ASP produces CSV and XML - came out without the BOM its
+        consumers (Excel above all) expect.
+        """
+        txt = vbs_cstr(self._buf_text)
+        if not txt:
+            # An empty stream is 0 bytes on IIS - the BOM only appears once
+            # there is content to write.
+            return b""
+        enc, bom = self._encoding_and_bom()
         try:
             return bom + txt.encode(enc, errors='replace')
         except Exception:
@@ -1226,8 +1279,38 @@ class ADODBStream:
         return
 
     def SetEOS(self):
+        """Make the current position the end of the stream, discarding the rest.
+
+        This used to do the opposite - move the POSITION to the end - so
+        `stm.Position = 0 : stm.SetEOS` left the content untouched instead of
+        emptying the stream.
+
+        For a text stream the cut is made on the BYTE offset, as ADO does, so
+        `Position = 0` also removes the BOM and leaves Size at 0. (Note the
+        wider caveat on Position below: ReadText and SkipLine still treat it as
+        a character offset in text mode.)
+        """
         self._ensure_open()
-        self._pos = int(self._effective_length())
+        if self._type == self.adTypeBinary or (len(self._buf_bin) > 0 and not self._buf_text):
+            pos = max(0, int(self._pos))
+            del self._buf_bin[pos:]
+            self._pos = min(pos, len(self._buf_bin))
+            return
+
+        # _pos indexes characters here; the cut is on the byte offset.
+        pos = self._char_to_byte(self._pos)
+        raw = self._text_bytes_for_io()[:pos]
+        enc, bom = self._encoding_and_bom()
+        if raw.startswith(bom):
+            raw = raw[len(bom):]
+        elif bom:
+            # The cut landed inside the BOM: nothing decodable survives.
+            raw = b""
+        try:
+            self._buf_text = raw.decode(enc, errors='ignore')
+        except Exception:
+            self._buf_text = raw.decode('utf-8', errors='ignore')
+        self._pos = min(pos, int(self._effective_length()))
 
     def SkipLine(self):
         self._ensure_open()
@@ -1301,13 +1384,9 @@ class ADODBStream:
                 f.write(data)
             return
 
-        cs = vbs_cstr(getattr(self, 'Charset', '') or 'utf-8')
-        try:
-            data = vbs_cstr(self._buf_text).encode(cs, errors='replace')
-        except Exception:
-            data = vbs_cstr(self._buf_text).encode('utf-8', errors='replace')
+        # Same byte view as Size/CopyTo, so the file on disk carries the BOM.
         with open(phys, 'wb') as f:
-            f.write(data)
+            f.write(self._text_bytes_for_io())
 
     def Read(self, count=None):
         self._ensure_open()
