@@ -23,6 +23,125 @@ from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 import http.client
+import xml.etree.ElementTree as ET
+
+# vb_runtime imports nothing from ASPPY, so this cannot create a cycle.
+from .vb_runtime import vbs_cstr
+from .vm.values import VBNothing, VBNull
+
+# Optional lxml backend.
+#
+# Python's bundled ElementTree has no XSLT engine and only a small subset of
+# XPath, so the features below need lxml. It is optional in the same way fpdf2,
+# Pillow and bcrypt are: absent, everything else keeps working and only the
+# features that genuinely require it raise, naming the package.
+#
+#   * transformNode / transformNodeToObject   (XSLT 1.0)
+#   * XPath beyond ElementTree's subset       (axes, functions, unions,
+#     attribute selection, namespace prefixes)
+#   * CDATA, comment and processing-instruction preservation on parse
+#   * original namespace prefixes preserved on output
+try:
+    from lxml import etree as _LXML  # type: ignore
+    _HAS_LXML = True
+except ImportError:  # pragma: no cover - depends on the host environment
+    _LXML = None  # type: ignore
+    _HAS_LXML = False
+
+
+def _require_lxml(feature: str):
+    """Return the lxml.etree module, or raise naming the missing package."""
+    if not _HAS_LXML:
+        raise Exception(
+            "MSXML: %s requires the lxml package. Install it with "
+            "'pip install lxml' in the interpreter that runs ASPPY." % feature)
+    return _LXML
+
+
+# The tree backend. EVERY element must come from the same module - an
+# ElementTree element cannot be appended to an lxml tree - so all construction
+# and serialisation goes through _TB rather than ET directly. (`ET` is still
+# imported for the cast(ET.Element, ...) type hints, which are no-ops at
+# runtime.)
+_TB: Any = _LXML if _HAS_LXML else ET
+
+# Comment / processing-instruction markers for whichever backend is active.
+_COMMENT_TAGS = tuple(m.Comment for m in ((ET, _LXML) if _HAS_LXML else (ET,)))
+_PI_TAGS = tuple(m.ProcessingInstruction for m in ((ET, _LXML) if _HAS_LXML else (ET,)))
+
+
+# Options passed to lxml's iterparse. strip_cdata=False keeps <![CDATA[...]]>
+# sections intact; comments and PIs are retained by default. resolve_entities
+# =False and no_network=True block XXE, which the stdlib parser avoids simply
+# by never resolving anything.
+_LXML_PARSE_OPTS = dict(strip_cdata=False, resolve_entities=False,
+                        no_network=True, remove_comments=False, remove_pis=False)
+
+
+# XPath constructs ElementTree's ElementPath cannot evaluate. Used only on the
+# stdlib fallback, to turn a silent empty result into an actionable error.
+_EP_UNSUPPORTED = (
+    ("an axis (::)", re.compile(r'::')),
+    ("a union (|)", re.compile(r'\|')),
+    ("a function call", re.compile(r'\b(?:text|contains|starts-with|substring|'
+                                   r'normalize-space|count|not|string|concat|'
+                                   r'translate|number|sum|position)\s*\(')),
+    ("attribute selection (@ outside a predicate)", re.compile(r'(?<!\[)@[\w:.-]+\s*$')),
+    ("a namespace prefix", re.compile(r'(?:^|/)\s*[A-Za-z_][\w.-]*:')),
+    ("an arithmetic or boolean predicate", re.compile(r'\[[^\]]*\b(?:and|or|div|mod)\b')),
+    # A single leading slash is an absolute path from the document root;
+    # ElementPath only searches below the context element.
+    ("an absolute path (/...)", re.compile(r'^/(?!/)')),
+)
+
+
+def _elementpath_unsupported(xp: str) -> str:
+    """Name the first unsupported construct in `xp`, or "" when it is fine."""
+    for label, rx in _EP_UNSUPPORTED:
+        if rx.search(xp):
+            return label
+    return ""
+
+
+def _parse_selection_namespaces(decl: str) -> dict[str, str]:
+    """Parse `xmlns:a='urn:x' xmlns:b="urn:y"` into {prefix: uri}."""
+    out: dict[str, str] = {}
+    for m in re.finditer(r'xmlns:([\w.-]+)\s*=\s*([\'"])(.*?)\2', str(decl or '')):
+        out[m.group(1)] = m.group(3)
+    return out
+
+
+def _stylesheet_xml(stylesheet) -> str:
+    """Serialise whatever was passed as a stylesheet to XSLT source text."""
+    if stylesheet is None or stylesheet is VBNothing:
+        raise Exception("MSXML: transformNode requires a stylesheet")
+    # A DOMDocument or an element node: take its serialised form.
+    xml_attr = getattr(stylesheet, "xml", None)
+    if isinstance(xml_attr, str) and xml_attr.strip():
+        return xml_attr
+    text = vbs_cstr(stylesheet)
+    if text.strip():
+        return text
+    raise Exception("MSXML: the stylesheet is empty")
+
+
+def _xslt_transform(source_xml: str, stylesheet) -> str:
+    """Run an XSLT 1.0 transform and return the serialised result."""
+    LX = _require_lxml("transformNode/transformNodeToObject (XSLT)")
+    if not (source_xml or "").strip():
+        raise Exception("MSXML: nothing to transform (the document is empty)")
+    xsl_text = _stylesheet_xml(stylesheet)
+    try:
+        src_doc = LX.fromstring((source_xml or "").encode("utf-8"))
+        xsl_doc = LX.fromstring(xsl_text.encode("utf-8"))
+        transform = LX.XSLT(xsl_doc)
+        result = transform(src_doc)
+    except Exception as e:
+        raise Exception("MSXML: XSLT transform failed: %s" % e)
+    try:
+        return str(result)
+    except Exception:
+        return LX.tostring(result, encoding="unicode")
 
 try:
     import certifi
@@ -30,7 +149,6 @@ try:
 except ImportError:
     _HAS_CERTIFI = False
 import ipaddress
-import xml.etree.ElementTree as ET
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -310,6 +428,57 @@ class ServerXMLHTTP:
         self._timeout_s = 15.0
         self._aborted = False
 
+        # setProxy/setOption state. Both are stateful setters on MSXML; the
+        # values are recorded and readable, but this runtime always connects
+        # directly and always verifies TLS (see setOption for why).
+        self._proxy_settings: tuple[int, str, str] = (0, "", "")
+        self._proxy_credentials: tuple[str, str] = ("", "")
+        self._options: dict[int, Any] = {}
+
+    def setProxy(self, proxySetting=0, proxyServer="", bypassList=""):
+        """SXH_PROXY_SETTING_*: 0 DEFAULT, 1 PRECONFIG, 2 DIRECT, 3 PROXY.
+
+        Recorded but not acted on - requests always go direct.
+        """
+        try:
+            self._proxy_settings = (int(proxySetting), str(proxyServer), str(bypassList))
+        except Exception:
+            self._proxy_settings = (0, "", "")
+
+    def setProxyCredentials(self, userName="", password=""):
+        """Accepted and recorded. No proxy is used, so they are never sent."""
+        self._proxy_credentials = (str(userName or ""), str(password or ""))
+
+    def setOption(self, option, value):
+        """SXH_OPTION_*. Values are recorded and readable via getOption.
+
+        Note option 2 (SXH_OPTION_IGNORE_SERVER_SSL_CERT_ERROR_FLAGS) is
+        deliberately NOT honoured: certificate and hostname verification stay
+        on. Legacy pages that set it to work around an expired certificate
+        will still fail here, which is the safer default for a server that may
+        be reached from the public internet.
+        """
+        try:
+            k = int(option)
+        except Exception:
+            return
+        self._options[k] = value
+
+    def getOption(self, option):
+        try:
+            k = int(option)
+        except Exception:
+            return None
+        return self._options.get(k)
+
+    def waitForResponse(self, timeoutSeconds=0):
+        """True once the response is complete.
+
+        send() is synchronous in this runtime, so by the time a script can
+        call this the exchange has already finished.
+        """
+        return self.readyState == 4
+
     def setTimeouts(self, resolve_ms, connect_ms, send_ms, receive_ms):
         # Best-effort: use receive timeout as total.
         try:
@@ -414,7 +583,7 @@ class DOMParseError:
 
 
 class _Attr:
-    def __init__(self, name: str, text: str):
+    def __init__(self, name: str, text: str, namespace_uri: str = ""):
         self.name = name
         self.text = text
         # MSXML attribute node aliases
@@ -424,6 +593,16 @@ class _Attr:
         self.nodeTypedValue = text
         self.nodeType = 2
         self.nodeTypeString = "attribute"
+        # Namespace / schema members. An attribute written in source always
+        # reports specified=True; only values defaulted from a DTD report
+        # False, and no DTD is parsed here.
+        self.specified = True
+        self.baseName = name.split(':', 1)[-1]
+        self.prefix = name.split(':', 1)[0] if ':' in name else ""
+        self.namespaceURI = namespace_uri
+        self.dataType = None
+        self.definition = None
+        self.parsed = True
 
 
 class _AttrList:
@@ -442,7 +621,7 @@ class _AttrList:
     def item(self, idx):
         i = int(idx)
         if i < 0 or i >= len(self._attrs):
-            return None
+            return VBNothing
         return self._attrs[i]
 
     def Item(self, idx):
@@ -461,7 +640,7 @@ class _AttrList:
         for a in self._attrs:
             if a.name.split(':', 1)[-1].lower() == want_l:
                 return a
-        return None
+        return VBNothing
 
 
 class _NodeList:
@@ -496,10 +675,21 @@ class _Node:
         self._doc = doc
 
     def _node_kind(self):
-        if self._e.tag is ET.Comment:
+        # A tree may contain nodes made by either backend (e.g. a document
+        # parsed with lxml plus a comment created before the swap), so check
+        # both markers. lxml also reports comments/PIs as non-str tags.
+        tag = getattr(self._e, 'tag', None)
+        if tag in _COMMENT_TAGS:
             return "comment"
-        if self._e.tag is ET.ProcessingInstruction:
+        if tag in _PI_TAGS:
             return "processinginstruction"
+        if not isinstance(tag, str):
+            # lxml comment/PI proxies expose a callable tag.
+            name = type(self._e).__name__.lower()
+            if 'comment' in name:
+                return "comment"
+            if 'processinginstruction' in name or 'pi' == name:
+                return "processinginstruction"
         return "element"
 
     def _qname(self, tag: str) -> str:
@@ -541,6 +731,57 @@ class _Node:
             return "processinginstruction"
         return "element"
 
+    # --- namespace / schema members --------------------------------------
+    @property
+    def baseName(self):
+        """Local name, without the namespace prefix."""
+        if self._node_kind() != "element":
+            return ""
+        return self._local(str(self._e.tag))
+
+    @property
+    def prefix(self):
+        """Namespace prefix, or "" for the default/no namespace."""
+        if self._node_kind() != "element":
+            return ""
+        tag = str(self._e.tag)
+        if tag.startswith('{'):
+            uri = tag[1:].split('}', 1)[0]
+            return self._ns.get(uri, "")
+        return ""
+
+    @property
+    def namespaceURI(self):
+        if self._node_kind() != "element":
+            return ""
+        tag = str(self._e.tag)
+        if tag.startswith('{'):
+            return tag[1:].split('}', 1)[0]
+        return ""
+
+    @property
+    def dataType(self):
+        # XDR/XSD typing is not implemented, and MSXML reports Null for an
+        # untyped node. Null rather than Empty matters: CStr(node.dataType)
+        # then raises "Invalid use of Null" exactly as it does on IIS.
+        return VBNull
+
+    @property
+    def definition(self):
+        # Requires a DTD/schema declaration for the node; none is parsed.
+        return VBNothing
+
+    @property
+    def specified(self):
+        # For an element this is always True on MSXML; only attributes
+        # defaulted from a DTD report False, and no DTD is parsed here.
+        return True
+
+    @property
+    def parsed(self):
+        # This subtree is fully parsed as soon as it exists.
+        return True
+
     @property
     def nodeValue(self):
         kind = self._node_kind()
@@ -570,23 +811,61 @@ class _Node:
     @property
     def xml(self):
         try:
-            return ET.tostring(self._e, encoding='unicode')
+            return _TB.tostring(self._e, encoding='unicode')
         except Exception:
             return ""
 
     @property
     def childNodes(self):
-        kids = [
-            _Node(ch, self._ns, self._doc)
-            for ch in list(self._e)
-            if isinstance(ch.tag, str)
-        ]
+        """Child nodes in document order, INCLUDING text and CDATA.
+
+        `node.firstChild.nodeValue` is one of the most common ways Classic ASP
+        reads an element's content, so text has to appear here as a real node.
+        This used to return elements only, which made firstChild on a
+        text-bearing element yield Nothing and the next member access fail.
+        """
+        kids: list[Any] = []
+        cdata_spans = self._cdata_spans()
+
+        def add_text(txt, span):
+            if txt is None or txt == "":
+                return
+            cls = _CDATANode if span in cdata_spans else _TextNode
+            kids.append(cls(txt, self, len(kids)))
+
+        add_text(getattr(self._e, 'text', None), 0)
+        for i, ch in enumerate(list(self._e)):
+            kids.append(_Node(ch, self._ns, self._doc))
+            add_text(getattr(ch, 'tail', None), i + 1)
         return _NodeList(kids)
+
+    def _cdata_spans(self) -> set:
+        """Indices of the text runs that came from CDATA sections.
+
+        lxml keeps CDATA in the tree (strip_cdata=False) but exposes no flag
+        for it, so the only way to tell is to look at the serialised markup.
+        That is too expensive to do for every element, so it is limited to
+        LEAF elements - `<conn><![CDATA[...]]></conn>` is the shape CDATA
+        actually takes in practice, and serialising a leaf is cheap. Text
+        inside a container that also has element children is reported as an
+        ordinary text node (nodeType 3); its VALUE is unaffected either way.
+        """
+        if not _HAS_LXML or self._node_kind() != "element":
+            return set()
+        if len(self._e) != 0:          # not a leaf: skip the scan entirely
+            return set()
+        if not (getattr(self._e, 'text', None) or ''):
+            return set()
+        try:
+            raw = _TB.tostring(self._e, encoding='unicode')
+        except Exception:
+            return set()
+        return {0} if '<![CDATA[' in raw else set()
 
     @property
     def firstChild(self):
         nl = self.childNodes
-        return nl.item(0) if nl.length > 0 else None
+        return nl.item(0) if nl.length > 0 else VBNothing
 
     @property
     def lastChild(self):
@@ -596,7 +875,7 @@ class _Node:
     @property
     def parentNode(self):
         if self._doc is None:
-            return None
+            return VBNothing
         return self._doc._find_parent_node(self)
 
     @property
@@ -606,13 +885,13 @@ class _Node:
     @property
     def nextSibling(self):
         if self._doc is None:
-            return None
+            return VBNothing
         return self._doc._find_sibling_node(self, forward=True)
 
     @property
     def previousSibling(self):
         if self._doc is None:
-            return None
+            return VBNothing
         return self._doc._find_sibling_node(self, forward=False)
 
     @property
@@ -629,6 +908,13 @@ class _Node:
     def appendChild(self, newChild):
         if isinstance(newChild, _TextNode):
             self._append_text_node(newChild)
+            return newChild
+        # A fragment is a container, not content: appending it splices its
+        # CHILDREN in and leaves the fragment itself out of the tree.
+        if isinstance(newChild, _FragmentNode):
+            for child in list(newChild._e):
+                newChild._e.remove(child)
+                self._e.append(child)
             return newChild
         if isinstance(newChild, _Node):
             self._e.append(newChild._e)
@@ -687,12 +973,12 @@ class _Node:
     def cloneNode(self, deep=False):
         if bool(deep):
             try:
-                data = ET.tostring(self._e, encoding='unicode')
-                new_e = ET.fromstring(data)
+                data = _TB.tostring(self._e, encoding='unicode')
+                new_e = _TB.fromstring(data)
             except Exception:
-                new_e = ET.Element(self._e.tag)
+                new_e = _TB.Element(self._e.tag)
         else:
-            new_e = ET.Element(self._e.tag)
+            new_e = _TB.Element(self._e.tag)
             new_e.attrib = dict(self._e.attrib)
             new_e.text = self._e.text
         return _Node(new_e, dict(self._ns), self._doc)
@@ -717,6 +1003,47 @@ class _Node:
     def getAttribute(self, name):
         return self.GetAttribute(name)
 
+    def getAttributeNode(self, name):
+        """Return the attribute as a node object, or Nothing when absent."""
+        want_local = str(name).split(':', 1)[-1]
+        for k, v in self._e.attrib.items():
+            kn = str(k)
+            if self._local(kn).lower() == want_local.lower():
+                return _Attr(self._qname(kn), str(v))
+        return VBNothing
+
+    def setAttribute(self, name, value):
+        """Set an attribute value, creating it when absent."""
+        want_local = str(name).split(':', 1)[-1]
+        for k in list(self._e.attrib.keys()):
+            if self._local(str(k)).lower() == want_local.lower():
+                self._e.attrib[k] = vbs_cstr(value)
+                return
+        self._e.attrib[str(name)] = vbs_cstr(value)
+
+    def removeAttribute(self, name):
+        """Remove an attribute; silently ignore an absent one, like MSXML."""
+        want_local = str(name).split(':', 1)[-1]
+        for k in list(self._e.attrib.keys()):
+            if self._local(str(k)).lower() == want_local.lower():
+                del self._e.attrib[k]
+                return
+
+    def transformNode(self, stylesheet):
+        """Apply an XSLT stylesheet to this subtree, returning a string."""
+        return _xslt_transform(self.xml, stylesheet)
+
+    def transformNodeToObject(self, stylesheet, output):
+        """Apply an XSLT stylesheet to this subtree into a DOMDocument."""
+        result = _xslt_transform(self.xml, stylesheet)
+        loader = getattr(output, "LoadXML", None)
+        if loader is None:
+            raise Exception(
+                "MSXML: transformNodeToObject expects a DOMDocument as the "
+                "output argument")
+        loader(result)
+        return None
+
     def getElementsByTagName(self, tagName):
         """Return all descendant elements with the given tag name."""
         tag = str(tagName)
@@ -730,34 +1057,191 @@ class _Node:
         return _NodeList(found)
 
     def selectNodes(self, xpath):
-        # Minimal XPath support via ElementTree ElementPath.
-        # MSXML often uses "//tag"; ElementTree expects ".//tag".
-        xp = str(xpath or "")
-        if xp.startswith("//"):
-            xp = "." + xp
+        """Evaluate an XPath expression, returning the matching nodes.
+
+        With lxml this is real XPath 1.0 - axes, functions, unions, predicates
+        and namespace prefixes all work, as they do on MSXML. Without it, only
+        ElementTree's ElementPath subset is available; anything outside that
+        subset RAISES rather than quietly returning an empty list, because a
+        silently wrong answer is far harder to diagnose than an error.
+        """
+        xp = str(xpath or "").strip()
+        if not xp:
+            return _NodeList([])
+
+        if _HAS_LXML:
+            try:
+                found = self._e.xpath(xp, namespaces=self._xpath_namespaces())
+            except Exception as e:
+                raise Exception("MSXML: invalid XPath %r: %s" % (xp, e))
+            nodes = []
+            for item in (found if isinstance(found, list) else [found]):
+                # An XPath may select attributes or strings; only element
+                # nodes belong in a node list here.
+                if hasattr(item, 'tag'):
+                    nodes.append(_Node(item, self._ns, self._doc))
+            return _NodeList(nodes)
+
+        # --- stdlib fallback: ElementPath subset ---------------------------
+        unsupported = _elementpath_unsupported(xp)
+        if unsupported:
+            raise Exception(
+                "MSXML: XPath %r uses %s, which needs the lxml package "
+                "(pip install lxml). ElementTree only supports a small XPath "
+                "subset." % (xp, unsupported))
+        ep = "." + xp if xp.startswith("//") else xp
         try:
-            found = self._e.findall(xp)
-        except Exception:
-            found = []
-        nodes = [_Node(e, self._ns, self._doc) for e in found if isinstance(getattr(e, 'tag', None), str)]
+            found = self._e.findall(ep)
+        except Exception as e:
+            raise Exception("MSXML: invalid XPath %r: %s" % (xp, e))
+        nodes = [_Node(e, self._ns, self._doc)
+                 for e in found if isinstance(getattr(e, 'tag', None), str)]
         return _NodeList(nodes)
+
+    def _xpath_namespaces(self):
+        """Prefix -> URI map for XPath, from the document and SelectionNamespaces."""
+        doc = self._doc
+        ns = {}
+        if doc is not None:
+            ns.update(getattr(doc, '_prefix_to_uri', {}) or {})
+            ns.update(_parse_selection_namespaces(
+                getattr(doc, '_selection_namespaces', '') or ''))
+        # lxml rejects an empty prefix; a default namespace must be given a
+        # name by the caller via SelectionNamespaces.
+        return {k: v for k, v in ns.items() if k}
 
     def selectSingleNode(self, xpath):
         nl = self.selectNodes(xpath)
         try:
-            return nl.item(0) if nl.length > 0 else None
+            return nl.item(0) if nl.length > 0 else VBNothing
         except Exception:
-            return None
+            return VBNothing
+
+
+class _FragmentNode(_Node):
+    """DOMDocumentFragment: a transient container.
+
+    Appending it to a node splices its children in and discards the wrapper,
+    which is why it must never appear in the tree itself. The old version
+    returned a plain element called "_fragment", so appending a fragment
+    injected a literal <_fragment> element into the document.
+    """
+
+    @property
+    def nodeName(self):
+        return "#document-fragment"
+
+    @property
+    def nodeType(self):
+        return 11
+
+    @property
+    def nodeTypeString(self):
+        return "documentfragment"
 
 
 class _TextNode:
-    def __init__(self, text: str):
+    """A text node.
+
+    `owner`/`index` link it back into the tree so that parentNode and
+    next/previousSibling work. Walking past text to the next element -
+    `Do While refChild.nodeType = 3 : Set refChild = refChild.nextSibling` -
+    is a standard DOM idiom, and without navigation it loops forever.
+    """
+
+    def __init__(self, text: str, owner=None, index=None):
         self.text = str(text)
         self.nodeName = "#text"
         self.nodeType = 3
         self.nodeTypeString = "text"
         self.nodeValue = self.text
         self.nodeTypedValue = self.text
+        # Namespace members exist on every MSXML node.
+        self.baseName = ""
+        self.prefix = ""
+        self.namespaceURI = ""
+        self.specified = True
+        self.parsed = True
+        self.dataType = VBNull
+        self.definition = VBNothing
+        self._owner = owner
+        self._index = index
+
+    @property
+    def xml(self):
+        return self.text
+
+    @property
+    def parentNode(self):
+        return self._owner if self._owner is not None else VBNothing
+
+    @property
+    def ownerDocument(self):
+        return getattr(self._owner, '_doc', None) or VBNothing
+
+    @property
+    def childNodes(self):
+        return _NodeList([])
+
+    def hasChildNodes(self):
+        return False
+
+    @property
+    def firstChild(self):
+        return VBNothing
+
+    @property
+    def lastChild(self):
+        return VBNothing
+
+    @property
+    def attributes(self):
+        return VBNothing
+
+    def _sibling(self, step: int):
+        if self._owner is None or self._index is None:
+            return VBNothing
+        try:
+            nl = self._owner.childNodes
+            i = self._index + step
+            if 0 <= i < nl.length:
+                return nl.item(i)
+        except Exception:
+            pass
+        return VBNothing
+
+    @property
+    def nextSibling(self):
+        return self._sibling(1)
+
+    @property
+    def previousSibling(self):
+        return self._sibling(-1)
+
+
+class _CDATANode(_TextNode):
+    """A CDATA section: text content, but its own node type.
+
+    Serialising it back as a real <![CDATA[...]]> section requires the lxml
+    backend; with the stdlib parser the payload is preserved but written as
+    ordinary escaped text (the characters survive, the wrapper does not).
+    """
+
+    def __init__(self, text: str, owner=None, index=None):
+        super().__init__(text, owner, index)
+        self.nodeName = "#cdata-section"
+        self.nodeType = 4
+        self.nodeTypeString = "cdatasection"
+
+
+class _EntityRefNode(_TextNode):
+    """An entity reference, e.g. &name;."""
+
+    def __init__(self, name: str, owner=None, index=None):
+        super().__init__("&%s;" % name, owner, index)
+        self.nodeName = str(name)
+        self.nodeType = 5
+        self.nodeTypeString = "entityreference"
 
 
 class DOMDocument:
@@ -778,7 +1262,9 @@ class DOMDocument:
         self._selection_namespaces = ""
 
         self._ns_uri_to_prefix: dict[str, str] = {}
-        self._tree: ET.ElementTree | None = None
+        # Reverse map, used to resolve prefixed XPath expressions.
+        self._prefix_to_uri: dict[str, str] = {}
+        self._tree: Any = None
 
     def _root(self):
         if not self._tree:
@@ -820,13 +1306,13 @@ class DOMDocument:
     def documentElement(self):
         root = self._root()
         if root is None:
-            return None
+            return VBNothing
         root = cast(ET.Element, root)
         return _Node(root, self._ns_uri_to_prefix, self)
 
     @property
     def attributes(self):
-        return None
+        return VBNothing
 
     @property
     def childNodes(self):
@@ -838,7 +1324,7 @@ class DOMDocument:
 
     @property
     def doctype(self):
-        return None
+        return VBNothing
 
     @property
     def firstChild(self):
@@ -860,7 +1346,40 @@ class DOMDocument:
 
     @property
     def nextSibling(self):
-        return None
+        return VBNothing
+
+    # --- IXMLDOMNode members the document also exposes -------------------
+    # A document node has no name of its own, so MSXML reports empty strings
+    # here rather than raising. Real pages rarely read them, but a missing
+    # member is a hard 438 that aborts the whole page.
+    @property
+    def baseName(self):
+        return ""
+
+    @property
+    def prefix(self):
+        return ""
+
+    @property
+    def namespaceURI(self):
+        return ""
+
+    @property
+    def dataType(self):
+        return VBNull
+
+    @property
+    def definition(self):
+        return VBNothing
+
+    @property
+    def specified(self):
+        return True
+
+    @property
+    def parsed(self):
+        # True once the document is fully loaded and parsed.
+        return self.readyState == 4
 
     @property
     def nodeName(self):
@@ -884,15 +1403,15 @@ class DOMDocument:
 
     @property
     def ownerDocument(self):
-        return None
+        return VBNothing
 
     @property
     def parentNode(self):
-        return None
+        return VBNothing
 
     @property
     def previousSibling(self):
-        return None
+        return VBNothing
 
     @property
     def text(self):
@@ -916,7 +1435,7 @@ class DOMDocument:
             return ""
         root = cast(ET.Element, root)
         try:
-            return ET.tostring(root, encoding='unicode')
+            return _TB.tostring(root, encoding='unicode')
         except Exception:
             return ""
 
@@ -942,11 +1461,11 @@ class DOMDocument:
     def appendChild(self, newChild):
         if isinstance(newChild, _Node):
             if not self._tree:
-                self._tree = ET.ElementTree(newChild._e)
+                self._tree = _TB.ElementTree(newChild._e)
                 return newChild
             root = self._root()
             if root is None:
-                self._tree = ET.ElementTree(newChild._e)
+                self._tree = _TB.ElementTree(newChild._e)
                 return newChild
             root = cast(ET.Element, root)
             root.append(newChild._e)
@@ -974,7 +1493,7 @@ class DOMDocument:
         root = cast(ET.Element, root)
         if isinstance(refChild, _Node) and refChild._e is root:
             if isinstance(newChild, _Node):
-                self._tree = ET.ElementTree(newChild._e)
+                self._tree = _TB.ElementTree(newChild._e)
                 return newChild
             raise Exception("MSXML: insertBefore expects a node")
         if isinstance(newChild, _Node):
@@ -1007,7 +1526,7 @@ class DOMDocument:
         root = cast(ET.Element, root)
         if isinstance(oldChild, _Node) and oldChild._e is root:
             if isinstance(newChild, _Node):
-                self._tree = ET.ElementTree(newChild._e)
+                self._tree = _TB.ElementTree(newChild._e)
                 return newChild
             raise Exception("MSXML: replaceChild expects a node")
         root.remove(oldChild._e if isinstance(oldChild, _Node) else oldChild)
@@ -1029,34 +1548,34 @@ class DOMDocument:
         root0 = cast(ET.Element, root0)
         if bool(deep):
             try:
-                data = ET.tostring(root0, encoding='unicode')
-                root = ET.fromstring(data)
+                data = _TB.tostring(root0, encoding='unicode')
+                root = _TB.fromstring(data)
             except Exception:
-                root = ET.Element(root0.tag)
+                root = _TB.Element(root0.tag)
         else:
-            root = ET.Element(root0.tag)
+            root = _TB.Element(root0.tag)
             root.attrib = dict(root0.attrib)
             root.text = root0.text
-        new_doc._tree = ET.ElementTree(root)
+        new_doc._tree = _TB.ElementTree(root)
         return new_doc
 
     def createElement(self, tagName):
-        return _Node(ET.Element(str(tagName)), self._ns_uri_to_prefix, self)
+        return _Node(_TB.Element(str(tagName)), self._ns_uri_to_prefix, self)
 
     def createAttribute(self, name):
         return _Attr(str(name), "")
 
     def createCDATASection(self, data):
-        return _TextNode(str(data))
+        return _CDATANode(str(data))
 
     def createComment(self, data):
-        return _Node(cast(Any, ET.Comment(str(data))), self._ns_uri_to_prefix, self)
+        return _Node(cast(Any, _TB.Comment(str(data))), self._ns_uri_to_prefix, self)
 
     def createDocumentFragment(self):
-        return _Node(ET.Element("_fragment"), self._ns_uri_to_prefix, self)
+        return _FragmentNode(_TB.Element("_fragment"), self._ns_uri_to_prefix, self)
 
     def createEntityReference(self, name):
-        return _TextNode(f"&{str(name)};")
+        return _EntityRefNode(str(name))
 
     def createNode(self, nodeType, name, namespaceURI=None):
         t = int(nodeType)
@@ -1068,16 +1587,20 @@ class DOMDocument:
             return self.createTextNode("")
         if t == 4:
             return self.createCDATASection("")
+        if t == 5:
+            return self.createEntityReference(name)
         if t == 7:
             return self.createProcessingInstruction(name, "")
         if t == 8:
             return self.createComment("")
         if t == 9:
             return DOMDocument(self._docroot)
+        if t == 11:
+            return self.createDocumentFragment()
         raise Exception("MSXML: unsupported node type")
 
     def createProcessingInstruction(self, target, data):
-        return _Node(cast(Any, ET.ProcessingInstruction(str(target), str(data))), self._ns_uri_to_prefix, self)
+        return _Node(cast(Any, _TB.ProcessingInstruction(str(target), str(data))), self._ns_uri_to_prefix, self)
 
     def createTextNode(self, data):
         return _TextNode(str(data))
@@ -1100,47 +1623,83 @@ class DOMDocument:
         return _NodeList(nodes)
 
     def save(self, filename):
-        # Save XML to local file. Restricted to docroot unless explicitly allowed.
+        """Write the document to a file.
+
+        `xmlDoc.save Server.MapPath("out.xml")` is the standard Classic ASP
+        idiom, so a write that lands INSIDE the application's docroot is
+        allowed by default. Escaping the docroot - an absolute path elsewhere,
+        or a traversal - still requires ASP_PY_XML_ALLOW_LOCAL=1.
+
+        The previous version had this backwards: it gated every write on the
+        env var, and once that was set it performed no containment check at
+        all, despite the comment claiming one.
+        """
         path = str(filename)
-        if not _env_bool("ASP_PY_XML_ALLOW_LOCAL", False):
-            raise Exception("MSXML: local paths blocked (set ASP_PY_XML_ALLOW_LOCAL=1 to allow)")
-        if self._docroot and not os.path.isabs(path):
-            path = os.path.abspath(os.path.join(self._docroot, path.lstrip("/\\")))
-        data = self.xml
-        with open(path, "w", encoding="utf-8", newline="") as f:
-            f.write(data)
+        allow_anywhere = _env_bool("ASP_PY_XML_ALLOW_LOCAL", False)
+
+        root = os.path.abspath(self._docroot) if self._docroot else ""
+        if root and not os.path.isabs(path):
+            target = os.path.abspath(os.path.join(root, path.lstrip("/\\")))
+        else:
+            target = os.path.abspath(path)
+
+        inside = False
+        if root:
+            try:
+                inside = os.path.commonpath([root, target]) == root
+            except ValueError:
+                inside = False  # different drives on Windows
+
+        if not inside and not allow_anywhere:
+            raise Exception(
+                "MSXML: save outside the application root is blocked "
+                "(set ASP_PY_XML_ALLOW_LOCAL=1 to allow)")
+
+        with open(target, "w", encoding="utf-8", newline="") as f:
+            f.write(self.xml)
         return True
 
     def selectNodes(self, xpath):
         de = self.documentElement
-        if de is None:
+        if not isinstance(de, _Node):
             return _NodeList([])
         return de.selectNodes(xpath)
 
     def selectSingleNode(self, xpath):
         de = self.documentElement
-        if de is None:
-            return None
+        if not isinstance(de, _Node):
+            return VBNothing
         return de.selectSingleNode(xpath)
 
     def _parse_xml_bytes(self, data: bytes) -> bool:
         # Capture namespaces while parsing.
         self._ns_uri_to_prefix = {}
+        self._prefix_to_uri = {}
         try:
             ns_events = ("start", "start-ns")
             bio = io.BytesIO(data)
-            # iterparse builds the tree incrementally
-            it = ET.iterparse(bio, events=ns_events)
+            # iterparse builds the tree incrementally. On lxml the parser also
+            # keeps CDATA sections, comments and PIs, so a load/save round trip
+            # is lossless; the stdlib parser discards all three.
+            if _HAS_LXML:
+                it = _TB.iterparse(bio, events=ns_events, **_LXML_PARSE_OPTS)
+            else:
+                it = _TB.iterparse(bio, events=ns_events)
             for ev, obj in it:
                 if ev == "start-ns":
                     pref, uri = obj
                     uri = str(uri)
+                    pref = str(pref or "")
                     if uri not in self._ns_uri_to_prefix:
-                        self._ns_uri_to_prefix[uri] = str(pref or "")
+                        self._ns_uri_to_prefix[uri] = pref
+                    # Both directions: selectNodes needs prefix -> URI to
+                    # resolve a prefixed XPath such as //ns:Item.
+                    if pref and pref not in self._prefix_to_uri:
+                        self._prefix_to_uri[pref] = uri
             root = it.root  # type: ignore[attr-defined]
             if root is None:
                 raise Exception("MSXML: empty document")
-            self._tree = ET.ElementTree(root)
+            self._tree = _TB.ElementTree(root)
             self.readyState = 4
             self._fire_ready_state()
             return True
@@ -1214,7 +1773,7 @@ class DOMDocument:
     def nodeFromID(self, idString):
         root = self._root()
         if root is None:
-            return None
+            return VBNothing
         root = cast(ET.Element, root)
         want = str(idString)
         for e in root.iter():
@@ -1222,13 +1781,26 @@ class DOMDocument:
                 continue
             if e.attrib.get("id") == want or e.attrib.get("ID") == want:
                 return _Node(e, self._ns_uri_to_prefix, self)
-        return None
+        return VBNothing
 
     def transformNode(self, stylesheet):
-        raise Exception("MSXML: transformNode not implemented")
+        """Apply an XSLT stylesheet and return the result as a string."""
+        return _xslt_transform(self.xml, stylesheet)
 
     def transformNodeToObject(self, stylesheet, output):
-        raise Exception("MSXML: transformNodeToObject not implemented")
+        """Apply an XSLT stylesheet, loading the result into `output`.
+
+        MSXML accepts a DOMDocument here (the common case); it also accepts a
+        stream, which is not supported.
+        """
+        result = _xslt_transform(self.xml, stylesheet)
+        loader = getattr(output, "LoadXML", None)
+        if loader is None:
+            raise Exception(
+                "MSXML: transformNodeToObject expects a DOMDocument as the "
+                "output argument")
+        loader(result)
+        return None
 
     def _fire_ready_state(self):
         try:
@@ -1241,19 +1813,25 @@ class DOMDocument:
     def _find_parent_node(self, node: _Node):
         root = self._root()
         if root is None:
-            return None
+            return VBNothing
         root = cast(ET.Element, root)
         target = node._e
         for parent in root.iter():
             for ch in list(parent):
                 if ch is target:
                     return _Node(parent, self._ns_uri_to_prefix, self)
-        return self
+        # The document element's parent IS the document; a node that is not in
+        # this tree at all has no parent. Returning `self` unconditionally made
+        # every orphan node claim the document as its parent.
+        root_node = self.documentElement
+        if isinstance(root_node, _Node) and root_node._e is target:
+            return self
+        return VBNothing
 
     def _find_sibling_node(self, node: _Node, forward: bool = True):
         root = self._root()
         if root is None:
-            return None
+            return VBNothing
         root = cast(ET.Element, root)
         target = node._e
         for parent in root.iter():
@@ -1263,5 +1841,5 @@ class DOMDocument:
                     j = i + 1 if forward else i - 1
                     if 0 <= j < len(kids):
                         return _Node(kids[j], self._ns_uri_to_prefix, self)
-                    return None
-        return None
+                    return VBNothing
+        return VBNothing

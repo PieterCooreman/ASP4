@@ -11,12 +11,22 @@ def IsArray(v):
 
 
 def LBound(arr, dimension=1):
+    # Binary payloads (ServerXMLHTTP.responseBody, Request.BinaryRead) are a
+    # Byte() SafeArray on IIS, so LBound/UBound must work on them.
+    if isinstance(arr, (bytes, bytearray)):
+        if int(dimension) != 1:
+            raise Exception("Subscript out of range")
+        return 0
     if not isinstance(arr, VBArray):
         raise Exception("Type mismatch")
     return arr.lbound(int(dimension))
 
 
 def UBound(arr, dimension=1):
+    if isinstance(arr, (bytes, bytearray)):
+        if int(dimension) != 1:
+            raise Exception("Subscript out of range")
+        return len(arr) - 1
     if not isinstance(arr, VBArray):
         raise Exception("Type mismatch")
     return arr.ubound(int(dimension))

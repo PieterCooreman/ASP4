@@ -155,7 +155,8 @@ def UBound(arrayname, dimension=1):
     if isinstance(arrayname, VBArray):
         try: return arrayname.ubound(dimension)
         except IndexError as e: raise_runtime('SUBSCRIPT_OUT_OF_RANGE', str(e))
-    if isinstance(arrayname, (list, tuple)):
+    # bytes/bytearray model a Byte() SafeArray (responseBody, BinaryRead).
+    if isinstance(arrayname, (list, tuple, bytes, bytearray)):
         if int(dimension) != 1:
             raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
                 f"UBound dimension {dimension} requested but array is 1-dimensional")
@@ -167,7 +168,7 @@ def LBound(arrayname, dimension=1):
     if isinstance(arrayname, VBArray):
         try: return arrayname.lbound(dimension)
         except IndexError as e: raise_runtime('SUBSCRIPT_OUT_OF_RANGE', str(e))
-    if isinstance(arrayname, (list, tuple)):
+    if isinstance(arrayname, (list, tuple, bytes, bytearray)):
         if int(dimension) != 1:
             raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
                 f"LBound dimension {dimension} requested but array is 1-dimensional")
@@ -176,7 +177,10 @@ def LBound(arrayname, dimension=1):
 
 def IsArray(varname):
     from .vm.values import VBArray
-    return isinstance(varname, (VBArray, list, tuple))
+    # bytes/bytearray represent a Byte() SafeArray - what IIS hands back from
+    # ServerXMLHTTP.responseBody and Request.BinaryRead. Verified on IIS 10:
+    # IsArray = True, TypeName = "Byte()", VarType = 8209, IsObject = False.
+    return isinstance(varname, (VBArray, list, tuple, bytes, bytearray))
 
 def IsDate(expression):
     if expression is VBNull: return False
@@ -219,6 +223,8 @@ def IsObject(expression):
     if isinstance(expression, (VBClassInstance, ADOConnection, ADORecordset, ADOCommand)): return True
     if expression is None: return False
     if isinstance(expression, (str, int, float, bool, Decimal, _dt.date, _dt.datetime)): return False
+    # A Byte() SafeArray is an array, not an object (IsObject = False on IIS).
+    if isinstance(expression, (bytes, bytearray)): return False
     from .vm.values import VBArray
     if isinstance(expression, VBArray): return False
     return True
@@ -244,6 +250,8 @@ def TypeName(varname):
         try: return tn_hook()
         except Exception: pass
     if isinstance(v, str): return "String"
+    # Binary payloads are a Byte() SafeArray on IIS, not an opaque object.
+    if isinstance(v, (bytes, bytearray)): return "Byte()"
     if isinstance(v, (_dt.datetime, _dt.date, _dt.time)): return "Date"
     from .vm.values import VBArray
     if isinstance(v, VBArray): return "Variant()"
@@ -284,6 +292,8 @@ def VarType(varname):
     if isinstance(v, Decimal): return 6
     if isinstance(v, str): return 8
     if isinstance(v, (_dt.datetime, _dt.date, _dt.time)): return 7
+    # vbArray (8192) + vbByte (17) = 8209, what IIS reports for responseBody.
+    if isinstance(v, (bytes, bytearray)): return 8209
     from .vm.values import VBArray
     if isinstance(v, VBArray): return 8204
     if v is VBNothing: return 9

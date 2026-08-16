@@ -1114,12 +1114,17 @@ class VBInterpreter:
                     except Exception: _ub_str = ', array unallocated'
                 raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
                     f"{_idx_varname}({', '.join(str(a) for a in args)}){_ub_str}")
-        # Python list/tuple support for arrays
-        if isinstance(obj, (list, tuple)):
+        # Python list/tuple support for arrays. bytes/bytearray are included:
+        # they model a Byte() SafeArray, so b(0) must yield the byte value
+        # (an Integer), exactly as on IIS.
+        if isinstance(obj, (list, tuple, bytes, bytearray)):
             if len(args) != 1:
                 raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
                     f"{_idx_varname}({', '.join(str(a) for a in args)}) — expected 1 index, got {len(args)}")
             _req_idx = int(args[0])
+            if _req_idx < 0:
+                raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
+                    f"{_idx_varname}({_req_idx}), but UBound is {len(obj) - 1}")
             try:
                 return obj[_req_idx]
             except IndexError:
@@ -1197,6 +1202,17 @@ class VBInterpreter:
         # class's Default Property Get (e.g. KeyValueStore.Item).
         if isinstance(callee, VBClassInstance) and callee._cls.default_prop_get is not None:
             return self._invoke_class_proc(callee, callee._cls.default_prop_get, expr.args)
+
+        # Byte() SafeArray indexing: b(0) on a binary payload
+        # (ServerXMLHTTP.responseBody, Request.BinaryRead) yields the byte.
+        if isinstance(callee, (bytes, bytearray)) and len(expr.args) == 1 and expr.args[0] is not None:
+            _bidx = _try_number(self.eval_expr(expr.args[0]))
+            _bi = int(_bidx) if _bidx is not None else -1
+            if _bi < 0 or _bi >= len(callee):
+                _bname = getattr(expr.callee, 'name', None) or '(expression)'
+                raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
+                              f"{_bname}({_bi}), UBound = {len(callee) - 1}")
+            return callee[_bi]
 
         # Default member indexing (e.g., rs("field")) for non-callable objects.
         if callee is not None and not callable(callee):
