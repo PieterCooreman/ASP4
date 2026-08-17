@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asppy"
-version = "0.1.0"
+# Single source of truth is ASPPY/__init__.py - see [tool.setuptools.dynamic]
+# below. Declaring it in both places let 0.1.1 ship reporting "0.1.0".
+dynamic = ["version"]
 description = "Classic ASP / VBScript runtime for Python - run legacy .asp pages on Windows, Linux and macOS without IIS or COM."
 readme = "README.md"
 license = "MIT"
@@ -86,6 +88,10 @@ asppy = "ASPPY.__main__:main"
 asppy-render = "ASPPY.cli:main"
 # Batch-check a whole app for errors:   asppy-check www
 asppy-check = "ASPPY.check:main"
+# Print/open the bundled docs:          asppy-guide | clip
+asppy-guide = "ASPPY.guide:main"
+# Scaffold a new app from the starter:  asppy-new myapp
+asppy-new = "ASPPY.scaffold:main"
 
 [project.urls]
 Homepage = "https://pietercooreman.github.io/ASPPY/"
@@ -97,16 +103,40 @@ Changelog = "https://github.com/PieterCooreman/ASPPY/releases"
 "Prompt Builder (MVC)" = "https://pietercooreman.github.io/ASPPY/prompt-builder.html"
 "Prompt Builder (SPA)" = "https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html"
 
+[tool.setuptools.dynamic]
+# Read the version straight out of ASPPY/__init__.py. setuptools parses that
+# file statically (it deliberately imports nothing), so bumping __version__ is
+# the only edit a release needs.
+version = { attr = "ASPPY.__version__" }
+
 [tool.setuptools]
-# Only the runtime ships. The demo apps (www/, www_starter/, www_test/), the
-# HTML docs and the prompt builders stay in the git repo - they are examples,
-# not library code, and would bloat the wheel with SQLite databases and PNGs.
 packages = ["ASPPY", "ASPPY.vm"]
 
 [tool.setuptools.package-data]
-# locale_data.json is the generated 60-locale table used by vb_locale.py; the
-# tools/ folder carries the standalone Access-to-SQLite migration utility.
-ASPPY = ["locale_data.json", "tools/*.py", "tools/*.md", "tools/*.bat"]
+# Everything a person or an AI agent needs to actually build something, offline:
+#
+#   locale_data.json  generated 60-locale table used by vb_locale.py
+#   tools/*           standalone Access-to-SQLite migration utility
+#   guides/*.md       developers.md (the agent brief) and README.md
+#   guides/html/*     the full documentation set, including both prompt builders
+#   starter/**        www_starter, unpacked by `asppy-new` into a runnable app
+#
+# guides/ and starter/ are mirrored from docs/ and www_starter/ by
+# tools/sync_guides.py, because GitHub Pages needs docs/ to stay at the repo
+# root. Run `python tools/sync_guides.py --check` before releasing.
+#
+# Deliberately excluded: docs/screenshots/ (~540 KB of PNGs that only the
+# GitHub README uses, and it references them by absolute URL) and the demo
+# apps under www/ and www_test/, which are examples rather than library code.
+ASPPY = [
+    "locale_data.json",
+    "tools/*.py",
+    "tools/*.md",
+    "tools/*.bat",
+    "guides/*.md",
+    "guides/html/*.html",
+    "starter/**/*",
+]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__/*"]

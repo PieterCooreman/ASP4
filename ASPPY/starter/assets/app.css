@@ -1,0 +1,116 @@
+:root {
+    --starter-ink: #1d2a38;
+    --starter-soft: #5c6b77;
+    --starter-line: rgba(29, 42, 56, 0.1);
+    --starter-surface: rgba(255, 255, 255, 0.92);
+    --starter-bg-top: #f6efe2;
+    --starter-bg-bottom: #dcebf0;
+    --starter-primary: #156f63;
+    --starter-primary-dark: #0f564d;
+}
+
+body {
+    margin: 0;
+    font-family: "Public Sans", sans-serif;
+    color: var(--starter-ink);
+    background: linear-gradient(180deg, var(--starter-bg-top) 0%, var(--starter-bg-bottom) 100%);
+    min-height: 100vh;
+}
+
+a {
+    color: var(--starter-primary-dark);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--starter-primary);
+}
+
+.starter-nav {
+    background: rgba(255, 255, 255, 0.82);
+    border-bottom: 1px solid var(--starter-line);
+    backdrop-filter: blur(12px);
+}
+
+.navbar-brand {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--starter-ink);
+}
+
+.nav-link {
+    color: var(--starter-soft);
+    font-weight: 600;
+}
+
+.nav-link.active,
+.nav-link:hover {
+    color: var(--starter-ink);
+}
+
+.btn-primary {
+    background: var(--starter-primary);
+    border-color: var(--starter-primary);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background: var(--starter-primary-dark);
+    border-color: var(--starter-primary-dark);
+}
+
+.hero-panel,
+.surface-card {
+    border-radius: 24px;
+    border: 1px solid var(--starter-line);
+    background: var(--starter-surface);
+    box-shadow: 0 24px 60px rgba(29, 42, 56, 0.08);
+}
+
+.hero-panel {
+    padding: 2rem;
+}
+
+.eyebrow {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(21, 111, 99, 0.1);
+    color: var(--starter-primary-dark);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.text-secondary {
+    color: var(--starter-soft) !important;
+}
+
+.info-card,
+.starter-note {
+    height: 100%;
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+    border: 1px solid var(--starter-line);
+    background: rgba(255, 255, 255, 0.66);
+}
+
+.starter-list {
+    padding-left: 1.1rem;
+}
+
+.starter-list li + li {
+    margin-top: 0.55rem;
+}
+
+code {
+    color: inherit;
+}
+
+@media (max-width: 767px) {
+    .hero-panel,
+    .surface-card {
+        border-radius: 20px;
+    }
+}

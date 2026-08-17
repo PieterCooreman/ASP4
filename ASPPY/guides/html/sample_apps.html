@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sample Applications - Working ASPPY sample apps demonstrating crypto, PDF, ZIP, and ExecutePython modules.">
+    <title>Sample Applications - ASPPY Framework Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-card: #FFFFFF;
+  --bg-code: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-heading: #0F172A;
+  --border-color: #E2E8F0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-code: #0D1117;
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-heading: #F1F5F9;
+  --border-color: #334155;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text-heading); font-weight: 700; line-height: 1.2; }
+h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); }
+h2 { font-size: clamp(1.375rem, 2.5vw, 1.75rem); }
+h3 { font-size: clamp(1.125rem, 2vw, 1.375rem); }
+a { color: #6366F1; text-decoration: none; transition: var(--transition); }
+a:hover { color: #4F46E5; }
+code { font-family: 'JetBrains Mono', monospace; background: rgba(99,102,241,0.08); color: #6366F1; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+[data-theme="dark"] code { background: rgba(99,102,241,0.15); color: #818CF8; }
+pre {
+  background: var(--bg-code);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  position: relative;
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+.copy-btn {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #818CF8; padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-size: 0.72rem; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+}
+.copy-btn:hover { background: rgba(99,102,241,0.3); }
+:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+.skip-link {
+  position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
+  background: #6366F1; color: #fff; padding: 0.75rem 1.5rem;
+  border-radius: 8px; z-index: 10000; font-weight: 600;
+}
+.skip-link:focus { top: 1rem; }
+.doc-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.nav-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; font-size: 1rem; color: var(--text-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.nav-logo:hover { color: #6366F1; }
+.nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+.nav-link {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);
+  padding: 0.4rem 0.6rem; border-radius: 6px; transition: var(--transition);
+}
+.nav-link:hover { color: #6366F1; background: rgba(99,102,241,0.08); }
+.theme-btn, .sidebar-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); font-size: 0.9rem;
+}
+.theme-btn:hover, .sidebar-toggle-btn:hover { border-color: #6366F1; color: #6366F1; }
+.sidebar-toggle-btn { display: none; }
+.doc-layout {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.sidebar li a {
+  display: block; padding: 0.5rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+}
+.sidebar li a:hover { color: #6366F1; background: rgba(99,102,241,0.05); }
+.sidebar li a.active {
+  color: #6366F1; background: rgba(99,102,241,0.08);
+  border-left-color: #6366F1; font-weight: 600;
+}
+.doc-main {
+  flex: 1; padding: 2rem 2.5rem 4rem;
+  max-width: 900px;
+}
+.doc-main h1 { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border-color); }
+.doc-main h2, .doc-main h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+.doc-main p, .doc-main li { color: var(--text-secondary); line-height: 1.7; }
+.doc-main ul, .doc-main ol { padding-left: 1.5rem; }
+.doc-main li { margin-bottom: 0.35rem; }
+.doc-main table {
+  width: 100%; border-collapse: collapse;
+  margin: 1rem 0; font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.doc-main th {
+  background: #6366F1; color: #fff;
+  padding: 0.75rem 1rem; text-align: left;
+  font-weight: 600; font-size: 0.82rem;
+}
+.doc-main td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.doc-main tr:last-child td { border-bottom: none; }
+.doc-main tr:hover td { background: rgba(99,102,241,0.03); }
+.doc-footer {
+  background: #0B1120; color: rgba(255,255,255,0.5);
+  padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem;
+}
+.doc-footer a { color: rgba(255,255,255,0.6); }
+.doc-footer a:hover { color: #fff; }
+.alert-box {
+  padding: 1rem 1.25rem; border-radius: var(--radius-md);
+  margin: 1rem 0; font-size: 0.9rem; line-height: 1.6;
+}
+.alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
+.alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
+.alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .sidebar-toggle-btn { display: flex; }
+  .doc-main { padding: 1.5rem 1rem 3rem; }
+  .nav-link { display: none; }
+}
+    </style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<nav class="doc-nav" role="navigation" aria-label="Documentation navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="ASPPY Home">
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><text x="32" y="42" text-anchor="middle" font-family="monospace" font-size="28" font-weight="bold" fill="white">&lt;%</text></svg>
+      <span>ASPPY Docs</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Website</a>
+	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="doc-layout">
+<aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+  <nav>
+    <ul>
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
+      <li><a href="database.html">Database (ADODB)</a></li>
+      <li><a href="pop3_imap.html">ASPPY Mail</a></li>
+      <li><a href="zip.html">ASPPY.zip</a></li>
+      <li><a href="pdf.html">ASPPY.pdf</a></li>
+      <li><a href="image.html">ASPPY.image</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
+      <li><a href="json.html">ASPPY.json</a></li>
+      <li><a href="python.html">ASPPY.ExecutePython</a></li>
+      <li><a href="specifications.html">Specifications</a></li>
+      <li><a href="why_asppy.html">Why ASPPY Exists</a></li>
+      <li><a href="iis_setup.html">IIS Setup</a></li>
+      <li><a href="sample_apps.html" class="active">Sample Apps</a></li>
+    </ul>
+  </nav>
+</aside>
+<main id="main-content" class="doc-main">
+<h1>Sample Applications</h1>
+<p class="lead">Here are several self-contained, working sample applications that demonstrate ASPPY's native modules. You can copy these files into your environment and try them out immediately.</p>
+
+<h2>Interactive Password Hasher (bcrypt)</h2>
+<p>An interactive page where users can input text to see the generated <code>bcrypt</code> hash, and then input a hash to verify it natively.</p>
+<pre><code class="language-vbscript">&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim textToHash, hashResult, verified, verifyClass
+textToHash = Request.Form("textToHash")
+hashResult = ""
+verified = ""
+verifyClass = ""
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" Then
+    If Request.Form("action") = "hash" And textToHash &lt;&gt; "" Then
+        ' Hash the text using bcrypt (cost 10)
+        hashResult = ASPPY.crypto.Hash(textToHash, 10)
+    ElseIf Request.Form("action") = "verify" And Request.Form("hashToVerify") &lt;&gt; "" And textToHash &lt;&gt; "" Then
+        ' Verify the hash
+        If ASPPY.crypto.Verify(textToHash, Request.Form("hashToVerify")) Then
+            verified = "Match! The text corresponds to the hash."
+            verifyClass = "alert-success"
+        Else
+            verified = "No match! The text does not correspond to the hash."
+            verifyClass = "alert-danger"
+        End If
+    End If
+End If
+%&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;ASPPY Crypto App&lt;/title&gt;
+    &lt;link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;
+&lt;body class="bg-light"&gt;
+&lt;div class="container mt-5" style="max-width: 600px;"&gt;
+    &lt;div class="card shadow-sm mb-4"&gt;
+        &lt;div class="card-header bg-dark text-white"&gt;&lt;h4&gt;Password Hasher (bcrypt)&lt;/h4&gt;&lt;/div&gt;
+        &lt;div class="card-body"&gt;
+            &lt;form method="post" action="test_hasher.asp"&gt;
+                &lt;input type="hidden" name="action" value="hash"&gt;
+                &lt;div class="mb-3"&gt;
+                    &lt;label class="form-label"&gt;Plain Text Password&lt;/label&gt;
+                    &lt;input type="text" name="textToHash" class="form-control" value="&lt;%=Server.HTMLEncode(textToHash)%&gt;" required&gt;
+                &lt;/div&gt;
+                &lt;button type="submit" class="btn btn-primary w-100"&gt;Generate Hash&lt;/button&gt;
+            &lt;/form&gt;
+            &lt;% If hashResult &lt;&gt; "" Then %&gt;
+                &lt;div class="mt-4"&gt;
+                    &lt;label class="form-label text-muted"&gt;Generated Hash:&lt;/label&gt;
+                    &lt;div class="alert alert-secondary text-break" style="font-family: monospace;"&gt;
+                        &lt;%=Server.HTMLEncode(hashResult)%&gt;
+                    &lt;/div&gt;
+                &lt;/div&gt;
+            &lt;% End If %&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    
+    &lt;div class="card shadow-sm"&gt;
+        &lt;div class="card-header bg-secondary text-white"&gt;&lt;h4&gt;Verify Hash&lt;/h4&gt;&lt;/div&gt;
+        &lt;div class="card-body"&gt;
+            &lt;% If verified &lt;&gt; "" Then %&gt;
+                &lt;div class="alert &lt;%=verifyClass%&gt;"&gt;&lt;%=verified%&gt;&lt;/div&gt;
+            &lt;% End If %&gt;
+            &lt;form method="post" action="test_hasher.asp"&gt;
+                &lt;input type="hidden" name="action" value="verify"&gt;
+                &lt;div class="mb-3"&gt;
+                    &lt;label class="form-label"&gt;Plain Text&lt;/label&gt;
+                    &lt;input type="text" name="textToHash" class="form-control" value="&lt;%=Server.HTMLEncode(textToHash)%&gt;" required&gt;
+                &lt;/div&gt;
+                &lt;div class="mb-3"&gt;
+                    &lt;label class="form-label"&gt;Bcrypt Hash&lt;/label&gt;
+                    &lt;input type="text" name="hashToVerify" class="form-control" value="&lt;%=Server.HTMLEncode(Request.Form("hashToVerify"))%&gt;" required&gt;
+                &lt;/div&gt;
+                &lt;button type="submit" class="btn btn-success w-100"&gt;Verify&lt;/button&gt;
+            &lt;/form&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h2>Interactive PDF Generator</h2>
+<p>An application with a <code>&lt;textarea&gt;</code> where users can enter arbitrary text and generate a styled A4 PDF on the fly. It also provides a download link.</p>
+<pre><code class="language-vbscript">&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim textInput, pdfUrl
+textInput = Request.Form("pdfText")
+pdfUrl = ""
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" And textInput &lt;&gt; "" Then
+    Dim pdf, fileName, physicalPath
+    
+    ' Initialize a new A4 PDF
+    Set pdf = ASPPY.pdf.New("P", "mm", "A4")
+    pdf.add_page()
+    
+    ' Add a Title
+    pdf.set_font "Arial", "B", 24
+    pdf.set_text_color 50, 50, 150
+    pdf.cell 0, 15, "My Generated PDF", 0, 1, "C"
+    pdf.ln 10
+    
+    ' Add User Text
+    pdf.set_font "Arial", "", 12
+    pdf.set_text_color 0, 0, 0
+    pdf.multi_cell 0, 8, textInput
+    
+    ' Add a footer timestamp
+    pdf.ln 20
+    pdf.set_font "Arial", "I", 10
+    pdf.set_text_color 150, 150, 150
+    pdf.cell 0, 10, "Generated by ASPPY at " &amp; Now(), 0, 1, "R"
+    
+    ' Create a unique filename based on the current timestamp
+    fileName = "generated_" &amp; Replace(Replace(Replace(Now(), "/", ""), ":", ""), " ", "") &amp; ".pdf"
+    physicalPath = Server.MapPath("/pdfs/" &amp; fileName)
+    
+    ' Save and set the download link
+    pdf.output physicalPath
+    pdfUrl = "/pdfs/" &amp; fileName
+End If
+%&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;ASPPY PDF Generator&lt;/title&gt;
+    &lt;link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;
+&lt;body class="bg-light"&gt;
+&lt;div class="container mt-5" style="max-width: 600px;"&gt;
+    &lt;div class="card shadow-sm"&gt;
+        &lt;div class="card-header bg-danger text-white"&gt;&lt;h4&gt;PDF Generator&lt;/h4&gt;&lt;/div&gt;
+        &lt;div class="card-body"&gt;
+            &lt;% If pdfUrl &lt;&gt; "" Then %&gt;
+                &lt;div class="alert alert-success text-center"&gt;
+                    PDF Created Successfully!&lt;br&gt;&lt;br&gt;
+                    &lt;a href="&lt;%=pdfUrl%&gt;" target="_blank" class="btn btn-sm btn-success"&gt;View PDF&lt;/a&gt;
+                    &lt;a href="&lt;%=pdfUrl%&gt;" download class="btn btn-sm btn-outline-success"&gt;Download&lt;/a&gt;
+                &lt;/div&gt;
+            &lt;% End If %&gt;
+            
+            &lt;form method="post" action="test_pdf_app.asp"&gt;
+                &lt;div class="mb-3"&gt;
+                    &lt;label class="form-label"&gt;Enter text to include in the PDF:&lt;/label&gt;
+                    &lt;textarea name="pdfText" class="form-control" rows="5" required placeholder="Hello world..."&gt;&lt;%=Server.HTMLEncode(textInput)%&gt;&lt;/textarea&gt;
+                &lt;/div&gt;
+                &lt;button type="submit" class="btn btn-danger w-100"&gt;Generate PDF Document&lt;/button&gt;
+            &lt;/form&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h2>ZIP File Compressor</h2>
+<p>A file uploader application that demonstrates how ASPPY intercepts multipart uploads via <code>Request.Files</code> natively, saves the file, compresses it via <code>ASPPY.zip</code>, and offers it via <code>Response.File</code> for download.</p>
+<pre><code class="language-vbscript">&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim msg, zipPath, download
+download = Request.QueryString("download")
+
+If download &lt;&gt; "" Then
+    ' Serve the generated zip file natively
+    Response.File Server.MapPath("/data/" &amp; download), False
+End If
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" Then
+    If Request.Files.Count &gt; 0 Then
+        Dim uploadedFile, savePath, outZip
+        Set uploadedFile = Request.Files("fileToZip")
+        If Not uploadedFile Is Nothing And uploadedFile.FileName &lt;&gt; "" Then
+            savePath = Server.MapPath("/data/" &amp; uploadedFile.FileName)
+            uploadedFile.SaveAs savePath
+
+            ' Zip the file
+            outZip = Server.MapPath("/data/" &amp; uploadedFile.FileName &amp; ".zip")
+            ASPPY.zip.Zip savePath, outZip
+
+            msg = "&lt;div class='alert alert-success'&gt;Successfully compressed! &lt;a href='?download=" &amp; Server.URLEncode(uploadedFile.FileName &amp; ".zip") &amp; "'&gt;Download ZIP&lt;/a&gt;&lt;/div&gt;"
+        End If
+    End If
+End If
+%&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;title&gt;ASPPY Zip Compressor&lt;/title&gt;
+    &lt;link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;
+&lt;body class="bg-light"&gt;
+&lt;div class="container mt-5" style="max-width: 500px;"&gt;
+    &lt;div class="card shadow-sm"&gt;
+        &lt;div class="card-header bg-dark text-white"&gt;&lt;h4&gt;File to ZIP Compressor&lt;/h4&gt;&lt;/div&gt;
+        &lt;div class="card-body"&gt;
+            &lt;%=msg%&gt;
+            &lt;form method="post" action="test_compress.asp" enctype="multipart/form-data"&gt;
+                &lt;div class="mb-3"&gt;
+                    &lt;label class="form-label"&gt;Select a file to compress:&lt;/label&gt;
+                    &lt;input class="form-control" type="file" name="fileToZip" required&gt;
+                &lt;/div&gt;
+                &lt;button type="submit" class="btn btn-primary w-100"&gt;Upload &amp; Compress&lt;/button&gt;
+            &lt;/form&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h2>Python System Monitor (ExecutePython)</h2>
+<p>A dashboard that calls real Python via <code>ASPPY.ExecutePython</code> to retrieve CPU, memory, and disk stats using <code>psutil</code>, then decodes the JSON result with <code>ASPPY.json.Decode</code>. Demonstrates the VBScript-to-Python bridge with structured data exchange.</p>
+<pre><code class="language-vbscript">&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim pyCode, jsonResult, stats
+
+pyCode = "import json, psutil, platform" &amp; vbCrLf &amp; _
+         "cpu = psutil.cpu_percent(interval=1)" &amp; vbCrLf &amp; _
+         "mem = psutil.virtual_memory()" &amp; vbCrLf &amp; _
+         "disk = psutil.disk_usage('/')" &amp; vbCrLf &amp; _
+         "ASPPY_RETURN(json.dumps({" &amp; vbCrLf &amp; _
+         "  'python': platform.python_version()," &amp; vbCrLf &amp; _
+         "  'os': platform.system() + ' ' + platform.release()," &amp; vbCrLf &amp; _
+         "  'cpu_percent': cpu," &amp; vbCrLf &amp; _
+         "  'mem_used_gb': round(mem.used / (1024**3), 1)," &amp; vbCrLf &amp; _
+         "  'mem_total_gb': round(mem.total / (1024**3), 1)," &amp; vbCrLf &amp; _
+         "  'disk_used_gb': round(disk.used / (1024**3), 1)," &amp; vbCrLf &amp; _
+         "  'disk_total_gb': round(disk.total / (1024**3), 1)" &amp; vbCrLf &amp; _
+         "}))"
+
+On Error Resume Next
+jsonResult = ASPPY.ExecutePython(pyCode)
+
+If Err.Number &lt;&gt; 0 Then
+    Response.Write "&lt;div style='color:red'&gt;Python error: " &amp; _
+        Server.HTMLEncode(Err.Description) &amp; "&lt;/div&gt;"
+    Err.Clear
+Else
+    Set stats = ASPPY.json.Decode(jsonResult)
+%&gt;
+&lt;div style="font-family:Arial;max-width:500px;margin:2rem auto"&gt;
+    &lt;h2&gt;System Monitor&lt;/h2&gt;
+    &lt;p&gt;Python &lt;%=stats("python")%&gt; on &lt;%=stats("os")%&gt;&lt;/p&gt;
+    &lt;table border="1" cellpadding="6" cellspacing="0"&gt;
+        &lt;tr&gt;&lt;th&gt;CPU&lt;/th&gt;&lt;td&gt;&lt;%=stats("cpu_percent")%&gt;%&lt;/td&gt;&lt;/tr&gt;
+        &lt;tr&gt;&lt;th&gt;Memory&lt;/th&gt;&lt;td&gt;&lt;%=stats("mem_used_gb")%&gt; / &lt;%=stats("mem_total_gb")%&gt; GB&lt;/td&gt;&lt;/tr&gt;
+        &lt;tr&gt;&lt;th&gt;Disk&lt;/th&gt;&lt;td&gt;&lt;%=stats("disk_used_gb")%&gt; / &lt;%=stats("disk_total_gb")%&gt; GB&lt;/td&gt;&lt;/tr&gt;
+    &lt;/table&gt;
+&lt;/div&gt;
+&lt;%
+End If
+On Error Goto 0
+%&gt;</code></pre>
+
+</main>
+</div>
+<footer class="doc-footer">
+    <p>ASPPY Framework Documentation &middot; <a href="index.html">Website</a> &middot; <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub</a></p>
+</footer>
+<script>
+(function() {
+  var saved = localStorage.getItem('asppy-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateIcon(theme);
+})();
+function updateIcon(t) {
+  var icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var current = document.documentElement.getAttribute('data-theme');
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('asppy-theme', next);
+  updateIcon(next);
+});
+document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  this.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('pre').forEach(function(el) {
+    var btn = document.createElement('button');
+    btn.innerText = 'Copy';
+    btn.className = 'copy-btn';
+    btn.addEventListener('click', function() {
+      var code = el.querySelector('code');
+      var text = code ? code.innerText : el.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 2000);
+      });
+    });
+    el.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>

@@ -11,9 +11,10 @@ Examples:
     asppy-check www_test --verbose  # also list passing pages
     asppy-check www --exclude drafts --exclude old
 
-Directories named 'includes' (include fragments that cannot render
-standalone) and directories starting with '_' (data folders such as
-_appdata) are skipped by default. Use --no-default-excludes to scan them.
+Directories holding include fragments that cannot render standalone -
+'includes', 'views', 'partials', 'layouts' - and directories starting with
+'_' (data folders such as _appdata) are skipped by default. Use
+--no-default-excludes to scan them anyway.
 
 The same entry point is reachable as ``python -m ASPPY.check ...`` or, from a
 source checkout, as ``python asppycheck.py ...``.
@@ -30,7 +31,13 @@ import sys
 
 from ASPPY.cli import render_file
 
-DEFAULT_EXCLUDED_DIRS = ("includes",)
+# Directories whose .asp files are fragments, not pages: they are pulled in by
+# a controller or a front controller via #include, and reference variables and
+# helper functions that only exist in that context. Rendering them standalone
+# always fails, so scanning them produces noise rather than signal - the MVC
+# starter reported three phantom failures before these were excluded.
+# Pass --no-default-excludes to scan them anyway.
+DEFAULT_EXCLUDED_DIRS = ("includes", "views", "partials", "layouts")
 
 # The IIS-style error page emitted by the VM looks like:
 #   <p>ASPPY runtime error '8000ffff'</p>
@@ -78,7 +85,9 @@ def main(argv=None):
     ap.add_argument("--exclude", action="append", default=[], metavar="DIR",
                     help="directory name to skip (repeatable)")
     ap.add_argument("--no-default-excludes", action="store_true",
-                    help="also scan 'includes' and '_*' directories")
+                    help="also scan the include-fragment directories "
+                         "(includes, views, partials, layouts) and '_*' "
+                         "data directories")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="list passing pages too, not just failures")
     ap.add_argument("--fail-fast", action="store_true",

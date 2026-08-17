@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="IIS Setup - Configure IIS as a reverse proxy to run ASPPY as a drop-in Classic ASP replacement.">
+    <title>IIS Setup - ASPPY Framework Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-card: #FFFFFF;
+  --bg-code: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-heading: #0F172A;
+  --border-color: #E2E8F0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-code: #0D1117;
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-heading: #F1F5F9;
+  --border-color: #334155;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text-heading); font-weight: 700; line-height: 1.2; }
+h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); }
+h2 { font-size: clamp(1.375rem, 2.5vw, 1.75rem); }
+h3 { font-size: clamp(1.125rem, 2vw, 1.375rem); }
+a { color: #6366F1; text-decoration: none; transition: var(--transition); }
+a:hover { color: #4F46E5; }
+code { font-family: 'JetBrains Mono', monospace; background: rgba(99,102,241,0.08); color: #6366F1; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+[data-theme="dark"] code { background: rgba(99,102,241,0.15); color: #818CF8; }
+pre {
+  background: var(--bg-code);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  position: relative;
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+.copy-btn {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #818CF8; padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-size: 0.72rem; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+}
+.copy-btn:hover { background: rgba(99,102,241,0.3); }
+:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+.skip-link {
+  position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
+  background: #6366F1; color: #fff; padding: 0.75rem 1.5rem;
+  border-radius: 8px; z-index: 10000; font-weight: 600;
+}
+.skip-link:focus { top: 1rem; }
+.doc-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.nav-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; font-size: 1rem; color: var(--text-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.nav-logo:hover { color: #6366F1; }
+.nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+.nav-link {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);
+  padding: 0.4rem 0.6rem; border-radius: 6px; transition: var(--transition);
+}
+.nav-link:hover { color: #6366F1; background: rgba(99,102,241,0.08); }
+.theme-btn, .sidebar-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); font-size: 0.9rem;
+}
+.theme-btn:hover, .sidebar-toggle-btn:hover { border-color: #6366F1; color: #6366F1; }
+.sidebar-toggle-btn { display: none; }
+.doc-layout {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.sidebar li a {
+  display: block; padding: 0.5rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+}
+.sidebar li a:hover { color: #6366F1; background: rgba(99,102,241,0.05); }
+.sidebar li a.active {
+  color: #6366F1; background: rgba(99,102,241,0.08);
+  border-left-color: #6366F1; font-weight: 600;
+}
+.doc-main {
+  flex: 1; padding: 2rem 2.5rem 4rem;
+  max-width: 900px;
+}
+.doc-main h1 { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border-color); }
+.doc-main h2, .doc-main h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+.doc-main p, .doc-main li { color: var(--text-secondary); line-height: 1.7; }
+.doc-main ul, .doc-main ol { padding-left: 1.5rem; }
+.doc-main li { margin-bottom: 0.35rem; }
+.doc-main table {
+  width: 100%; border-collapse: collapse;
+  margin: 1rem 0; font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.doc-main th {
+  background: #6366F1; color: #fff;
+  padding: 0.75rem 1rem; text-align: left;
+  font-weight: 600; font-size: 0.82rem;
+}
+.doc-main td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.doc-main tr:last-child td { border-bottom: none; }
+.doc-main tr:hover td { background: rgba(99,102,241,0.03); }
+.doc-footer {
+  background: #0B1120; color: rgba(255,255,255,0.5);
+  padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem;
+}
+.doc-footer a { color: rgba(255,255,255,0.6); }
+.doc-footer a:hover { color: #fff; }
+.alert-box {
+  padding: 1rem 1.25rem; border-radius: var(--radius-md);
+  margin: 1rem 0; font-size: 0.9rem; line-height: 1.6;
+}
+.alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
+.alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
+.alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .sidebar-toggle-btn { display: flex; }
+  .doc-main { padding: 1.5rem 1rem 3rem; }
+  .nav-link { display: none; }
+}
+    </style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<nav class="doc-nav" role="navigation" aria-label="Documentation navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="ASPPY Home">
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><text x="32" y="42" text-anchor="middle" font-family="monospace" font-size="28" font-weight="bold" fill="white">&lt;%</text></svg>
+      <span>ASPPY Docs</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Website</a>
+	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="doc-layout">
+<aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+  <nav>
+    <ul>
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
+      <li><a href="database.html">Database (ADODB)</a></li>
+      <li><a href="pop3_imap.html">ASPPY Mail</a></li>
+      <li><a href="zip.html">ASPPY.zip</a></li>
+      <li><a href="pdf.html">ASPPY.pdf</a></li>
+      <li><a href="image.html">ASPPY.image</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
+      <li><a href="json.html">ASPPY.json</a></li>
+      <li><a href="python.html">ASPPY.ExecutePython</a></li>
+      <li><a href="specifications.html">Specifications</a></li>
+      <li><a href="why_asppy.html">Why ASPPY Exists</a></li>
+      <li><a href="iis_setup.html" class="active">IIS Setup</a></li>
+      <li><a href="sample_apps.html">Sample Apps</a></li>
+    </ul>
+  </nav>
+</aside>
+<main id="main-content" class="doc-main">
+<h2>What It Does</h2>
+<p>This <code>web.config</code> makes IIS act as a <strong>reverse proxy</strong>: all incoming HTTP traffic to your IIS website is silently forwarded to <strong>ASPPY</strong>, running as a service on <code>localhost:8080</code>. The client never sees port 8080 â€” to the outside world, IIS remains the web server, just as it did with Classic ASP.</p>
+<p>This setup is the easiest (no the only) way to run ASPPY as a drop-in replacement for Classic ASP/VBScript pages, without changing any URLs or client-facing behaviour.</p>
+<pre><code class="language-xml">&lt;configuration&gt;
+  &lt;system.webServer&gt;
+    &lt;httpErrors existingResponse="PassThrough" /&gt;
+    &lt;rewrite&gt;
+      &lt;rules&gt;
+        &lt;rule name="ReverseProxyToASPPY" stopProcessing="true"&gt;
+          &lt;match url=".*" /&gt;
+          &lt;action type="Rewrite" url="http://localhost:8080/{R:0}" /&gt;
+        &lt;/rule&gt;
+      &lt;/rules&gt;
+    &lt;/rewrite&gt;
+  &lt;/system.webServer&gt;
+&lt;/configuration&gt;
+</code></pre>
+<hr />
+<h2>Line-by-Line Explanation</h2>
+<h3><code>&lt;httpErrors existingResponse="PassThrough" /&gt;</code></h3>
+<p>By default, IIS intercepts HTTP error responses (404, 500, etc.) and replaces them with its own error pages. <code>PassThrough</code> disables this â€” whatever ASPPY returns is sent directly to the client, errors included. This is important so that ASPPY's own error handling reaches the browser unmodified.</p>
+<h3><code>&lt;match url=".*" /&gt;</code></h3>
+<p>A regular expression that matches <strong>every</strong> incoming request URL, without exception. All <code>.asp</code> pages, static assets, and any other requests are captured by this rule.</p>
+<h3><code>stopProcessing="true"</code></h3>
+<p>Once this rule matches (which it always will), IIS stops evaluating any further rewrite rules. Prevents unintended rule conflicts.</p>
+<h3><code>&lt;action type="Rewrite" url="http://localhost:8080/{R:0}" /&gt;</code></h3>
+<p>Rewrites the request to ASPPY on <code>localhost:8080</code>, appending the original URL path via <code>{R:0}</code> (the full matched string). For example:</p>
+<table>
+    <thead>
+        <tr><th>Incoming request</th><th>Forwarded to ASPPY</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>/</code></td><td><code>http://localhost:8080/</code></td></tr>
+        <tr><td><code>/default.asp</code></td><td><code>http://localhost:8080/default.asp</code></td></tr>
+        <tr><td><code>/shop/order.asp?id=42</code></td><td><code>http://localhost:8080/shop/order.asp?id=42</code></td></tr>
+    </tbody>
+</table>
+<p>This is a <strong>rewrite</strong>, not a <strong>redirect</strong> â€” the URL in the browser does not change.</p>
+<hr />
+<h2>Requirements</h2>
+<h3>1. URL Rewrite Module <em>(required)</em></h3>
+<p>Provides the <code>&lt;rewrite&gt;</code> configuration section in <code>web.config</code>. Without it, IIS does not understand the rewrite rules and will throw a 500 error.</p>
+<ul>
+    <li>Download: <a href="https://www.iis.net/downloads/microsoft/url-rewrite">IIS URL Rewrite</a></li>
+</ul>
+<h3>2. Application Request Routing â€” ARR <em>(required)</em></h3>
+<p>Enables IIS to forward HTTP requests to ASPPY on port 8080. The URL Rewrite module alone can rewrite URLs internally, but cannot proxy requests over HTTP to another process.</p>
+<ul>
+    <li>Download: <a href="https://www.iis.net/downloads/microsoft/application-request-routing">IIS Application Request Routing</a></li>
+</ul>
+<div class="alert-box alert-warning">
+    <strong>Important:</strong> After installing ARR, you must explicitly enable the proxy at the <strong>server level</strong> in IIS Manager:<br />
+    <em>IIS Manager â†’ Server node â†’ Application Request Routing Cache â†’ Server Proxy Settings â†’ Enable proxy â†’ Apply</em><br />
+    This is a one-time step per server. Without it, rewrite rules that forward to <code>http://localhost:port</code> will silently fail with a 404.
+</div>
+<h3>3. ASPPY running on port 8080 <em>(required)</em></h3>
+<p>The ASPPY service must be running and listening on <code>localhost:8080</code> before any requests will be handled. IIS will return a 502 Bad Gateway if ASPPY is not running.</p>
+<hr />
+<h2>Scope</h2>
+<p>This <code>web.config</code> only affects the <strong>site it belongs to</strong>. Enabling ARR proxy at the server level is a global capability switch, but the actual forwarding behaviour is controlled entirely by per-site rewrite rules. Other IIS websites on the same server without these rules are completely unaffected.</p>
+<hr />
+<h2>Traffic Flow</h2>
+<pre><code>Browser â†’ IIS :80/:443 â†’ ASPPY on localhost:8080
+                      â† response returned to browser
+</code></pre>
+<p>IIS handles SSL termination, logging, and connection management. ASPPY receives plain HTTP requests on port 8080 and returns responses exactly as Classic ASP did â€” the transition is transparent to the client.</p>
+</main>
+</div>
+<footer class="doc-footer">
+    <p>ASPPY Framework Documentation &middot; <a href="index.html">Website</a> &middot; <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub</a></p>
+</footer>
+<script>
+(function() {
+  var saved = localStorage.getItem('asppy-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateIcon(theme);
+})();
+function updateIcon(t) {
+  var icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var current = document.documentElement.getAttribute('data-theme');
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('asppy-theme', next);
+  updateIcon(next);
+});
+document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  this.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('pre').forEach(function(el) {
+    var btn = document.createElement('button');
+    btn.innerText = 'Copy';
+    btn.className = 'copy-btn';
+    btn.addEventListener('click', function() {
+      var code = el.querySelector('code');
+      var text = code ? code.innerText : el.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 2000);
+      });
+    });
+    el.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>

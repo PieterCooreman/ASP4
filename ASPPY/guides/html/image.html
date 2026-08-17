@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ASPPY.image - Image processing from Classic ASP/VBScript using Python's Pillow library.">
+    <title>ASPPY.image - ASPPY Framework Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-card: #FFFFFF;
+  --bg-code: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-heading: #0F172A;
+  --border-color: #E2E8F0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-code: #0D1117;
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-heading: #F1F5F9;
+  --border-color: #334155;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text-heading); font-weight: 700; line-height: 1.2; }
+h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); }
+h2 { font-size: clamp(1.375rem, 2.5vw, 1.75rem); }
+h3 { font-size: clamp(1.125rem, 2vw, 1.375rem); }
+a { color: #6366F1; text-decoration: none; transition: var(--transition); }
+a:hover { color: #4F46E5; }
+code { font-family: 'JetBrains Mono', monospace; background: rgba(99,102,241,0.08); color: #6366F1; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+[data-theme="dark"] code { background: rgba(99,102,241,0.15); color: #818CF8; }
+pre {
+  background: var(--bg-code);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  position: relative;
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+.copy-btn {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #818CF8; padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-size: 0.72rem; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+}
+.copy-btn:hover { background: rgba(99,102,241,0.3); }
+:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+.skip-link {
+  position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
+  background: #6366F1; color: #fff; padding: 0.75rem 1.5rem;
+  border-radius: 8px; z-index: 10000; font-weight: 600;
+}
+.skip-link:focus { top: 1rem; }
+.doc-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.nav-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; font-size: 1rem; color: var(--text-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.nav-logo:hover { color: #6366F1; }
+.nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+.nav-link {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);
+  padding: 0.4rem 0.6rem; border-radius: 6px; transition: var(--transition);
+}
+.nav-link:hover { color: #6366F1; background: rgba(99,102,241,0.08); }
+.theme-btn, .sidebar-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); font-size: 0.9rem;
+}
+.theme-btn:hover, .sidebar-toggle-btn:hover { border-color: #6366F1; color: #6366F1; }
+.sidebar-toggle-btn { display: none; }
+.doc-layout {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.sidebar li a {
+  display: block; padding: 0.5rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+}
+.sidebar li a:hover { color: #6366F1; background: rgba(99,102,241,0.05); }
+.sidebar li a.active {
+  color: #6366F1; background: rgba(99,102,241,0.08);
+  border-left-color: #6366F1; font-weight: 600;
+}
+.doc-main {
+  flex: 1; padding: 2rem 2.5rem 4rem;
+  max-width: 900px;
+}
+.doc-main h1 { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border-color); }
+.doc-main h2, .doc-main h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+.doc-main p, .doc-main li { color: var(--text-secondary); line-height: 1.7; }
+.doc-main ul, .doc-main ol { padding-left: 1.5rem; }
+.doc-main li { margin-bottom: 0.35rem; }
+.doc-main table {
+  width: 100%; border-collapse: collapse;
+  margin: 1rem 0; font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.doc-main th {
+  background: #6366F1; color: #fff;
+  padding: 0.75rem 1rem; text-align: left;
+  font-weight: 600; font-size: 0.82rem;
+}
+.doc-main td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.doc-main tr:last-child td { border-bottom: none; }
+.doc-main tr:hover td { background: rgba(99,102,241,0.03); }
+.doc-footer {
+  background: #0B1120; color: rgba(255,255,255,0.5);
+  padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem;
+}
+.doc-footer a { color: rgba(255,255,255,0.6); }
+.doc-footer a:hover { color: #fff; }
+.alert-box {
+  padding: 1rem 1.25rem; border-radius: var(--radius-md);
+  margin: 1rem 0; font-size: 0.9rem; line-height: 1.6;
+}
+.alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
+.alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
+.alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .sidebar-toggle-btn { display: flex; }
+  .doc-main { padding: 1.5rem 1rem 3rem; }
+  .nav-link { display: none; }
+}
+    </style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<nav class="doc-nav" role="navigation" aria-label="Documentation navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="ASPPY Home">
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><text x="32" y="42" text-anchor="middle" font-family="monospace" font-size="28" font-weight="bold" fill="white">&lt;%</text></svg>
+      <span>ASPPY Docs</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Website</a>
+	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="doc-layout">
+<aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+  <nav>
+    <ul>
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
+      <li><a href="database.html">Database (ADODB)</a></li>
+      <li><a href="pop3_imap.html">ASPPY Mail</a></li>
+      <li><a href="zip.html">ASPPY.zip</a></li>
+      <li><a href="pdf.html">ASPPY.pdf</a></li>
+      <li><a href="image.html" class="active">ASPPY.image</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
+      <li><a href="json.html">ASPPY.json</a></li>
+      <li><a href="python.html">ASPPY.ExecutePython</a></li>
+      <li><a href="specifications.html">Specifications</a></li>
+      <li><a href="why_asppy.html">Why ASPPY Exists</a></li>
+      <li><a href="iis_setup.html">IIS Setup</a></li>
+      <li><a href="sample_apps.html">Sample Apps</a></li>
+    </ul>
+  </nav>
+</aside>
+<main id="main-content" class="doc-main">
+<h1>ASPPY.image</h1>
+<p>The <code>ASPPY.image</code> namespace exposes the powerful Python <code>Pillow</code> library directly to VBScript. You can resize, crop, draw, apply filters, and enhance images seamlessly.</p>
+
+<h3>Namespaces</h3>
+
+<h4>ASPPY.image.Image</h4>
+<ul>
+    <li><code>open(path)</code> - Opens and identifies the given image file.</li>
+    <li><code>new(mode, size, [color])</code> - Creates a new image with the given mode ("RGB", "RGBA") and size <code>Array(width, height)</code>.</li>
+    <li><strong>ImageInstance methods:</strong> <code>save(path)</code>, <code>resize(Array(w, h))</code>, <code>crop(Array(left, top, right, bottom))</code>, <code>rotate(angle)</code>, <code>convert(mode)</code>.</li>
+    <li><strong>ImageInstance properties:</strong> <code>width</code>, <code>height</code>, <code>size</code>.</li>
+</ul>
+
+<h4>ASPPY.image.ImageDraw</h4>
+<ul>
+    <li><code>Draw(img)</code> - Returns a <code>DrawInstance</code> for drawing on the image.</li>
+    <li><strong>DrawInstance methods:</strong> <code>text(xy, text, [fill])</code>, <code>rectangle(box, [outline], [fill])</code>, <code>ellipse(box, [outline], [fill])</code>, <code>line(xy, [fill], [width])</code>.</li>
+</ul>
+
+<h4>ASPPY.image.ImageFilter</h4>
+<ul>
+    <li><code>GaussianBlur(radius)</code> - Creates a Gaussian blur filter object to be passed into <code>ImageInstance.filter()</code>.</li>
+    <li><strong>Constants:</strong> <code>BLUR</code>, <code>SHARPEN</code>, <code>SMOOTH</code>, <code>CONTOUR</code>, <code>EMBOSS</code>, etc.</li>
+</ul>
+
+<h3>Sample Code</h3>
+<pre><code class="language-vbscript">&lt;%
+Dim img, draw, filter, blurredImg
+' 1. Create a new 200x200 RGB image with a blue background
+Set img = ASPPY.image.Image.new("RGB", Array(200, 200), Array(0, 0, 255))
+
+' 2. Draw a red rectangle and some text
+Set draw = ASPPY.image.ImageDraw.Draw(img)
+
+' Rectangle box: Array(Left, Top, Right, Bottom)
+draw.rectangle Array(50, 50, 150, 150), Array(255, 255, 255), Array(255, 0, 0)
+
+' Draw text at Array(X, Y)
+draw.text Array(60, 90), "ASPPY Image", Array(255, 255, 255)
+
+' 3. Apply a Gaussian Blur filter
+Set blurredImg = img.filter(ASPPY.image.ImageFilter.GaussianBlur(2.0))
+
+' 4. Save the modified image
+Dim savePath
+savePath = Server.MapPath("/images/output.jpg")
+blurredImg.save savePath
+
+Response.Write "Image saved successfully. Dimensions: " & blurredImg.width & "x" & blurredImg.height
+%&gt;</code></pre>
+
+<h3>Resizing and Cropping Example</h3>
+<pre><code class="language-vbscript">&lt;%
+Dim srcImg, resizedImg, croppedImg
+
+' Open an existing image
+Set srcImg = ASPPY.image.Image.open(Server.MapPath("/images/photo.jpg"))
+
+' Resize
+Set resizedImg = srcImg.resize(Array(800, 600))
+
+' Crop center
+Set croppedImg = resizedImg.crop(Array(100, 100, 700, 500))
+
+' Save back to disk
+croppedImg.save Server.MapPath("/images/photo_cropped.jpg")
+%&gt;</code></pre>
+</main>
+</div>
+<footer class="doc-footer">
+    <p>ASPPY Framework Documentation &middot; <a href="index.html">Website</a> &middot; <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub</a></p>
+</footer>
+<script>
+(function() {
+  var saved = localStorage.getItem('asppy-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateIcon(theme);
+})();
+function updateIcon(t) {
+  var icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var current = document.documentElement.getAttribute('data-theme');
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('asppy-theme', next);
+  updateIcon(next);
+});
+document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  this.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('pre').forEach(function(el) {
+    var btn = document.createElement('button');
+    btn.innerText = 'Copy';
+    btn.className = 'copy-btn';
+    btn.addEventListener('click', function() {
+      var code = el.querySelector('code');
+      var text = code ? code.innerText : el.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 2000);
+      });
+    });
+    el.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>

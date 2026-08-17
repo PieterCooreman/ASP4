@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ASPPY Specifications - Complete API reference, VBScript built-ins, COM objects, and compatibility matrix.">
+    <title>Specifications - ASPPY Framework Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-card: #FFFFFF;
+  --bg-code: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-heading: #0F172A;
+  --border-color: #E2E8F0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-code: #0D1117;
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-heading: #F1F5F9;
+  --border-color: #334155;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text-heading); font-weight: 700; line-height: 1.2; }
+h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); }
+h2 { font-size: clamp(1.375rem, 2.5vw, 1.75rem); }
+h3 { font-size: clamp(1.125rem, 2vw, 1.375rem); }
+a { color: #6366F1; text-decoration: none; transition: var(--transition); }
+a:hover { color: #4F46E5; }
+code { font-family: 'JetBrains Mono', monospace; background: rgba(99,102,241,0.08); color: #6366F1; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+[data-theme="dark"] code { background: rgba(99,102,241,0.15); color: #818CF8; }
+pre {
+  background: var(--bg-code);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  position: relative;
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+.copy-btn {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #818CF8; padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-size: 0.72rem; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+}
+.copy-btn:hover { background: rgba(99,102,241,0.3); }
+:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+.skip-link {
+  position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
+  background: #6366F1; color: #fff; padding: 0.75rem 1.5rem;
+  border-radius: 8px; z-index: 10000; font-weight: 600;
+}
+.skip-link:focus { top: 1rem; }
+.doc-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.nav-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; font-size: 1rem; color: var(--text-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.nav-logo:hover { color: #6366F1; }
+.nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+.nav-link {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);
+  padding: 0.4rem 0.6rem; border-radius: 6px; transition: var(--transition);
+}
+.nav-link:hover { color: #6366F1; background: rgba(99,102,241,0.08); }
+.theme-btn, .sidebar-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); font-size: 0.9rem;
+}
+.theme-btn:hover, .sidebar-toggle-btn:hover { border-color: #6366F1; color: #6366F1; }
+.sidebar-toggle-btn { display: none; }
+.doc-layout {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.sidebar li a {
+  display: block; padding: 0.5rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+}
+.sidebar li a:hover { color: #6366F1; background: rgba(99,102,241,0.05); }
+.sidebar li a.active {
+  color: #6366F1; background: rgba(99,102,241,0.08);
+  border-left-color: #6366F1; font-weight: 600;
+}
+.doc-main {
+  flex: 1; padding: 2rem 2.5rem 4rem;
+  max-width: 900px;
+}
+.doc-main h1 { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border-color); }
+.doc-main h2, .doc-main h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+.doc-main p, .doc-main li { color: var(--text-secondary); line-height: 1.7; }
+.doc-main ul, .doc-main ol { padding-left: 1.5rem; }
+.doc-main li { margin-bottom: 0.35rem; }
+.doc-main table {
+  width: 100%; border-collapse: collapse;
+  margin: 1rem 0; font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.doc-main th {
+  background: #6366F1; color: #fff;
+  padding: 0.75rem 1rem; text-align: left;
+  font-weight: 600; font-size: 0.82rem;
+}
+.doc-main td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.doc-main tr:last-child td { border-bottom: none; }
+.doc-main tr:hover td { background: rgba(99,102,241,0.03); }
+.doc-footer {
+  background: #0B1120; color: rgba(255,255,255,0.5);
+  padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem;
+}
+.doc-footer a { color: rgba(255,255,255,0.6); }
+.doc-footer a:hover { color: #fff; }
+.alert-box {
+  padding: 1rem 1.25rem; border-radius: var(--radius-md);
+  margin: 1rem 0; font-size: 0.9rem; line-height: 1.6;
+}
+.alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
+.alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
+.alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .sidebar-toggle-btn { display: flex; }
+  .doc-main { padding: 1.5rem 1rem 3rem; }
+  .nav-link { display: none; }
+}
+    </style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<nav class="doc-nav" role="navigation" aria-label="Documentation navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="ASPPY Home">
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><text x="32" y="42" text-anchor="middle" font-family="monospace" font-size="28" font-weight="bold" fill="white">&lt;%</text></svg>
+      <span>ASPPY Docs</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Website</a>
+	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="doc-layout">
+<aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+  <nav>
+    <ul>
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="legacy_asp.html">Legacy ASP Objects</a></li>
+      <li><a href="database.html">Database (ADODB)</a></li>
+      <li><a href="pop3_imap.html">ASPPY Mail</a></li>
+      <li><a href="zip.html">ASPPY.zip</a></li>
+      <li><a href="pdf.html">ASPPY.pdf</a></li>
+      <li><a href="image.html">ASPPY.image</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
+      <li><a href="json.html">ASPPY.json</a></li>
+      <li><a href="python.html">ASPPY.ExecutePython</a></li>
+      <li><a href="specifications.html" class="active">Specifications</a></li>
+      <li><a href="why_asppy.html">Why ASPPY Exists</a></li>
+      <li><a href="iis_setup.html">IIS Setup</a></li>
+      <li><a href="sample_apps.html">Sample Apps</a></li>
+    </ul>
+  </nav>
+</aside>
+<main id="main-content" class="doc-main">
+<p>ASPPY is a Python-based runtime that executes Classic ASP (VBScript) pages. It provides compatibility with most VBScript built-in functions, the Classic ASP object model (Request, Response, Session, Application, Server), and various COM components commonly used in legacy ASP applications.</p>
+<h2>Platform Support</h2>
+<p>ASPPY works on:</p>
+<ul>
+    <li>Windows</li>
+    <li>Linux</li>
+    <li>macOS</li>
+</ul>
+<h2>Dependencies</h2>
+<p>The following Python libraries are required:</p>
+<table>
+    <thead>
+        <tr><th>Library</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Python 3.8+</td><td>Runtime environment</td></tr>
+        <tr><td>fpdf2</td><td>PDF generation (<code>pip install fpdf2</code>)</td></tr>
+        <tr><td>bcrypt</td><td>Password hashing (<code>pip install bcrypt</code>)</td></tr>
+        <tr><td>Pillow</td><td>Image processing (<code>pip install pillow</code>)</td></tr>
+        <tr><td>pyodbc</td><td>Access/Excel/ODBC database providers (<code>pip install pyodbc</code>)</td></tr>
+        <tr><td>certifi (optional)</td><td>TLS CA bundle for MSXML HTTP (<code>pip install certifi</code>)</td></tr>
+        <tr><td>zipfile (built-in)</td><td>ZIP file handling</td></tr>
+    </tbody>
+</table>
+<hr />
+<h1>VBScript Built-in Functions</h1>
+<p>Compatibility notes for built-ins:</p>
+<ul>
+    <li>ASPPY targets practical Classic ASP/VBScript compatibility, but does not guarantee byte-for-byte parity with IIS VBScript for every edge case.</li>
+    <li>The function lists below describe the exposed runtime surface; behavior can still differ in locale, coercion, error wording, and edge conditions.</li>
+    <li>Functions implemented through compatibility shims/stubs (for example formatting/script-engine helpers) are intended for app portability, not strict engine emulation.</li>
+    <li>SQL/dialect translation is intentionally out of scope; database commands are executed as provided by the script and underlying provider/driver.</li>
+    <li>If exact behavior matters for a critical path, validate with your app-specific regression tests.</li>
+</ul>
+<h2>String Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Len(string)</code></td><td>Returns the length of a string</td></tr>
+        <tr><td><code>LenB(expression)</code></td><td>Returns the length of a string in bytes</td></tr>
+        <tr><td><code>UCase(string)</code></td><td>Converts a string to uppercase</td></tr>
+        <tr><td><code>LCase(string)</code></td><td>Converts a string to lowercase</td></tr>
+        <tr><td><code>Trim(string)</code></td><td>Removes leading and trailing spaces</td></tr>
+        <tr><td><code>LTrim(string)</code></td><td>Removes leading spaces</td></tr>
+        <tr><td><code>RTrim(string)</code></td><td>Removes trailing spaces</td></tr>
+        <tr><td><code>StrReverse(string)</code></td><td>Reverses a string</td></tr>
+        <tr><td><code>StrComp(string1, string2[, compare])</code></td><td>Compares two strings</td></tr>
+        <tr><td><code>Left(string, length)</code></td><td>Returns leftmost characters</td></tr>
+        <tr><td><code>Right(string, length)</code></td><td>Returns rightmost characters</td></tr>
+        <tr><td><code>Mid(string, start[, length])</code></td><td>Returns characters from a string</td></tr>
+        <tr><td><code>LeftB(string, length)</code></td><td>Returns leftmost bytes</td></tr>
+        <tr><td><code>RightB(string, length)</code></td><td>Returns rightmost bytes</td></tr>
+        <tr><td><code>MidB(expr, start[, length])</code></td><td>Returns bytes from a string</td></tr>
+        <tr><td><code>InStr([start, ]string1, string2[, compare])</code></td><td>Finds one string within another</td></tr>
+        <tr><td><code>InStrB([start, ]string1, string2)</code></td><td>Finds one string within another (byte)</td></tr>
+        <tr><td><code>Replace(expression, find, replace[, start[, count[, compare]]])</code></td><td>Replaces text in a string</td></tr>
+        <tr><td><code>Split(expression[, delimiter[, count[, compare]]])</code></td><td>Splits a string into an array</td></tr>
+        <tr><td><code>Join(list[, delimiter])</code></td><td>Joins an array into a string</td></tr>
+        <tr><td><code>Filter(inputstrings, value[, include[, compare]])</code></td><td>Returns a filtered array</td></tr>
+        <tr><td><code>Space(number)</code></td><td>Returns a string of spaces</td></tr>
+        <tr><td><code>String(number, character)</code></td><td>Returns a repeating character string</td></tr>
+        <tr><td><code>Asc(string)</code></td><td>Returns the ANSI code of the first character</td></tr>
+        <tr><td><code>AscW(string)</code></td><td>Returns the Unicode code of the first character</td></tr>
+        <tr><td><code>AscB(string)</code></td><td>Returns the first byte of a string</td></tr>
+        <tr><td><code>Chr(charcode)</code></td><td>Returns the character associated with an ANSI code</td></tr>
+        <tr><td><code>ChrW(charcode)</code></td><td>Returns the character associated with a Unicode code</td></tr>
+        <tr><td><code>ChrB(charcode)</code></td><td>Returns a single-byte character</td></tr>
+        <tr><td><code>Hex(number)</code></td><td>Returns the hexadecimal value</td></tr>
+        <tr><td><code>Oct(number)</code></td><td>Returns the octal value</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Array Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Array(arglist)</code></td><td>Creates an array</td></tr>
+        <tr><td><code>IsArray(varname)</code></td><td>Returns True if variable is an array</td></tr>
+        <tr><td><code>LBound(arrayname[, dimension])</code></td><td>Returns the lowest subscript</td></tr>
+        <tr><td><code>UBound(arrayname[, dimension])</code></td><td>Returns the highest subscript</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Type Conversion Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>CBool(expression)</code></td><td>Converts to Boolean</td></tr>
+        <tr><td><code>CByte(expression)</code></td><td>Converts to Byte</td></tr>
+        <tr><td><code>CCur(expression)</code></td><td>Converts to Currency</td></tr>
+        <tr><td><code>CDbl(expression)</code></td><td>Converts to Double</td></tr>
+        <tr><td><code>CInt(expression)</code></td><td>Converts to Integer</td></tr>
+        <tr><td><code>CLng(expression)</code></td><td>Converts to Long</td></tr>
+        <tr><td><code>CSng(expression)</code></td><td>Converts to Single</td></tr>
+        <tr><td><code>CStr(expression)</code></td><td>Converts to String</td></tr>
+        <tr><td><code>CDate(date)</code></td><td>Converts to Date</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Date/Time Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Now()</code></td><td>Returns current date and time</td></tr>
+        <tr><td><code>Date()</code></td><td>Returns current system date</td></tr>
+        <tr><td><code>Time()</code></td><td>Returns current system time</td></tr>
+        <tr><td><code>Timer()</code></td><td>Returns seconds since midnight</td></tr>
+        <tr><td><code>Year(date)</code></td><td>Returns the year</td></tr>
+        <tr><td><code>Month(date)</code></td><td>Returns the month (1-12)</td></tr>
+        <tr><td><code>Day(date)</code></td><td>Returns the day (1-31)</td></tr>
+        <tr><td><code>Hour(time)</code></td><td>Returns the hour (0-23)</td></tr>
+        <tr><td><code>Minute(time)</code></td><td>Returns the minute (0-59)</td></tr>
+        <tr><td><code>Second(time)</code></td><td>Returns the second (0-59)</td></tr>
+        <tr><td><code>DateSerial(year, month, day)</code></td><td>Returns a date</td></tr>
+        <tr><td><code>TimeSerial(hour, minute, second)</code></td><td>Returns a time</td></tr>
+        <tr><td><code>DateAdd(interval, number, date)</code></td><td>Adds a time interval</td></tr>
+        <tr><td><code>DateDiff(interval, date1, date2[, firstdayofweek[, firstweekofyear]])</code></td><td>Returns the difference</td></tr>
+        <tr><td><code>DatePart(interval, date[, firstdayofweek[, firstweekofyear]])</code></td><td>Returns a part of a date</td></tr>
+        <tr><td><code>Weekday(date[, firstdayofweek])</code></td><td>Returns the weekday (1-7)</td></tr>
+        <tr><td><code>WeekdayName(weekday[, abbreviate[, firstdayofweek]])</code></td><td>Returns the weekday name</td></tr>
+        <tr><td><code>MonthName(month[, abbreviate])</code></td><td>Returns the month name</td></tr>
+        <tr><td><code>DateValue(string)</code></td><td>Returns a date from a string</td></tr>
+        <tr><td><code>TimeValue(string)</code></td><td>Returns a time from a string</td></tr>
+        <tr><td><code>CDate(string)</code></td><td>Converts a string to a date</td></tr>
+        <tr><td><code>IsDate(expression)</code></td><td>Returns True if expression is a date</td></tr>
+        <tr><td><code>FormatDateTime(date[, namedformat])</code></td><td>Formats a date/time</td></tr>
+    </tbody>
+</table>
+<h3>Date Constants</h3>
+<table>
+    <thead><tr><th>Constant</th><th>Value</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>vbSunday</code></td><td>1</td><td>Sunday</td></tr>
+        <tr><td><code>vbMonday</code></td><td>2</td><td>Monday</td></tr>
+        <tr><td><code>vbTuesday</code></td><td>3</td><td>Tuesday</td></tr>
+        <tr><td><code>vbWednesday</code></td><td>4</td><td>Wednesday</td></tr>
+        <tr><td><code>vbThursday</code></td><td>5</td><td>Thursday</td></tr>
+        <tr><td><code>vbFriday</code></td><td>6</td><td>Friday</td></tr>
+        <tr><td><code>vbSaturday</code></td><td>7</td><td>Saturday</td></tr>
+        <tr><td><code>vbUseSystemDayOfWeek</code></td><td>0</td><td>Use system day of week</td></tr>
+        <tr><td><code>vbFirstJan1</code></td><td>1</td><td>First week with Jan 1</td></tr>
+        <tr><td><code>vbFirstFourDays</code></td><td>2</td><td>First week with 4 days</td></tr>
+        <tr><td><code>vbFirstFullWeek</code></td><td>3</td><td>First full week</td></tr>
+        <tr><td><code>vbGeneralDate</code></td><td>0</td><td>General date format</td></tr>
+        <tr><td><code>vbLongDate</code></td><td>1</td><td>Long date format</td></tr>
+        <tr><td><code>vbShortDate</code></td><td>2</td><td>Short date format</td></tr>
+        <tr><td><code>vbLongTime</code></td><td>3</td><td>Long time format</td></tr>
+        <tr><td><code>vbShortTime</code></td><td>4</td><td>Short time format</td></tr>
+        <tr><td><code>vbBinaryCompare</code></td><td>0</td><td>Binary comparison</td></tr>
+        <tr><td><code>vbTextCompare</code></td><td>1</td><td>Text comparison</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Math Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Abs(number)</code></td><td>Returns absolute value</td></tr>
+        <tr><td><code>Atn(number)</code></td><td>Returns arctangent</td></tr>
+        <tr><td><code>Cos(number)</code></td><td>Returns cosine</td></tr>
+        <tr><td><code>Exp(number)</code></td><td>Returns e raised to a power</td></tr>
+        <tr><td><code>Fix(number)</code></td><td>Returns integer portion</td></tr>
+        <tr><td><code>Int(number)</code></td><td>Returns integer portion (floor)</td></tr>
+        <tr><td><code>Log(number)</code></td><td>Returns natural logarithm</td></tr>
+        <tr><td><code>Rnd([number])</code></td><td>Returns random number</td></tr>
+        <tr><td><code>Round(expression[, numdecimalplaces])</code></td><td>Rounds a number</td></tr>
+        <tr><td><code>Sqr(number)</code></td><td>Returns square root</td></tr>
+        <tr><td><code>Sgn(number)</code></td><td>Returns sign of a number</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Format Functions</h2>
+<p>Note: formatting functions are compatibility-focused and may differ from IIS under some locale/regional settings.</p>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>FormatNumber(expression[, numdigitsafterdecimal[, includeleadingdigit[, useparensfornegativenumbers[, groupdigits]]]])</code></td><td>Formats a number</td></tr>
+        <tr><td><code>FormatCurrency(expression[, numdigitsafterdecimal[, includeleadingdigit[, useparensfornegativenumbers[, groupdigits]]]])</code></td><td>Formats as currency</td></tr>
+        <tr><td><code>FormatPercent(expression[, numdigitsafterdecimal[, includeleadingdigit[, useparensfornegativenumbers[, groupdigits]]]])</code></td><td>Formats as percentage</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Information Functions</h2>
+<p>Note: type/coercion semantics generally follow VBScript, but may differ in edge cases involving Empty/Null/Nothing and host objects.</p>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>IsArray(varname)</code></td><td>Returns True if variable is an array</td></tr>
+        <tr><td><code>IsDate(expression)</code></td><td>Returns True if expression is a date</td></tr>
+        <tr><td><code>IsEmpty(expression)</code></td><td>Returns True if variable is Empty</td></tr>
+        <tr><td><code>IsNull(expression)</code></td><td>Returns True if expression is Null</td></tr>
+        <tr><td><code>IsNumeric(expression)</code></td><td>Returns True if expression is numeric</td></tr>
+        <tr><td><code>IsObject(expression)</code></td><td>Returns True if expression is an object</td></tr>
+        <tr><td><code>TypeName(varname)</code></td><td>Returns the type name</td></tr>
+        <tr><td><code>VarType(varname)</code></td><td>Returns the variant type</td></tr>
+    </tbody>
+</table>
+<h3>VarType Constants</h3>
+<table>
+    <thead><tr><th>Constant</th><th>Value</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>vbEmpty</code></td><td>0</td><td>Empty (uninitialized)</td></tr>
+        <tr><td><code>vbNull</code></td><td>1</td><td>Null (no valid data)</td></tr>
+        <tr><td><code>vbInteger</code></td><td>2</td><td>Integer</td></tr>
+        <tr><td><code>vbLong</code></td><td>3</td><td>Long integer</td></tr>
+        <tr><td><code>vbSingle</code></td><td>4</td><td>Single-precision</td></tr>
+        <tr><td><code>vbDouble</code></td><td>8</td><td>Double-precision</td></tr>
+        <tr><td><code>vbCurrency</code></td><td>6</td><td>Currency</td></tr>
+        <tr><td><code>vbDate</code></td><td>7</td><td>Date</td></tr>
+        <tr><td><code>vbString</code></td><td>8</td><td>String</td></tr>
+        <tr><td><code>vbObject</code></td><td>9</td><td>Object</td></tr>
+        <tr><td><code>vbBoolean</code></td><td>11</td><td>Boolean</td></tr>
+        <tr><td><code>vbArray</code></td><td>8192</td><td>Array</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Color Functions</h2>
+<table>
+    <thead><tr><th>Function</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>RGB(red, green, blue)</code></td><td>Returns an RGB color value</td></tr>
+    </tbody>
+</table>
+<hr />
+<h1>Classic ASP Objects</h1>
+<h2>Server-Side Includes</h2>
+<p>
+    <code>&lt;!--#include file="..." --&gt;</code> and <code>&lt;!--#include virtual="..." --&gt;</code>
+    are resolved before the page runs. The two forms differ only in what the path is relative to:
+</p>
+<table>
+    <thead><tr><th>Form</th><th>Resolved relative to</th></tr></thead>
+    <tbody>
+        <tr><td><code>file="x.inc"</code></td><td>The folder of the file <em>containing the directive</em>. Inside a nested include this is the include's own folder, not the requesting page's, so an <code>.inc</code> can pull in its siblings without knowing who included it.</td></tr>
+        <tr><td><code>virtual="/x.inc"</code></td><td>The application root, at every nesting depth. A bare <code>virtual="x.inc"</code> (no leading slash) is also accepted and is treated as application-root relative.</td></tr>
+    </tbody>
+</table>
+<p>Matching IIS, the scanner accepts backslashes as separators, <code>./</code> and <code>../</code> segments, single or double quotes, and loose whitespace around <code>#include</code> and <code>=</code>. Paths that climb above the application root are refused.</p>
+<p>
+    <strong>A file included twice is expanded twice.</strong> The directive is a textual
+    splice, not an idempotent import, so including a snippet at two points in a page emits it
+    at both &mdash; there is no <code>#pragma once</code> behaviour and no de-duplication.
+    That also applies when the same file is reached by two different spellings
+    (<code>file=</code> in one place, <code>virtual=</code> in another), or directly in one
+    place and transitively through another include. Because definitions are hoisted before
+    execution, a duplicated include that declares a <code>Sub</code> or <code>Function</code>
+    does not raise a redefinition error; only its top-level statements and markup repeat.
+</p>
+<p>
+    A genuine <em>cycle</em> &mdash; <code>a.inc</code> including <code>b.inc</code> including
+    <code>a.inc</code> &mdash; is an error, not a silently truncated expansion, and fails the
+    request as IIS does. Detection walks the current include chain, which is what keeps
+    legitimate repeats working; nesting deeper than 32 levels is also refused.
+</p>
+<p>
+    Text that merely looks like a directive is left alone: <code>#include</code> inside a
+    VBScript string literal or inside an ASP comment is inert.
+</p>
+<h2>Server Object</h2>
+<h3>Methods</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>CreateObject(progid)</code></td><td>Creates an instance of a COM object</td></tr>
+        <tr><td><code>HTMLEncode(string)</code></td><td>Encodes HTML characters</td></tr>
+        <tr><td><code>URLEncode(string)</code></td><td>URL-encodes a string</td></tr>
+        <tr><td><code>MapPath(path)</code></td><td>Maps a virtual path to a physical path. Never appends a trailing separator, even when <code>path</code> has one &mdash; <code>MapPath("data/x/")</code> and <code>MapPath("data/x")</code> both return <code>...\data\x</code>, matching IIS, which cannot know whether the target is a file or a folder because it never touches the filesystem. So <code>Server.MapPath("data/x/") &amp; "f.txt"</code> silently yields <code>...\data\xf.txt</code>; put the filename inside the call instead: <code>Server.MapPath("data/x/f.txt")</code>. An empty path raises (see <a href="#error-parity">Runtime Error Parity</a>).</td></tr>
+        <tr><td><code>Execute(path)</code></td><td>Executes an ASP file</td></tr>
+        <tr><td><code>Transfer(path)</code></td><td>Transfers execution to another ASP file</td></tr>
+        <tr><td><code>GetLastError()</code></td><td>Returns the last error object</td></tr>
+    </tbody>
+</table>
+<h3>Properties</h3>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ScriptTimeout</code></td><td>Gets/sets script timeout in seconds</td></tr>
+    </tbody>
+</table>
+<h3>Extension Methods (ASPPY-specific)</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ASPPYListAspPages()</code></td><td>Lists all .asp pages under docroot</td></tr>
+        <tr><td><code>ASPPYRun(virtual_path)</code></td><td>Runs another ASP page and captures output</td></tr>
+    </tbody>
+</table>
+<h3>Supported <code>Server.CreateObject</code> ProgIDs</h3>
+<ul>
+    <li><code>Scripting.Dictionary</code></li>
+    <li><code>Scripting.FileSystemObject</code></li>
+    <li><code>ADODB.Connection</code>, <code>ADODB.Recordset</code>, <code>ADODB.Command</code>, <code>ADODB.Stream</code></li>
+    <li><code>VBScript.RegExp</code> / <code>RegExp</code></li>
+    <li><code>MSXML2.ServerXMLHTTP</code>, <code>MSXML2.XMLHTTP</code>, <code>MSXML2.DOMDocument</code> (incl. <code>.3.0</code>/<code>.6.0</code> aliases)</li>
+    <li><code>Microsoft.XMLDOM</code>, <code>MSXML.DOMDocument</code></li>
+    <li><code>CDO.Message</code>, <code>CDOSYS.Message</code></li>
+    <li><code>ASPPY.POP3</code>, <code>ASPPY.POP3</code>, <code>ASPPY.IMAP</code>, <code>ASPPY.IMAP</code></li>
+</ul>
+<hr />
+<h2>Request Object</h2>
+<h3>Properties</h3>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>QueryString</code></td><td>NameValueCollection of query string parameters</td></tr>
+        <tr><td><code>Form</code></td><td>NameValueCollection of form data parsed from <code>POST</code> only</td></tr>
+        <tr><td><code>Cookies</code></td><td>NameValueCollection of cookies</td></tr>
+        <tr><td><code>ServerVariables</code></td><td>NameValueCollection of server variables</td></tr>
+        <tr><td><code>TotalBytes</code></td><td>Total bytes in request body</td></tr>
+        <tr><td><code>Method</code> / <code>HttpMethod</code></td><td>HTTP method (GET, POST, PUT, DELETE, etc.)</td></tr>
+        <tr><td><code>Files</code></td><td>Collection of uploaded files</td></tr>
+        <tr><td><code>Request</code> (default)</td><td>Access to QueryString, Form, Cookies</td></tr>
+    </tbody>
+</table>
+<h3>Methods</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>BinaryRead(count)</code></td><td>Reads raw bytes from request body</td></tr>
+    </tbody>
+</table>
+<h3>HTTP methods and body parsing</h3>
+<ul>
+    <li>ASPPY passes through HTTP methods to ASP pages without a verb allow-list.</li>
+    <li><code>Request.ServerVariables("REQUEST_METHOD")</code> returns the incoming verb string (for example: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>, <code>PATCH</code>, <code>HEAD</code>, <code>OPTIONS</code>).</li>
+    <li><code>Request.Form</code> is parsed for <code>POST</code> with supported form encodings (<code>application/x-www-form-urlencoded</code>, <code>multipart/form-data</code>).</li>
+    <li>For non-<code>POST</code> bodies (<code>PUT</code>, <code>DELETE</code>, <code>PATCH</code>, etc.), read raw bytes via <code>Request.BinaryRead(...)</code>; <code>Request.Form</code> remains empty.</li>
+    <li><code>Request.TotalBytes</code> reflects the request body size for any method.</li>
+</ul>
+<h3>Request.Files Collection</h3>
+<p>Access uploaded files from multipart form submissions.</p>
+<pre><code class="language-vbscript">' Iterate over all uploaded files
+For Each file In Request.Files
+    Response.Write(file.FileName)
+    Response.Write(file.Size)
+    Response.Write(file.ContentType)
+    ' Save to disk
+    file.SaveAs Server.MapPath("/uploads/" &amp; file.FileName)
+Next
+
+' Access specific file
+Set f = Request.Files("myfile")
+If Not f Is Nothing Then
+    Response.Write f.Name
+    Response.Write f.FileName
+    Response.Write f.Size
+    Response.Write f.ContentType
+End If
+
+' Check if file exists
+If Request.Files.Exists("myfile") Then
+    ' File was uploaded
+End If
+
+' Get count
+Response.Write Request.Files.Count
+</code></pre>
+<h4>UploadedFile Properties</h4>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Name</code></td><td>Form field name</td></tr>
+        <tr><td><code>FileName</code></td><td>Original filename</td></tr>
+        <tr><td><code>ContentType</code></td><td>MIME content type</td></tr>
+        <tr><td><code>Size</code></td><td>File size in bytes</td></tr>
+    </tbody>
+</table>
+<h4>UploadedFile Methods</h4>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>SaveAs(path)</code></td><td>Saves the file to disk</td></tr>
+    </tbody>
+</table>
+<h4>Files Collection Methods</h4>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Count</code></td><td>Number of uploaded files</td></tr>
+        <tr><td><code>Exists(name)</code></td><td>Checks if file with given name exists</td></tr>
+        <tr><td><code>Item(name)</code></td><td>Gets uploaded file by name</td></tr>
+        <tr><td><code>Keys()</code></td><td>Returns array of field names</td></tr>
+        <tr><td><code>Items()</code></td><td>Returns array of UploadedFile objects</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Response Object</h2>
+<h3>Properties</h3>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Buffer</code></td><td>Enables/disables response buffering</td></tr>
+        <tr><td><code>Cookies</code></td><td>Collection of cookies to send</td></tr>
+        <tr><td><code>LCID</code></td><td>Locale identifier</td></tr>
+        <tr><td><code>ContentType</code></td><td>MIME type of the response (default <code>text/html</code>)</td></tr>
+        <tr><td><code>Charset</code></td><td>Character set of the response body. Defaults to <code>utf-8</code> - see <a href="#character-encoding">Character Encoding</a></td></tr>
+        <tr><td><code>CodePage</code></td><td>Codepage for this response. Defaults to <code>65001</code> (UTF-8), not the host ANSI codepage as under IIS</td></tr>
+    </tbody>
+</table>
+<h3>Methods</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Write(string)</code></td><td>Writes output to the response</td></tr>
+        <tr><td><code>BinaryWrite(data)</code></td><td>Writes binary data</td></tr>
+        <tr><td><code>Clear()</code></td><td>Clears the buffered output</td></tr>
+        <tr><td><code>Flush()</code></td><td>Flushes buffered output</td></tr>
+        <tr><td><code>End()</code></td><td>Stops script execution</td></tr>
+        <tr><td><code>AddHeader(name, value)</code></td><td>Adds a custom header</td></tr>
+        <tr><td><code>AppendToLog(message)</code></td><td>Appends to server log</td></tr>
+        <tr><td><code>Redirect(url)</code></td><td>Redirects to another URL</td></tr>
+        <tr><td><code>File(path[, inline])</code></td><td>Serves a file (inline=True for display, False for download)</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Session Object</h2>
+<h3>Properties</h3>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>SessionID</code></td><td>Unique session identifier</td></tr>
+        <tr><td><code>Timeout</code></td><td>Session timeout in minutes</td></tr>
+        <tr><td><code>Contents</code></td><td>Collection of session variables</td></tr>
+        <tr><td><code>StaticObjects</code></td><td>Collection of session-scoped objects</td></tr>
+        <tr><td><code>LCID</code></td><td>Locale identifier for the session</td></tr>
+        <tr><td><code>CodePage</code></td><td>Codepage for the session. Defaults to <code>65001</code> (UTF-8), not the host ANSI codepage as under IIS - see <a href="#character-encoding">Character Encoding</a></td></tr>
+    </tbody>
+</table>
+<h3>Methods</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Abandon()</code></td><td>Ends the session</td></tr>
+    </tbody>
+</table>
+<hr />
+<h2>Application Object</h2>
+<h3>Properties</h3>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Contents</code></td><td>Collection of application variables</td></tr>
+        <tr><td><code>StaticObjects</code></td><td>Collection of static objects</td></tr>
+    </tbody>
+</table>
+<h3>Methods</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Lock()</code></td><td>Locks application variables</td></tr>
+        <tr><td><code>Unlock()</code></td><td>Unlocks application variables</td></tr>
+    </tbody>
+</table>
+<hr />
+<h1>ASPPY Extended Objects</h1>
+<h2>ASPPY Object</h2>
+<p>The ASPPY object provides additional functionality beyond classic ASP.</p>
+<p>It is available as global <code>ASPPY</code> in script scope.</p>
+
+<h3 id="naming-rule">How members are named</h3>
+<p>Member access is always case-insensitive, so casing never matters. The <em>shape</em> of a name follows one rule:</p>
+<blockquote><p><strong>Objects that exist on IIS use PascalCase. Wrappers around a third-party library keep that library's own names, so its documentation transfers unchanged.</strong></p></blockquote>
+<table>
+    <thead><tr><th>Surface</th><th>Convention</th><th>Example</th></tr></thead>
+    <tbody>
+        <tr><td><code>Response</code>, <code>Request</code>, <code>Server</code>, <code>Session</code>, <code>Application</code>, ADODB, FSO, CDO, <code>Scripting.Dictionary</code>, <code>VBScript.RegExp</code></td><td>PascalCase, exactly as IIS</td><td><code>Response.BinaryWrite</code></td></tr>
+        <tr><td><code>MSXML2.*</code></td><td>camelCase &mdash; the real MSXML COM API is camelCase</td><td><code>doc.selectSingleNode</code></td></tr>
+        <tr><td><code>ASPPY.Image</code></td><td>lowercase &mdash; mirrors Pillow</td><td><code>img.thumbnail</code></td></tr>
+        <tr><td><code>ASPPY.Pdf</code></td><td>snake_case &mdash; mirrors fpdf2 (PascalCase aliases also provided, see <a href="pdf.html">PDF</a>)</td><td><code>pdf.set_margins</code> / <code>pdf.SetMargins</code></td></tr>
+        <tr><td><code>ASPPY.JSON</code>, <code>.Zip</code>, <code>.Crypto</code>, <code>ExecutePython</code></td><td>PascalCase &mdash; no upstream API to mirror</td><td><code>ASPPY.JSON.Encode</code></td></tr>
+    </tbody>
+</table>
+<p>If a member name is wrong, error 438 names the closest match rather than leaving you to guess: <code>Unknown member: SETMARGINZ on PdfDoc (did you mean 'SetMargins'?)</code>.</p>
+<p>Members beginning with <code>_</code> are host-side internals. VBScript identifiers cannot start with an underscore, so they are unreachable from script and, like on IIS, raise 438.</p>
+<h3>JSON</h3>
+<pre><code class="language-vbscript">ASPPY.JSON.Encode(value[, pretty])  ' Returns JSON string
+ASPPY.JSON.Decode(json_string)      ' Returns VBScript value
+</code></pre>
+<p>Note: member access is case-insensitive in VBScript; runtime members are exposed as <code>json</code>, <code>zip</code>, <code>image</code>, <code>crypto</code>, <code>pdf</code>.</p>
+<h3>ZIP</h3>
+<pre><code class="language-vbscript">ASPPY.Zip.Zip(path[, out_path])     ' Creates a ZIP file
+ASPPY.Zip.Unzip(zip_path, dest_folder[, overwrite])  ' Extracts a ZIP file
+</code></pre>
+<h3>Image (Pillow)</h3>
+<pre><code class="language-vbscript">ASPPY.Image.open(path)               ' Opens an image file
+ASPPY.Image.new(mode, size, color)    ' Creates a new image
+ASPPY.Image.merge(mode, bands)       ' Merges image bands
+ASPPY.Image.blend(img1, img2, alpha) ' Blends two images
+ASPPY.Image.composite(img1, img2, mask) ' Creates composite
+
+ASPPY.ImageDraw.Draw(img)            ' Creates a draw object
+ASPPY.ImageFilter.BLUR               ' Blur filter constant
+ASPPY.ImageFilter.CONTOUR            ' Contour filter
+ASPPY.ImageFilter.EDGE_ENHANCE       ' Edge enhancement
+ASPPY.ImageFilter.SHARPEN            ' Sharpen filter
+ASPPY.ImageFilter.GaussianBlur(radius) ' Gaussian blur
+
+ASPPY.ImageEnhance.Brightness(img)   ' Brightness enhancer
+ASPPY.ImageEnhance.Contrast(img)     ' Contrast enhancer
+</code></pre>
+<h4>ImageInstance Properties/Methods</h4>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>size</code></td><td>Image dimensions (width, height)</td></tr>
+        <tr><td><code>width</code></td><td>Image width</td></tr>
+        <tr><td><code>height</code></td><td>Image height</td></tr>
+        <tr><td><code>mode</code></td><td>Image color mode</td></tr>
+        <tr><td><code>format</code></td><td>Image format</td></tr>
+        <tr><td><code>save(path)</code></td><td>Saves the image</td></tr>
+        <tr><td><code>resize(size)</code></td><td>Resizes the image</td></tr>
+        <tr><td><code>thumbnail(size)</code></td><td>Creates thumbnail</td></tr>
+        <tr><td><code>crop(box)</code></td><td>Crops the image</td></tr>
+        <tr><td><code>rotate(angle)</code></td><td>Rotates the image</td></tr>
+        <tr><td><code>convert(mode)</code></td><td>Converts color mode</td></tr>
+        <tr><td><code>split()</code></td><td>Splits into bands</td></tr>
+        <tr><td><code>getpixel(xy)</code></td><td>Gets pixel value</td></tr>
+        <tr><td><code>putpixel(xy, value)</code></td><td>Sets pixel value</td></tr>
+        <tr><td><code>filter(filter_obj)</code></td><td>Applies filter</td></tr>
+        <tr><td><code>paste(other_img, box[, mask])</code></td><td>Pastes another image</td></tr>
+    </tbody>
+</table>
+<h3>PDF (FPDF)</h3>
+<pre><code class="language-vbscript">Set pdf = ASPPY.Pdf.New([orientation[, unit[, format]]])
+</code></pre>
+<h4>PdfDoc Methods</h4>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>add_page([orientation])</code></td><td>Adds a new page</td></tr>
+        <tr><td><code>set_margins(left, top[, right])</code></td><td>Sets page margins</td></tr>
+        <tr><td><code>set_auto_page_break(auto[, margin])</code></td><td>Sets auto page break</td></tr>
+        <tr><td><code>set_font(family[, style[, size]])</code></td><td>Sets the font</td></tr>
+        <tr><td><code>set_text_color(r[, g[, b]])</code></td><td>Sets text color</td></tr>
+        <tr><td><code>set_draw_color(r[, g[, b]])</code></td><td>Sets drawing color</td></tr>
+        <tr><td><code>set_fill_color(r[, g[, b]])</code></td><td>Sets fill color</td></tr>
+        <tr><td><code>set_line_width(width)</code></td><td>Sets line width</td></tr>
+        <tr><td><code>fill_page(r[, g[, b]])</code></td><td>Fills the page with color</td></tr>
+        <tr><td><code>text(x, y, text)</code></td><td>Writes text at position</td></tr>
+        <tr><td><code>cell(w[, h[, text[, border[, ln[, align[, fill[, link]]]]]]])</code></td><td>Writes a cell</td></tr>
+        <tr><td><code>multi_cell(w, h, text[, border[, align[, fill]]])</code></td><td>Writes multi-cell</td></tr>
+        <tr><td><code>set_xy(x, y)</code></td><td>Sets current position</td></tr>
+        <tr><td><code>ln([h])</code></td><td>Moves to next line</td></tr>
+        <tr><td><code>image(path[, x[, y[, w[, h]]]])</code></td><td>Adds an image</td></tr>
+        <tr><td><code>output(path)</code></td><td>Saves PDF to file</td></tr>
+    </tbody>
+</table>
+<h3>Crypto (bcrypt)</h3>
+<pre><code class="language-vbscript">ASPPY.Crypto.Hash(password[, rounds])    ' Hashes a password (rounds 4-31, default 12)
+ASPPY.Crypto.Verify(password, hashed)     ' Verifies password against hash
+</code></pre>
+<h3>ExecutePython</h3>
+<pre><code class="language-vbscript">ASPPY.ExecutePython(code [, args] [, timeout])       ' Executes inline Python source, returns ASPPY_RETURN value as string
+ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (relative to docroot), returns ASPPY_RETURN value
+</code></pre>
+<p>Enable with environment variable <code>ASP_PY_ALLOW_PYTHON=1</code>. Each call spawns an isolated Python subprocess. The Python snippet uses <code>ASPPY_RETURN(value)</code> to return a string to VBScript.</p>
+<p>Both optional arguments work the same way on either method. <code>args</code> takes any JSON-encodable value (string, number, boolean, <code>Array</code>, <code>Scripting.Dictionary</code>, or a nesting of those) and the Python side reads it as the built-in <code>ASPPY_ARGS</code>, already decoded &mdash; it is <code>None</code> when the argument is omitted. <code>timeout</code> is a per-call limit in seconds that overrides <code>ASP_PY_PYTHON_TIMEOUT</code>. See the <a href="python.html">ASPPY.ExecutePython</a> page for full documentation, samples, and environment variables.</p>
+<hr />
+<h1>COM Objects</h1>
+<h2>Scripting.Dictionary</h2>
+<pre><code class="language-vbscript">Set dict = Server.CreateObject("Scripting.Dictionary")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Count</code></td><td>Number of items</td></tr>
+        <tr><td><code>CompareMode</code></td><td>Comparison mode (0=Binary, 1=Text, 2=Database)</td></tr>
+        <tr><td><code>Item(key)</code></td><td>Gets/sets item value</td></tr>
+        <tr><td><code>Keys</code></td><td>Returns array of keys</td></tr>
+        <tr><td><code>Items</code></td><td>Returns array of items</td></tr>
+        <tr><td><code>Add(key, item)</code></td><td>Adds a key/item pair</td></tr>
+        <tr><td><code>Exists(key)</code></td><td>Returns True if key exists</td></tr>
+        <tr><td><code>Remove(key)</code></td><td>Removes a key</td></tr>
+        <tr><td><code>RemoveAll()</code></td><td>Removes all items</td></tr>
+    </tbody>
+</table>
+<h2>Scripting.FileSystemObject</h2>
+<pre><code class="language-vbscript">Set fso = Server.CreateObject("Scripting.FileSystemObject")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>BuildPath(path, name)</code></td><td>Builds a path</td></tr>
+        <tr><td><code>CreateTextFile(filename[, overwrite[, unicode]])</code></td><td>Creates text file</td></tr>
+        <tr><td><code>OpenTextFile(filename[, iomode[, create[, format]]])</code></td><td>Opens text file</td></tr>
+        <tr><td><code>GetFile(filepath)</code></td><td>Gets File object</td></tr>
+        <tr><td><code>GetFolder(folderpath)</code></td><td>Gets Folder object</td></tr>
+        <tr><td><code>GetDrive(drivespec)</code></td><td>Gets Drive object</td></tr>
+        <tr><td><code>DriveExists(drivespec)</code></td><td>Checks if drive exists</td></tr>
+        <tr><td><code>FileExists(filepath)</code></td><td>Checks if file exists</td></tr>
+        <tr><td><code>FolderExists(folderpath)</code></td><td>Checks if folder exists</td></tr>
+    </tbody>
+</table>
+<h3>File Object</h3>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Path</code></td><td>Full path</td></tr>
+        <tr><td><code>Name</code></td><td>File name</td></tr>
+        <tr><td><code>Size</code></td><td>File size</td></tr>
+        <tr><td><code>Type</code></td><td>File type</td></tr>
+        <tr><td><code>DateCreated</code></td><td>Creation date</td></tr>
+        <tr><td><code>DateLastAccessed</code></td><td>Last access date</td></tr>
+        <tr><td><code>DateLastModified</code></td><td>Last modified date</td></tr>
+        <tr><td><code>Drive</code></td><td>The <code>Drive</code> OBJECT. Its default property is <code>Path</code>, so <code>"" &amp; f.Drive</code> gives <code>C:</code> (no trailing separator); <code>f.Drive.RootFolder.Path</code> gives <code>C:\</code></td></tr>
+        <tr><td><code>ParentFolder</code></td><td>Parent folder</td></tr>
+        <tr><td><code>ShortName</code></td><td>8.3 NAME only, no path (contrast <code>ShortPath</code>)</td></tr>
+        <tr><td><code>ShortPath</code></td><td>8.3 path</td></tr>
+        <tr><td><code>Attributes</code></td><td>File attributes</td></tr>
+        <tr><td><code>Copy(destination[, overwrite])</code></td><td>Copies file</td></tr>
+        <tr><td><code>Move(destination)</code></td><td>Moves file</td></tr>
+        <tr><td><code>Delete([force])</code></td><td>Deletes file</td></tr>
+        <tr><td><code>OpenAsTextStream([iomode[, format]])</code></td><td>Opens as text stream</td></tr>
+    </tbody>
+</table>
+<h3>Folder Object</h3>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Path</code></td><td>Full path</td></tr>
+        <tr><td><code>Name</code></td><td>Folder name</td></tr>
+        <tr><td><code>Size</code></td><td>Total size of folder</td></tr>
+        <tr><td><code>DateCreated</code></td><td>Creation date</td></tr>
+        <tr><td><code>DateLastAccessed</code></td><td>Last access date</td></tr>
+        <tr><td><code>DateLastModified</code></td><td>Last modified date</td></tr>
+        <tr><td><code>Drive</code></td><td>The <code>Drive</code> OBJECT. Its default property is <code>Path</code>, so <code>"" &amp; f.Drive</code> gives <code>C:</code> (no trailing separator); <code>f.Drive.RootFolder.Path</code> gives <code>C:\</code></td></tr>
+        <tr><td><code>IsRootFolder</code></td><td>True if root</td></tr>
+        <tr><td><code>Files</code></td><td>Files collection</td></tr>
+        <tr><td><code>SubFolders</code></td><td>Subfolders collection</td></tr>
+        <tr><td><code>Attributes</code></td><td>Folder attributes</td></tr>
+        <tr><td><code>Copy(destination[, overwrite])</code></td><td>Copies folder</td></tr>
+        <tr><td><code>Move(destination)</code></td><td>Moves folder</td></tr>
+        <tr><td><code>Delete([force])</code></td><td>Deletes folder</td></tr>
+    </tbody>
+</table>
+<h3>TextStream Object</h3>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>AtEndOfStream</code></td><td>True at end of file</td></tr>
+        <tr><td><code>Read(n)</code></td><td>Reads n characters</td></tr>
+        <tr><td><code>ReadLine()</code></td><td>Reads a line</td></tr>
+        <tr><td><code>ReadAll()</code></td><td>Reads entire file</td></tr>
+        <tr><td><code>Write(string)</code></td><td>Writes string</td></tr>
+        <tr><td><code>WriteLine([string])</code></td><td>Writes line</td></tr>
+        <tr><td><code>WriteBlankLines(n)</code></td><td>Writes blank lines</td></tr>
+        <tr><td><code>Close()</code></td><td>Closes the stream</td></tr>
+        <tr><td><code>Skip(n)</code></td><td>Skips n characters</td></tr>
+        <tr><td><code>SkipLine()</code></td><td>Skips a line</td></tr>
+    </tbody>
+</table>
+<h2>VBScript.RegExp</h2>
+<pre><code class="language-vbscript">Set regex = Server.CreateObject("VBScript.RegExp")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Pattern</code></td><td>Regular expression pattern</td></tr>
+        <tr><td><code>IgnoreCase</code></td><td>Case-insensitive matching</td></tr>
+        <tr><td><code>Global</code></td><td>Match all occurrences</td></tr>
+        <tr><td><code>MultiLine</code></td><td>Multi-line matching</td></tr>
+        <tr><td><code>Test(string)</code></td><td>Tests for a match</td></tr>
+        <tr><td><code>Replace(string, replace_with)</code></td><td>Replaces matches</td></tr>
+        <tr><td><code>Execute(string)</code></td><td>Returns match collection</td></tr>
+    </tbody>
+</table>
+<h2>ADODB.Connection</h2>
+<pre><code class="language-vbscript">Set conn = Server.CreateObject("ADODB.Connection")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ConnectionString</code></td><td>Connection string</td></tr>
+        <tr><td><code>State</code></td><td>Connection state</td></tr>
+        <tr><td><code>CommandTimeout</code></td><td>Command timeout</td></tr>
+        <tr><td><code>CursorLocation</code></td><td>Cursor location</td></tr>
+        <tr><td><code>Version</code></td><td>ADO library version, <code>"10.0"</code> (what IIS on Windows 10 reports)</td></tr>
+        <tr><td><code>IsolationLevel</code></td><td><code>adXactReadCommitted</code> (4096)</td></tr>
+        <tr><td><code>Attributes</code></td><td>ConnectOptionEnum bitmask, 0</td></tr>
+        <tr><td><code>Properties</code></td><td>Provider property collection &mdash; present so scripts run, but always empty (see the note below)</td></tr>
+        <tr><td><code>Open([connection_string])</code></td><td>Opens connection</td></tr>
+        <tr><td><code>Close()</code></td><td>Closes connection</td></tr>
+        <tr><td><code>Execute(sql[, records_affected[, options]])</code></td><td>Executes SQL</td></tr>
+        <tr><td><code>OpenSchema(queryType[, criteria])</code></td><td>Schema rowsets &mdash; see below</td></tr>
+        <tr><td><code>BeginTrans()</code></td><td>Begins transaction</td></tr>
+        <tr><td><code>CommitTrans()</code></td><td>Commits transaction</td></tr>
+        <tr><td><code>RollbackTrans()</code></td><td>Rolls back transaction</td></tr>
+    </tbody>
+</table>
+<p>Connection string notes:</p>
+<ul>
+    <li>Execution support is currently SQLite (<code>sqlite3</code>), Access (<code>pyodbc</code> + Access ODBC driver), Excel (<code>pyodbc</code> + Excel ODBC driver), and generic ODBC (<code>pyodbc</code>) in this runtime.</li>
+    <li>ASPPY now parses and classifies common legacy ADO connection string families (Access, SQL Server, ODBC, MySQL, Oracle, PostgreSQL) so unsupported providers fail with explicit migration guidance instead of generic errors.</li>
+    <li>For SQLite, use <code>Provider=SQLite;Data Source=&lt;path&gt;</code> (or <code>Provider=SQLite;Database=&lt;path&gt;</code>), or a bare file path.</li>
+    <li>For Access, use legacy Access-style strings (<code>Provider=Microsoft.Jet.OLEDB.4.0</code> / <code>Provider=Microsoft.ACE.OLEDB.12.0</code>) with <code>Data Source=&lt;path to .mdb/.accdb&gt;</code>.</li>
+    <li>For Excel, use legacy Excel-style strings (for example <code>Provider=Microsoft.ACE.OLEDB.12.0;Data Source=&lt;path&gt;;Extended Properties="Excel 12.0 Xml;HDR=YES;IMEX=1";</code>).</li>
+    <li>Excel support is currently read-only in ASPPY (<code>SELECT</code> queries only).</li>
+    <li>For ODBC, use <code>DSN=...;Uid=...;Pwd=...;</code> or <code>Driver={...};Server=...;Database=...;Uid=...;Pwd=...;</code>.</li>
+    <li>PostgreSQL is supported via ODBC (<code>Provider=PostgreSQL;Server=...;Database=...;User Id=...;Password=...;Port=5432;</code>) or explicit <code>Driver={PostgreSQL ...}</code> / <code>DSN=...</code>.</li>
+    <li>SQL dialect translation is not performed; application SQL is executed as-is by the selected provider/driver.</li>
+    <li>Internally, provider adapters now use a registry + capability flags, so future DBMS support can be added as pluggable adapters without changing the ADO surface API.</li>
+</ul>
+<h2>ADODB.Recordset</h2>
+<pre><code class="language-vbscript">Set rs = Server.CreateObject("ADODB.Recordset")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>State</code></td><td>Recordset state</td></tr>
+        <tr><td><code>EOF</code></td><td>End of file</td></tr>
+        <tr><td><code>BOF</code></td><td>Beginning of file</td></tr>
+        <tr><td><code>RecordCount</code></td><td>Number of records</td></tr>
+        <tr><td><code>Fields</code></td><td>Fields collection</td></tr>
+        <tr><td><code>Open([source[, active_conn[, cursor_type[, lock_type[, options]]]]])</code></td><td>Opens recordset</td></tr>
+        <tr><td><code>Close()</code></td><td>Closes recordset</td></tr>
+        <tr><td><code>MoveFirst()</code></td><td>Moves to first record</td></tr>
+        <tr><td><code>MoveLast()</code></td><td>Moves to last record</td></tr>
+        <tr><td><code>MoveNext()</code></td><td>Moves to next record</td></tr>
+        <tr><td><code>MovePrevious()</code></td><td>Moves to previous record</td></tr>
+        <tr><td><code>Move(n)</code></td><td>Moves n records</td></tr>
+        <tr><td><code>AddNew()</code></td><td>Starts insert mode for a new record</td></tr>
+        <tr><td><code>Update()</code></td><td>Commits pending field changes</td></tr>
+        <tr><td><code>Delete()</code></td><td>Deletes current record</td></tr>
+        <tr><td><code>Resync</code></td><td>Resyncs with database</td></tr>
+        <tr><td><code>GetRows([rows[, start[, fields]]])</code></td><td>Rows as a 2-D array, field-major</td></tr>
+        <tr><td><code>GetString([format[, rows[, colDelim[, rowDelim[, nullExpr]]]]])</code></td><td>Rows as a delimited string &mdash; see below</td></tr>
+        <tr><td><code>Bookmark</code></td><td>Marker for the current row; read it, move away, assign it back</td></tr>
+        <tr><td><code>CompareBookmarks(a, b)</code></td><td>CompareEnum: 0 less, 1 equal, 2 greater, 4 not equal</td></tr>
+        <tr><td><code>AbsolutePosition</code>, <code>PageSize</code>, <code>PageCount</code>, <code>AbsolutePage</code></td><td>Positioning and paging</td></tr>
+        <tr><td><code>Filter</code>, <code>Sort</code>, <code>Find</code>, <code>Clone</code>, <code>Requery</code>, <code>Supports</code></td><td>Client-side cursor operations</td></tr>
+    </tbody>
+</table>
+<h4><code>GetString</code></h4>
+<p>Reads forward from the current row and leaves the recordset at EOF (or just past the last row taken), as ADO does. Omitted arguments take the ADO defaults: TAB between columns, CR between rows, <code>""</code> for Null. Every row is terminated, including the last.</p>
+<pre><code class="language-vbscript">' Pipe-separated, CRLF-terminated, empty string for NULL
+gs = rs.GetString(, , "|", vbCrLf, "")
+</code></pre>
+<p><code>StringFormat</code> only has one legal value, <code>adClipString</code> (2); anything else raises.</p>
+<h4><code>Bookmark</code></h4>
+<p>ASPPY recordsets are client-side cursors over an in-memory row list, so bookmarks are always available and are the row's ordinal. Assigning a bookmark outside the recordset raises rather than moving anywhere.</p>
+<p><strong>Divergence worth knowing:</strong> on IIS, bookmark support depends on the provider and cursor &mdash; a Jet <code>OpenSchema</code> recordset reports <code>Supports(adBookmark) = False</code>. ASPPY supports them everywhere, so code guarded by <code>If rs.Supports(adBookmark)</code> takes the <em>enabled</em> branch here and the disabled one there.</p>
+<h4>OpenSchema</h4>
+<p>Returns schema information as a Recordset, with the OLE DB rowset column names, so <code>rs("TABLE_NAME")</code> works as it does on IIS. Supported <code>SchemaEnum</code> values:</p>
+<table>
+    <thead><tr><th>Constant</th><th>Value</th><th>Columns</th></tr></thead>
+    <tbody>
+        <tr><td><code>adSchemaTables</code></td><td>20</td><td><code>TABLE_CATALOG</code>, <code>TABLE_SCHEMA</code>, <code>TABLE_NAME</code>, <code>TABLE_TYPE</code>, &hellip;</td></tr>
+        <tr><td><code>adSchemaColumns</code></td><td>4</td><td><code>TABLE_NAME</code>, <code>COLUMN_NAME</code>, <code>ORDINAL_POSITION</code>, <code>IS_NULLABLE</code>, <code>DATA_TYPE</code>, &hellip;</td></tr>
+        <tr><td><code>adSchemaIndexes</code></td><td>12</td><td><code>INDEX_NAME</code>, <code>TABLE_NAME</code>, <code>UNIQUE</code>, <code>PRIMARY_KEY</code>, <code>COLUMN_NAME</code> (SQLite only)</td></tr>
+        <tr><td><code>adSchemaPrimaryKeys</code></td><td>28</td><td><code>PK_TABLE_NAME</code>, <code>COLUMN_NAME</code>, <code>ORDINAL</code> (SQLite only)</td></tr>
+    </tbody>
+</table>
+<pre><code class="language-vbscript">Set rs = conn.OpenSchema(20)                              ' every table
+Set rs = conn.OpenSchema(20, Array(Empty, Empty, "widget"))  ' one table
+Set rs = conn.OpenSchema(4,  Array(Empty, Empty, "widget"))  ' its columns
+</code></pre>
+<p><code>criteria</code> is an array of restriction values positionally matched to the rowset's restriction columns; <code>Empty</code> entries mean "no restriction". Any other <code>queryType</code> raises rather than returning an empty recordset. System tables are excluded.</p>
+<h2>ADODB.Field</h2>
+<p>Reached through <code>rs.Fields(n)</code>, <code>rs.Fields("name")</code> or <code>rs("name")</code>. Its default property is <code>Value</code>, so a Field reads as its value in any expression.</p>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Name</code>, <code>Value</code></td><td>Column name and current value</td></tr>
+        <tr><td><code>Type</code></td><td>DataTypeEnum. SQLite reports no type in its cursor metadata, so it is inferred from the first non-NULL value in the column &mdash; <code>SELECT 1 AS F1</code> gives <code>adInteger</code> (3), matching IIS</td></tr>
+        <tr><td><code>DefinedSize</code></td><td>Declared size. For a fixed-width type this is the type's BYTE width (an <code>adInteger</code> column gives 4, as on IIS), otherwise the declared maximum</td></tr>
+        <tr><td><code>ActualSize</code></td><td>Length in bytes of the stored value: the type width for fixed types, the character or byte count for variable ones, 0 for Null</td></tr>
+        <tr><td><code>Attributes</code></td><td>FieldAttributeEnum. 114 for a nullable fixed-width column (<code>adFldMayDefer</code> | <code>adFldFixed</code> | <code>adFldIsNullable</code> | <code>adFldMayBeNull</code>), 98 for a variable-length one</td></tr>
+        <tr><td><code>Status</code></td><td>FieldStatusEnum; <code>adFieldOK</code> (0) for a field read from a resultset</td></tr>
+        <tr><td><code>OriginalValue</code>, <code>UnderlyingValue</code></td><td>The bound row's value. No separate pre-edit copy is kept, and there is no re-fetch, so both report the current row value</td></tr>
+        <tr><td><code>Precision</code>, <code>NumericScale</code></td><td>Reported as 0; IIS gets these from the provider (10 and 255 for a Jet integer)</td></tr>
+        <tr><td><code>Properties</code></td><td>Empty collection &mdash; see the note under ADODB.Command</td></tr>
+        <tr><td><code>AppendChunk(data)</code></td><td>Appends to a long binary/text value</td></tr>
+    </tbody>
+</table>
+<h2>ADODB.Command</h2>
+<pre><code class="language-vbscript">Set cmd = Server.CreateObject("ADODB.Command")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ActiveConnection</code></td><td>Connection used for execution</td></tr>
+        <tr><td><code>CommandText</code></td><td>SQL command text</td></tr>
+        <tr><td><code>CommandType</code></td><td>Command type (text)</td></tr>
+        <tr><td><code>Parameters</code></td><td>Parameters collection</td></tr>
+        <tr><td><code>CreateParameter(...)</code></td><td>Creates a parameter object</td></tr>
+        <tr><td><code>Execute(...)</code></td><td>Executes command and returns a recordset</td></tr>
+        <tr><td><code>State</code></td><td>ObjectStateEnum: <code>adStateClosed</code> (0) / <code>adStateOpen</code> (1)</td></tr>
+        <tr><td><code>Properties</code></td><td>Provider property collection (empty, see below)</td></tr>
+    </tbody>
+</table>
+<p><code>Parameter</code> objects returned by <code>CreateParameter</code> expose <code>Name</code>, <code>Type</code>, <code>Direction</code>, <code>Size</code>, <code>Value</code>, <code>Precision</code>, <code>NumericScale</code>, <code>Attributes</code> and <code>Properties</code>.</p>
+<h4>The <code>Properties</code> collections</h4>
+<p><code>Connection</code>, <code>Command</code>, <code>Recordset</code>, <code>Field</code> and <code>Parameter</code> all expose a <code>Properties</code> collection so that <code>obj.Properties.Count</code> runs instead of raising error 438. It is always <strong>empty</strong>: those entries are OLE DB provider properties, and ASPPY talks to SQLite and ODBC directly rather than through a provider. IIS reports 14 on an unopened <code>Connection</code>, around 94 once it is opened against Jet, and 88 on a connected <code>Command</code>. Anything that enumerates them, or reads a specific provider property by name, will not find it.</p>
+<h2>ADODB.Parameter / Parameters</h2>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Name</code></td><td>Parameter name</td></tr>
+        <tr><td><code>Type</code></td><td>ADO type constant</td></tr>
+        <tr><td><code>Direction</code></td><td>Direction (<code>adParamInput</code>, etc.)</td></tr>
+        <tr><td><code>Size</code></td><td>Declared size</td></tr>
+        <tr><td><code>Value</code></td><td>Parameter value</td></tr>
+        <tr><td><code>Parameters.Append(param)</code></td><td>Adds parameter</td></tr>
+        <tr><td><code>Parameters.Item(name_or_index)</code></td><td>Gets parameter</td></tr>
+        <tr><td><code>Parameters.Count</code></td><td>Number of parameters</td></tr>
+    </tbody>
+</table>
+<h2>ADODB.Stream</h2>
+<pre><code class="language-vbscript">Set stream = Server.CreateObject("ADODB.Stream")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Type</code></td><td>Stream type (1=Binary, 2=Text)</td></tr>
+        <tr><td><code>Charset</code></td><td>Character set</td></tr>
+        <tr><td><code>Position</code></td><td>Current position</td></tr>
+        <tr><td><code>Size</code></td><td>Stream size</td></tr>
+        <tr><td><code>EOS</code></td><td>End of stream</td></tr>
+        <tr><td><code>State</code></td><td>Stream state</td></tr>
+        <tr><td><code>LineSeparator</code></td><td>Line separator</td></tr>
+        <tr><td><code>Mode</code></td><td>Open mode</td></tr>
+        <tr><td><code>Open()</code></td><td>Opens stream</td></tr>
+        <tr><td><code>Close()</code></td><td>Closes stream</td></tr>
+        <tr><td><code>LoadFromFile(filename)</code></td><td>Loads from file</td></tr>
+        <tr><td><code>SaveToFile(filename[, options])</code></td><td>Saves to file</td></tr>
+        <tr><td><code>Read([count])</code></td><td>Reads bytes</td></tr>
+        <tr><td><code>ReadText([count])</code></td><td>Reads text</td></tr>
+        <tr><td><code>Write(data)</code></td><td>Writes bytes (needs a <code>Byte()</code> array, not a string)</td></tr>
+        <tr><td><code>WriteText(string[, options])</code></td><td>Writes text. <code>options</code> is a StreamWriteEnum: <code>adWriteChar</code> (0, default) or <code>adWriteLine</code> (1), which appends <code>LineSeparator</code></td></tr>
+        <tr><td><code>CopyTo(dest_stream[, count])</code></td><td>Copies to another stream</td></tr>
+        <tr><td><code>SetEOS()</code></td><td>Makes the current position the end of the stream, discarding everything after it</td></tr>
+        <tr><td><code>SkipLine()</code></td><td>Skips line</td></tr>
+        <tr><td><code>Flush()</code></td><td>Flushes buffer</td></tr>
+    </tbody>
+</table>
+
+<h4 id="stream-bom">Byte order marks, Size and Position</h4>
+<p>A text stream is measured in <strong>bytes</strong>, and ADO writes a byte order mark for the Unicode encodings. Verified against IIS by writing 16 characters plus one LF and reading the buffer back as binary:</p>
+<table>
+    <thead><tr><th><code>Charset</code></th><th><code>Size</code></th><th>First bytes</th></tr></thead>
+    <tbody>
+        <tr><td><code>utf-8</code></td><td>20</td><td><code>EF BB BF 48</code> &mdash; 3-byte BOM</td></tr>
+        <tr><td><code>Unicode</code> (UTF-16LE, the default)</td><td>36</td><td><code>FF FE 48 00</code> &mdash; 2-byte BOM</td></tr>
+        <tr><td><code>windows-1252</code>, <code>iso-8859-1</code></td><td>17</td><td><code>48 65 6C 6C</code> &mdash; no BOM</td></tr>
+    </tbody>
+</table>
+<p>The BOM appears only once there is content: an open but empty stream has <code>Size</code> 0. <code>Size</code>, <code>Position</code>, <code>Read</code>, <code>CopyTo</code>, <code>SaveToFile</code> and switching <code>Type</code> to binary all share the same byte view, so at end of stream <code>Position</code> equals <code>Size</code>, and the file written by <code>SaveToFile</code> is byte-for-byte what <code>Read</code> returns.</p>
+<p>This matters in practice: <code>ADODB.Stream</code> plus <code>SaveToFile</code> is the usual way Classic ASP produces UTF-8 CSV and XML, and consumers &mdash; Excel above all &mdash; rely on the BOM being there.</p>
+<p><strong>Known limitation.</strong> <code>ReadText</code> and <code>SkipLine</code> still index the buffer by character internally. For single-byte charsets and for ASCII text that is indistinguishable from the byte offset; it can differ for multi-byte content in the middle of a stream.</p>
+<h2>MSXML2 Objects</h2>
+<h3>ServerXMLHTTP</h3>
+<pre><code class="language-vbscript">Set http = Server.CreateObject("MSXML2.ServerXMLHTTP")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ReadyState</code></td><td>Request state</td></tr>
+        <tr><td><code>Status</code></td><td>HTTP status code</td></tr>
+        <tr><td><code>StatusText</code></td><td>HTTP status text</td></tr>
+        <tr><td><code>ResponseText</code></td><td>Response as text</td></tr>
+        <tr><td><code>ResponseXML</code></td><td>Response as XML DOM</td></tr>
+        <tr><td><code>ResponseBody</code></td><td>Response as a <code>Byte()</code> SafeArray &mdash; see below</td></tr>
+        <tr><td><code>Open(method, url[, async[, user[, password]]])</code></td><td>Opens request</td></tr>
+        <tr><td><code>SetRequestHeader(header, value)</code></td><td>Sets request header</td></tr>
+        <tr><td><code>Send([body])</code></td><td>Sends request</td></tr>
+        <tr><td><code>SetTimeouts(resolve, connect, send, receive)</code></td><td>Receive timeout is used as the overall timeout</td></tr>
+        <tr><td><code>SetProxy(setting[, server[, bypass]])</code> / <code>SetProxyCredentials(user, pass)</code></td><td>Recorded; requests always go direct</td></tr>
+        <tr><td><code>SetOption(option, value)</code> / <code>GetOption(option)</code></td><td>Recorded and readable. Option 2 (ignore SSL cert errors) is deliberately not honoured</td></tr>
+        <tr><td><code>WaitForResponse([timeout])</code></td><td>Waits for response (sends are synchronous, so always already complete)</td></tr>
+        <tr><td><code>GetResponseHeader(name)</code> / <code>GetAllResponseHeaders()</code></td><td>Response headers</td></tr>
+        <tr><td><code>Abort()</code></td><td>Aborts request</td></tr>
+    </tbody>
+</table>
+<h4>Binary payloads are a <code>Byte()</code> SafeArray</h4>
+<p><code>ResponseBody</code>, <code>Request.BinaryRead</code> and <code>ADODB.Stream.Read</code> return a byte array, matching IIS exactly:</p>
+<table>
+    <thead><tr><th>Expression</th><th>Result</th></tr></thead>
+    <tbody>
+        <tr><td><code>IsArray(b)</code></td><td><code>True</code></td></tr>
+        <tr><td><code>TypeName(b)</code></td><td><code>"Byte()"</code></td></tr>
+        <tr><td><code>VarType(b)</code></td><td><code>8209</code> (<code>vbArray + vbByte</code>)</td></tr>
+        <tr><td><code>IsObject(b)</code></td><td><code>False</code></td></tr>
+        <tr><td><code>LBound(b)</code> / <code>UBound(b)</code></td><td><code>0</code> / <code>LenB(b) - 1</code></td></tr>
+        <tr><td><code>b(0)</code></td><td>the first byte, as an Integer</td></tr>
+    </tbody>
+</table>
+<p><code>objStream.Write http.ResponseBody</code> and <code>Response.BinaryWrite</code> accept it unchanged.</p>
+<h3>XMLHTTP</h3>
+<pre><code class="language-vbscript">Set http = Server.CreateObject("MSXML2.XMLHTTP")
+</code></pre>
+<p>Same interface as ServerXMLHTTP.</p>
+<h3>DOMDocument</h3>
+<pre><code class="language-vbscript">Set xml = Server.CreateObject("MSXML2.DOMDocument")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>async</code></td><td>Async loading</td></tr>
+        <tr><td><code>readyState</code></td><td>Document state</td></tr>
+        <tr><td><code>xml</code></td><td>XML content</td></tr>
+        <tr><td><code>text</code></td><td>Text content</td></tr>
+        <tr><td><code>load(url)</code></td><td>Loads from URL</td></tr>
+        <tr><td><code>loadXML(xml_string)</code></td><td>Loads from string</td></tr>
+        <tr><td><code>save(destination)</code></td><td>Saves document</td></tr>
+        <tr><td><code>selectNodes(xpath)</code></td><td>Selects nodes by XPath</td></tr>
+        <tr><td><code>selectSingleNode(xpath)</code></td><td>Selects the first matching node, else <code>Nothing</code></td></tr>
+        <tr><td><code>getElementsByTagName(tagname)</code></td><td>Gets elements</td></tr>
+        <tr><td><code>transformNode(xsl)</code> / <code>transformNodeToObject(xsl, out)</code></td><td>XSLT 1.0 transform (needs <a href="#msxml-lxml">lxml</a>)</td></tr>
+        <tr><td><code>createElement</code>, <code>createTextNode</code>, <code>createCDATASection</code>, <code>createComment</code>, <code>createProcessingInstruction</code>, <code>createDocumentFragment</code>, <code>createEntityReference</code>, <code>createAttribute</code>, <code>createNode</code></td><td>Node factories, each reporting the MSXML <code>nodeType</code> (1, 3, 4, 8, 7, 11, 5, 2)</td></tr>
+        <tr><td><code>baseName</code>, <code>prefix</code>, <code>namespaceURI</code>, <code>parsed</code>, <code>dataType</code>, <code>definition</code>, <code>specified</code></td><td>Present on the document and on element, attribute and text nodes</td></tr>
+        <tr><td><code>getAttributeNode(name)</code>, <code>setAttribute</code>, <code>removeAttribute</code></td><td>Attribute access on element nodes</td></tr>
+    </tbody>
+</table>
+
+<h4>Node model notes</h4>
+<ul>
+    <li><strong><code>Nothing</code>, not <code>Empty</code>.</strong> A lookup that finds nothing &mdash; <code>selectSingleNode</code>, <code>getAttributeNode</code>, <code>parentNode</code> at the document level &mdash; returns <code>Nothing</code>, so the standard <code>If Not n Is Nothing Then</code> guard works.</li>
+    <li><strong><code>childNodes</code> includes text.</strong> Text and CDATA appear as real nodes with <code>nodeType</code> 3 and 4, so <code>node.firstChild.nodeValue</code> reads an element's content and <code>Do While n.nodeType = 3 : Set n = n.nextSibling : Loop</code> terminates.</li>
+    <li><strong>Fragments splice.</strong> <code>appendChild(fragment)</code> inserts the fragment's children and discards the wrapper.</li>
+    <li><strong><code>save()</code></strong> writes anywhere inside the application root by default &mdash; <code>xmlDoc.save Server.MapPath("out.xml")</code> just works. Writing outside it requires <code>ASP_PY_XML_ALLOW_LOCAL=1</code>.</li>
+</ul>
+
+<h4 id="msxml-lxml">XPath, XSLT and the optional lxml package</h4>
+<p>Python's bundled XML parser has no XSLT engine and only a small XPath subset, so those features come from <strong>lxml</strong>, which is optional in the same way fpdf2, Pillow and bcrypt are:</p>
+<pre><code class="language-bash">pip install lxml</code></pre>
+<table>
+    <thead><tr><th>Feature</th><th>With lxml</th><th>Without</th></tr></thead>
+    <tbody>
+        <tr><td>XPath: <code>//a/b</code>, <code>[@x='y']</code>, <code>[n]</code></td><td>works</td><td>works</td></tr>
+        <tr><td>XPath: namespace prefixes (<code>//ns:Item</code>), axes, <code>text()</code>, <code>contains()</code>, unions, absolute paths</td><td>works</td><td><strong>raises</strong>, naming lxml</td></tr>
+        <tr><td><code>transformNode</code> / <code>transformNodeToObject</code></td><td>works</td><td><strong>raises</strong>, naming lxml</td></tr>
+        <tr><td>CDATA, comments and PIs survive load &rarr; save</td><td>yes</td><td>discarded on parse</td></tr>
+        <tr><td>Original namespace prefixes preserved on output</td><td>yes</td><td>rewritten as <code>ns0:</code></td></tr>
+    </tbody>
+</table>
+<p>An unsupported XPath <strong>raises rather than returning an empty node list</strong>. Silently returning zero matches &mdash; which is what the stdlib parser does for anything outside its subset, including <em>every</em> namespaced document &mdash; is far harder to diagnose than an error.</p>
+<p>Namespace prefixes in an XPath resolve from the document's own declarations, and from <code>setProperty "SelectionNamespaces", "xmlns:a='urn:x'"</code>.</p>
+
+<h4>Deliberate divergences</h4>
+<ul>
+    <li><strong>External DTDs are never fetched.</strong> MSXML downloads the DTD named in a <code>DOCTYPE</code> and validates against it; ASPPY does not touch the network while parsing. A document MSXML rejects because the remote DTD failed to validate will parse here. Internal DTD subsets are accepted by both.</li>
+    <li><strong>Entities are not expanded.</strong> <code>&lt;!ENTITY x SYSTEM "file:///..."&gt;</code> stays literal instead of inlining the file, so the classic XXE read does not work.</li>
+    <li><strong>TLS verification cannot be turned off.</strong> <code>setOption 2</code> (<code>SXH_OPTION_IGNORE_SERVER_SSL_CERT_ERROR_FLAGS</code>) is recorded and readable via <code>getOption</code>, but certificate and hostname checks stay on.</li>
+    <li><strong>Requests to localhost and private networks are blocked</strong> unless <code>ASP_PY_ALLOW_LOCALHOST=1</code> / <code>ASP_PY_ALLOW_PRIVATE_NETS=1</code>. See <a href="#runtime-env">Runtime Environment Variables</a>.</li>
+</ul>
+<h2>WScript.Shell</h2>
+<pre><code class="language-vbscript">Set wsh = Server.CreateObject("WScript.Shell")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ExpandEnvironmentStrings(s)</code></td><td>Expands <code>%NAME%</code>. Unknown placeholders are preserved, as in WSH</td></tr>
+        <tr><td><code>Environment([scope])</code></td><td><code>SYSTEM</code> / <code>USER</code> / <code>VOLATILE</code> / <code>PROCESS</code> collection, with <code>Count</code>, <code>Length</code> and <code>Item</code></td></tr>
+        <tr><td><code>CurrentDirectory</code></td><td>Read/write</td></tr>
+        <tr><td><code>SpecialFolders</code></td><td>Collection; <code>sf("Windows")</code>, <code>"System"</code>, <code>"Fonts"</code>, <code>"Temp"</code>, <code>"Desktop"</code>, &hellip; An unknown or unavailable name yields <code>""</code> rather than raising</td></tr>
+        <tr><td><code>CreateShortcut(path)</code></td><td><code>.lnk</code> &rarr; <code>IWshShortcut</code>, <code>.url</code> &rarr; <code>IWshURLShortcut</code>. Any other extension raises</td></tr>
+        <tr><td><code>RegRead(name)</code></td><td>Reads a registry value (Windows only). <code>HKLM</code>/<code>HKCU</code>/<code>HKCR</code>/<code>HKU</code>/<code>HKCC</code> and their long forms; a trailing <code>\</code> reads the key's default value. <code>REG_MULTI_SZ</code> comes back as an array, <code>REG_BINARY</code> as a <code>Byte()</code></td></tr>
+        <tr><td><code>Run</code>, <code>Exec</code></td><td><strong>Not implemented</strong> &mdash; raise a catchable 429, see below</td></tr>
+    </tbody>
+</table>
+<p><code>IWshShortcut</code> exposes <code>TargetPath</code>, <code>Arguments</code>, <code>WorkingDirectory</code>, <code>Description</code>, <code>IconLocation</code>, <code>WindowStyle</code>, <code>Hotkey</code>, <code>FullName</code> and <code>Save</code>. <code>IWshURLShortcut</code> exposes <code>TargetPath</code>, <code>FullName</code> and <code>Save</code>, and re-opening an existing <code>.url</code> reads its target back.</p>
+<p>The <code>.lnk</code> writer builds a real <a href="https://learn.microsoft.com/openspecs/windows_protocols/ms-shllink/">[MS-SHLLINK]</a> file &mdash; header, <code>LinkTargetIDList</code>, <code>LinkInfo</code> and the string blocks &mdash; rather than calling the Shell COM object, so the same code path runs on a non-Windows host. Shortcuts written by ASPPY were verified by reading them back through Windows' own <code>WScript.Shell</code>: every property round-trips and Explorer resolves the target. On a non-Windows host the <code>LinkTargetIDList</code> is omitted (it is produced by the Windows shell), which leaves a link Windows can parse but not resolve.</p>
+<h4>Deliberate divergences</h4>
+<ul>
+    <li><strong><code>Run</code> and <code>Exec</code> are not implemented.</strong> They execute arbitrary shell commands from a web request, which contradicts the sandboxing ASPPY applies elsewhere &mdash; <code>FileSystemObject</code> is confined to the docroot, and <code>ADODB.Stream</code> to <code>ASP_PY_ADO_ROOT</code>. They raise ActiveX error 429, which <code>On Error Resume Next</code> can detect, rather than failing silently.</li>
+    <li><strong><code>RegWrite</code> and <code>RegDelete</code> are not implemented</strong> for the same reason. <code>RegRead</code> is available because it cannot change machine state.</li>
+</ul>
+<h2>CDO.Message</h2>
+<pre><code class="language-vbscript">Set msg = Server.CreateObject("CDO.Message")
+</code></pre>
+<table>
+    <thead><tr><th>Property/Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>From</code></td><td>Sender address</td></tr>
+        <tr><td><code>To</code></td><td>Recipient address(es)</td></tr>
+        <tr><td><code>CC</code></td><td>CC recipients</td></tr>
+        <tr><td><code>BCC</code></td><td>BCC recipients</td></tr>
+        <tr><td><code>Subject</code></td><td>Message subject</td></tr>
+        <tr><td><code>HTMLBody</code></td><td>HTML body</td></tr>
+        <tr><td><code>TextBody</code></td><td>Plain text body</td></tr>
+        <tr><td><code>BodyPart</code></td><td>Body part object</td></tr>
+        <tr><td><code>Configuration</code></td><td>Configuration object</td></tr>
+        <tr><td><code>DisableSend</code></td><td>If True, <code>Send()</code> is no-op success</td></tr>
+        <tr><td><code>AddAttachment(url)</code></td><td>Adds attachment</td></tr>
+        <tr><td><code>Send()</code></td><td>Sends the message</td></tr>
+    </tbody>
+</table>
+<h2>ASPPY.POP3</h2>
+<pre><code class="language-vbscript">Set pop = Server.CreateObject("ASPPY.POP3")
+</code></pre>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Connect/Open(host[, port[, use_ssl[, timeout]]])</code></td><td>Connects to POP3 server</td></tr>
+        <tr><td><code>Login(user, pass)</code></td><td>Authenticates</td></tr>
+        <tr><td><code>Stat()</code></td><td>Returns message count and mailbox size</td></tr>
+        <tr><td><code>List()</code></td><td>Returns message listing</td></tr>
+        <tr><td><code>UIDL([msg_num])</code></td><td>UID listing or UID for one message</td></tr>
+        <tr><td><code>Retr/GetMessage(msg_num)</code></td><td>Fetches a message object</td></tr>
+        <tr><td><code>Delete/Dele(msg_num)</code></td><td>Marks message for deletion</td></tr>
+        <tr><td><code>DeleteAll()</code></td><td>Marks all for deletion</td></tr>
+        <tr><td><code>Quit/Close()</code></td><td>Closes connection</td></tr>
+    </tbody>
+</table>
+<h2>ASPPY.IMAP</h2>
+<pre><code class="language-vbscript">Set imap = Server.CreateObject("ASPPY.IMAP")
+</code></pre>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Connect/Open(host[, port[, use_ssl[, timeout]]])</code></td><td>Connects to IMAP server</td></tr>
+        <tr><td><code>Login(user, pass)</code></td><td>Authenticates</td></tr>
+        <tr><td><code>Select([folder[, readonly]])</code></td><td>Selects mailbox</td></tr>
+        <tr><td><code>Search([criteria])</code></td><td>Finds messages by sequence number</td></tr>
+        <tr><td><code>SearchUID([criteria])</code></td><td>Finds messages by UID</td></tr>
+        <tr><td><code>Fetch/GetMessage(msg_num)</code></td><td>Fetches message by sequence number</td></tr>
+        <tr><td><code>GetMessageByUID(uid)</code></td><td>Fetches message by UID</td></tr>
+        <tr><td><code>Delete/Dele(msg_num)</code></td><td>Marks message deleted</td></tr>
+        <tr><td><code>DeleteAll()</code></td><td>Marks all selected messages deleted</td></tr>
+        <tr><td><code>Expunge()</code></td><td>Permanently removes deleted messages</td></tr>
+        <tr><td><code>Logout/Close()</code></td><td>Closes connection</td></tr>
+    </tbody>
+</table>
+<h2 id="runtime-env">Runtime Environment Variables</h2>
+<table>
+    <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>ASP_PY_LOG</code></td><td>Enables request log output from built-in server</td></tr>
+        <tr><td><code>ASP_PY_TRACE_REQUEST</code></td><td>Enables verbose request/body trace logging</td></tr>
+        <tr><td><code>ASP_PY_REQ_MEM_MAX</code></td><td>Max in-memory request body bytes before temp-file buffering</td></tr>
+        <tr><td><code>ASP_PY_ADO_ROOT</code></td><td>Sandbox root for <code>ADODB.Stream</code> filesystem operations</td></tr>
+        <tr><td><code>ASP_PY_FSO_ROOT</code></td><td>Sandbox root for <code>Scripting.FileSystemObject</code></td></tr>
+        <tr><td><code>ASP_PY_HTTP_MAX_BYTES</code></td><td>Max response bytes for MSXML HTTP requests</td></tr>
+        <tr><td><code>ASP_PY_HTTP_ALLOW_HOSTS</code></td><td>Comma-separated HTTP host allowlist for MSXML</td></tr>
+        <tr><td><code>ASP_PY_ALLOW_LOCALHOST</code></td><td>Allows MSXML HTTP access to localhost</td></tr>
+        <tr><td><code>ASP_PY_ALLOW_PRIVATE_NETS</code></td><td>Allows MSXML HTTP access to private subnets</td></tr>
+        <tr><td><code>ASP_PY_XML_ALLOW_LOCAL</code></td><td>Allows <code>DOMDocument.load()</code> from a local file, and <code>save()</code> <em>outside</em> the application root. Saving inside the root needs no flag.</td></tr>
+        <tr><td><code>ASP_PY_CDO_DISABLE_SEND</code></td><td>Disables SMTP send in <code>CDO.Message</code></td></tr>
+        <tr><td><code>ASP_PY_CDO_ALLOW_OUTSIDE_DOCROOT</code></td><td>Allows CDO attachments outside docroot</td></tr>
+        <tr><td><code>ASP_PY_ALLOW_PYTHON</code></td><td>Enables <code>ASPPY.ExecutePython</code> (set to <code>1</code>)</td></tr>
+        <tr><td><code>ASP_PY_PYTHON_TIMEOUT</code></td><td>Max seconds for ExecutePython snippets (default 30)</td></tr>
+        <tr><td><code>ASP_PY_PYTHON_ROOT</code></td><td>Sandbox root for <code>ExecutePythonFile</code></td></tr>
+    </tbody>
+</table>
+<h2 id="error-parity">Runtime Error Parity</h2>
+<p><code>Err.Number</code> is the contract ASPPY holds itself to: it is checked case by case against a live IIS 10 / VBScript 10.8 installation, because it is locale-independent and it is what real code branches on (<code>If Err.Number = 9 Then</code>). Behaviours verified against IIS include:</p>
+<table>
+    <thead><tr><th>Expression</th><th><code>Err.Number</code></th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td><code>ReDim a(-1)</code></td><td><code>0</code></td><td>Legal. Creates an EMPTY dynamic array with <code>UBound = -1</code>, the same object <code>Array()</code> and <code>Split("")</code> return. This is the idiomatic empty growable list, and <code>ReDim Preserve a(UBound(a) + 1)</code> grows it.</td></tr>
+        <tr><td><code>ReDim a(-2)</code></td><td><code>7</code></td><td>Out of memory. Only <code>-1</code> is a valid empty upper bound; anything lower asks for a negative element count.</td></tr>
+        <tr><td><code>Dim a(4)</code> then <code>ReDim a(9)</code></td><td><code>10</code></td><td>This array is fixed or temporarily locked. An array declared with explicit bounds cannot be resized - use <code>Dim a()</code>.</td></tr>
+        <tr><td><code>Dim a()</code> then <code>UBound(a)</code></td><td><code>9</code></td><td>Subscript out of range. An un-<code>ReDim</code>'d dynamic array has no dimensions yet. (Contrast with <code>ReDim a(-1)</code> above.)</td></tr>
+        <tr><td><code>obj + 1</code>, <code>obj &amp; ""</code>, <code>obj = 1</code></td><td><code>450</code></td><td>Wrong number of arguments. An operator reads the object's DEFAULT property first; a <code>Scripting.Dictionary</code>'s default is <code>Item(key)</code>, which needs an argument.</td></tr>
+        <tr><td><code>rs.Fields("id") + 1</code></td><td><code>0</code></td><td>Works: <code>ADODB.Field</code>'s default property is <code>Value</code>. Likewise <code>Request.QueryString</code> used without an index yields the raw query string, and <code>Request.Cookies("x")</code> yields the cookie value.</td></tr>
+        <tr><td>Operator on an object with no default property</td><td><code>438</code></td><td>Object doesn't support this property or method.</td></tr>
+        <tr><td><code>CBool("xyz")</code>, <code>CBool("")</code></td><td><code>13</code></td><td>Type mismatch. <code>CBool</code> accepts only <code>True</code>/<code>False</code> or a number. Implicit truthiness (<code>If "abc" Then</code>) is separate and does not raise.</td></tr>
+        <tr><td><code>Server.MapPath("")</code></td><td><code>-2147467259</code></td><td>An empty path is rejected; it does not resolve to the application root.</td></tr>
+    </tbody>
+</table>
+<p><code>Err.Number</code> is a signed 32-bit <strong>Long</strong>, so an HRESULT such as <code>0x80004005</code> reports as <code>-2147467259</code> - never as <code>2147500037</code>. This holds for <code>Err.Raise &amp;H80004005</code> too.</p>
+<h3>Deliberate divergences</h3>
+<ul>
+    <li><strong><code>Err.Description</code> text.</strong> IIS <em>localises</em> descriptions - a Dutch server returns <code>"Het subscript valt buiten het bereik"</code> for error 9 - so there is no single IIS string to match. ASPPY always emits English, and appends diagnostic detail IIS omits (<code>Subscript out of range: ARR(9), UBound = 2</code>; <code>Unknown member: SETMARGINZ on PdfDoc (did you mean 'SetMargins'?)</code>). Branch on <code>Err.Number</code>, never on description text.</li>
+    <li><strong><code>Server.MapPath("../")</code>.</strong> IIS resolves paths that escape the web root and returns them. ASPPY refuses, because on IIS the result is only safe thanks to filesystem ACLs that ASPPY cannot rely on. This is a hardening, and the one case where ASPPY is deliberately stricter than IIS.</li>
+    <li><strong>Host-object internals.</strong> ASPPY's objects are Python classes, so they have members the COM originals do not. Every such member is prefixed with <code>_</code>, which VBScript identifiers cannot name, so <code>Response.finalize_headers</code> and <code>Session.CodePage_</code> raise error 438 exactly as they do on IIS.</li>
+</ul>
+<h2>VBScript Compatibility Notes</h2>
+<ul>
+    <li><code>UBound/LBound</code>: follow VBScript-like array allocation rules; uninitialized/invalid-array usage raises runtime errors. See <a href="#error-parity">Runtime Error Parity</a> for the exact <code>ReDim</code> / empty-array rules.</li>
+    <li><code>VBScript.RegExp.Replace</code>: supports VB-style replacement tokens (<code>$1</code>, <code>$&amp;</code>, <code>$`</code>, <code>$'</code>, <code>$$</code>).</li>
+    <li><code>Request.Form</code>: parsed for <code>POST</code> only; non-POST bodies are available via <code>Request.BinaryRead</code>.</li>
+    <li>Date/number formatting is locale-aware across 60 locales and verified against live IIS; see <a href="#localization">Localization</a> for the supported list and the documented divergences.</li>
+</ul>
+<h2 id="localization">Localization</h2>
+<p>ASPPY implements the Classic ASP locale model for <strong>60 locales</strong>, driven by a generated table (<code>ASPPY/locale_data.json</code>) extracted from the Windows NLS data and validated field-by-field against live IIS output.</p>
+<h3>What is locale-aware</h3>
+<table>
+    <thead><tr><th>Area</th><th>Behaviour</th></tr></thead>
+    <tbody>
+        <tr><td><code>FormatNumber</code>, <code>FormatCurrency</code>, <code>FormatPercent</code></td><td>Decimal/group separators, group size, currency symbol and its position, per-currency decimal digits (ja-JP renders <code>&#165;1,234,568</code>, no decimals), and the locale negative/parenthesised patterns</td></tr>
+        <tr><td><code>FormatDateTime</code></td><td>All five named formats from the locale's own patterns. <code>vbShortTime</code> is always 24-hour but uses the locale time separator</td></tr>
+        <tr><td><code>MonthName</code>, <code>WeekdayName</code></td><td>Localised names, including the genitive month forms Slavic/Baltic/Finnic locales use in long dates (Polish <em>5 marca</em>, not <em>5 marzec</em>)</td></tr>
+        <tr><td><code>Weekday</code>, <code>DatePart("w")</code></td><td><code>vbUseSystemDayOfWeek</code> resolves to the locale first day - Monday across most of Europe, Saturday for ar-DZ</td></tr>
+        <tr><td><code>CDbl</code>, <code>CCur</code>, <code>CInt</code>, <code>CLng</code>, <code>IsNumeric</code></td><td>Locale number parsing. <code>CDbl("1,5")</code> is 15 under en-US (comma = group separator) and 1.5 under nl-BE; fr-FR rejects <code>"1.5"</code> with a type mismatch, exactly as IIS does</td></tr>
+        <tr><td><code>CDate</code>, <code>IsDate</code></td><td>Locale field order, so <code>"3/5/2024"</code> is March 5th under en-US and 5 March under nl-BE. A leading four-digit component is always read as ISO</td></tr>
+        <tr><td><code>StrComp(a, b, vbTextCompare)</code></td><td>Locale collation rather than a lowercase compare: <code>"stra&#223;e"</code> equals <code>"strasse"</code>, and accents act as a tiebreak</td></tr>
+        <tr><td><code>GetLocale</code> / <code>SetLocale</code></td><td>Numeric LCIDs and short names (<code>"nl-be"</code>, <code>"de"</code>) across all 60 locales</td></tr>
+        <tr><td><code>Session.LCID</code>, <code>Response.LCID</code>, <code>&lt;%@ LCID %&gt;</code></td><td>All three seed the script engine locale. <code>Session.LCID</code> is re-applied at the start of every request in the session, as under IIS</td></tr>
+    </tbody>
+</table>
+<h3>Deliberate divergences</h3>
+<ul>
+    <li><strong>Default locale.</strong> With no locale set, ASPPY uses LCID 1033 (en-US) rather than inheriting the host's system locale, so output is identical on every machine. Same reasoning as the UTF-8 default below.</li>
+    <li><strong><code>CStr(date)</code> / implicit date-to-string.</strong> While no locale has been selected, ASPPY keeps its ISO output (<code>2024-03-05 14:07:09</code>) instead of the IIS locale general date. This protects the very common pattern of concatenating a date straight into SQL. As soon as an app opts in via <code>Session.LCID</code>, <code>SetLocale</code> or <code>&lt;%@ LCID %&gt;</code>, full IIS formatting applies.</li>
+    <li><strong>Non-Gregorian calendars.</strong> ar-SA and th-TH render dates on the Gregorian calendar, so their era and year differ from IIS (which uses Hijri and the Buddhist era). Separators, names, currency and number formatting are correct for both. All other 58 locales match IIS exactly.</li>
+    <li><strong><code>CStr(True)</code></strong> returns <code>"True"</code>. IIS localises boolean literals via the OS <em>user</em> locale, which is a property of the host rather than of the script.</li>
+</ul>
+<h3>Supported locales</h3>
+<p>en-US, en-GB, en-AU, en-CA &middot; fr-FR, fr-BE, fr-CA, fr-CH &middot; de-DE, de-CH, de-AT &middot; nl-NL, nl-BE &middot; es-ES (both sort orders), es-MX &middot; it-IT, it-CH &middot; pt-PT, pt-BR &middot; ca-ES, gl-ES, eu-ES &middot; sv-SE, sv-FI, da-DK, fi-FI, nb-NO, nn-NO, is-IS &middot; pl-PL, cs-CZ, sk-SK, hu-HU, sl-SI, hr-HR, ro-RO, bg-BG, ru-RU, uk-UA, el-GR, tr-TR, et-EE, lv-LV, lt-LT &middot; ja-JP, ko-KR, zh-CN, zh-TW, zh-HK &middot; ar-SA, ar-DZ, he-IL, hi-IN, th-TH, id-ID, ms-MY, vi-VN, kk-KZ, uz-Latn-UZ.</p>
+<hr />
+<h2 id="character-encoding">Character Encoding</h2>
+<p><strong>ASPPY defaults to UTF-8 (codepage 65001) everywhere. This is an intentional break from IIS.</strong></p>
+<p>Classic ASP under IIS inherits the <em>system ANSI codepage</em> of the host machine - typically <code>1252</code> on a Western Windows server, <code>932</code> on a Japanese one. ASPPY does not, for three reasons:</p>
+<ul>
+    <li>ASPPY runs on Linux and macOS, where "the system ANSI codepage" has no meaningful equivalent - there is no coherent host default to inherit.</li>
+    <li>Modern consumers (browsers, <code>fetch</code>, JSON APIs, HTML5) assume UTF-8.</li>
+    <li>VBScript strings are Unicode internally. UTF-8 is the only encoding that round-trips them losslessly; legacy codepages silently substitute characters they cannot represent.</li>
+</ul>
+<table>
+    <thead><tr><th>Surface</th><th>ASPPY default</th><th>IIS default</th></tr></thead>
+    <tbody>
+        <tr><td><code>Session.CodePage</code> / <code>Response.CodePage</code></td><td><code>65001</code></td><td>system ANSI (e.g. <code>1252</code>)</td></tr>
+        <tr><td><code>Response.Charset</code></td><td><code>utf-8</code></td><td>unset - header omits <code>charset</code></td></tr>
+        <tr><td><code>.asp</code> source files</td><td>UTF-8, BOM-tolerant, falls back to <code>cp1252</code></td><td>BOM, else <code>@CODEPAGE</code>, else metabase</td></tr>
+        <tr><td><code>Request.Form</code> / <code>Request.QueryString</code></td><td>decoded as UTF-8</td><td>decoded per <code>Session.CodePage</code></td></tr>
+        <tr><td><code>Server.URLEncode</code></td><td>percent-encoded UTF-8</td><td>percent-encoded per current codepage</td></tr>
+    </tbody>
+</table>
+<h3>Migration impact</h3>
+<p>Pages served as <code>windows-1252</code> under IIS are served as UTF-8 by ASPPY and labelled as such in the <code>Content-Type</code> header, so browsers render them correctly with no source change. Legacy <code>.asp</code> files saved in <code>windows-1252</code> need no conversion - ASPPY detects and decodes them automatically.</p>
+<p>Intervention is only required where a <strong>non-browser</strong> consumer expects legacy bytes: CSV exports opened in Excel, fixed-format files for banking or EDI partners, or older integration endpoints that assume <code>iso-8859-1</code>. Set the encoding explicitly on those responses:</p>
+<pre><code class="language-asp">Response.Charset = "windows-1252"
+</code></pre>
+<h2>Compatibility Matrix</h2>
+<table>
+    <thead><tr><th>Subsystem</th><th>Level</th><th>Notes</th></tr></thead>
+    <tbody>
+        <tr><td>Character encoding / codepages</td><td>Intentional divergence</td><td>UTF-8 (65001) by default instead of the host ANSI codepage - see <a href="#character-encoding">Character Encoding</a></td></tr>
+        <tr><td>Core VBScript built-ins</td><td>Near</td><td>Broad coverage for common Classic ASP apps; edge coercion behaviors can differ</td></tr>
+        <tr><td>Date/time and numeric formatting</td><td>Full</td><td>Verified against live IIS across 60 locales; only the ar-SA/th-TH calendars differ - see <a href="#localization">Localization</a></td></tr>
+        <tr><td>Localization (LCID model)</td><td>Full</td><td>60 locales; <code>Session.LCID</code>, <code>Response.LCID</code>, <code>&lt;%@ LCID %&gt;</code>, <code>Get/SetLocale</code>, locale parsing and collation</td></tr>
+        <tr><td>Request/Response/Server/Application/Session</td><td>Near</td><td>Classic object model implemented; some operational semantics differ from IIS hosting internals</td></tr>
+        <tr><td><code>VBScript.RegExp</code></td><td>Near</td><td>Common API and VB-style replacement tokens supported</td></tr>
+        <tr><td><code>Scripting.Dictionary</code></td><td>Near</td><td>Core collection behavior supported; COM-level quirks may differ</td></tr>
+        <tr><td><code>Scripting.FileSystemObject</code> / <code>ADODB.Stream</code></td><td>Partial</td><td>Supported in sandboxed model (docroot/root-constrained)</td></tr>
+        <tr><td><code>ADODB.Connection/Recordset/Command</code></td><td>Partial</td><td>Provider support is runtime-dependent; ADO surface is compatibility-oriented</td></tr>
+        <tr><td>Database providers</td><td>Partial</td><td>SQLite, Access, Excel(read-only), generic ODBC, PostgreSQL via ODBC</td></tr>
+        <tr><td>MSXML HTTP/DOM shims</td><td>Partial</td><td>Security-guarded and stdlib-focused; not full MSXML COM parity</td></tr>
+        <tr><td><code>CDO.Message</code></td><td>Partial</td><td>Practical SMTP/pickup subset; not complete CDOSYS feature parity</td></tr>
+        <tr><td>POP3/IMAP shims</td><td>Partial</td><td>Legacy-friendly subset for mailbox workflows</td></tr>
+        <tr><td><code>ASPPY.ExecutePython</code></td><td>Full</td><td>Subprocess-based; full CPython access with ASPPY_RETURN convention</td></tr>
+    </tbody>
+</table>
+<hr />
+<h1>Global.asa Support</h1>
+<p>ASPPY supports the Global.asa file with the following events:</p>
+<ul>
+    <li><code>Application_OnStart</code></li>
+    <li><code>Application_OnEnd</code></li>
+    <li><code>Session_OnStart</code></li>
+    <li><code>Session_OnEnd</code></li>
+</ul>
+<p>Example Global.asa:</p>
+<pre><code class="language-asp">&lt;script language="vbscript" runat="server"&gt;
+Sub Application_OnStart
+    Application("StartTime") = Now()
+End Sub
+
+Sub Session_OnStart
+    Session("UserID") = ""
+End Sub
+&lt;/script&gt;
+</code></pre>
+<hr />
+<h1>Running ASPPY</h1>
+<p>Start the built-in server:</p>
+<pre><code class="language-bash">python -m ASPPY.server [host] [port] [docroot]
+</code></pre>
+<p>Example:</p>
+<pre><code class="language-bash">python -m ASPPY.server 0.0.0.0 8080 www
+</code></pre>
+<p>The server will serve both static files and .asp pages from the specified document root.</p>
+</main>
+</div>
+<footer class="doc-footer">
+    <p>ASPPY Framework Documentation &middot; <a href="index.html">Website</a> &middot; <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub</a></p>
+</footer>
+<script>
+(function() {
+  var saved = localStorage.getItem('asppy-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateIcon(theme);
+})();
+function updateIcon(t) {
+  var icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var current = document.documentElement.getAttribute('data-theme');
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('asppy-theme', next);
+  updateIcon(next);
+});
+document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  this.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('pre').forEach(function(el) {
+    var btn = document.createElement('button');
+    btn.innerText = 'Copy';
+    btn.className = 'copy-btn';
+    btn.addEventListener('click', function() {
+      var code = el.querySelector('code');
+      var text = code ? code.innerText : el.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 2000);
+      });
+    });
+    el.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>

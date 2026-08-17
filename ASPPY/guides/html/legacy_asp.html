@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Legacy Classic ASP / VBScript Support in ASPPY - Response, Request, Server objects and COM compatibility.">
+    <title>Legacy ASP Objects - ASPPY Framework Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-card: #FFFFFF;
+  --bg-code: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-heading: #0F172A;
+  --border-color: #E2E8F0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-code: #0D1117;
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-heading: #F1F5F9;
+  --border-color: #334155;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+h1, h2, h3, h4, h5, h6 { color: var(--text-heading); font-weight: 700; line-height: 1.2; }
+h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); }
+h2 { font-size: clamp(1.375rem, 2.5vw, 1.75rem); }
+h3 { font-size: clamp(1.125rem, 2vw, 1.375rem); }
+a { color: #6366F1; text-decoration: none; transition: var(--transition); }
+a:hover { color: #4F46E5; }
+code { font-family: 'JetBrains Mono', monospace; background: rgba(99,102,241,0.08); color: #6366F1; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+[data-theme="dark"] code { background: rgba(99,102,241,0.15); color: #818CF8; }
+pre {
+  background: var(--bg-code);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  position: relative;
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+.copy-btn {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #818CF8; padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-size: 0.72rem; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: var(--transition);
+}
+.copy-btn:hover { background: rgba(99,102,241,0.3); }
+:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+.skip-link {
+  position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
+  background: #6366F1; color: #fff; padding: 0.75rem 1.5rem;
+  border-radius: 8px; z-index: 10000; font-weight: 600;
+}
+.skip-link:focus { top: 1rem; }
+.doc-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.nav-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; font-size: 1rem; color: var(--text-heading);
+  font-family: 'JetBrains Mono', monospace;
+}
+.nav-logo:hover { color: #6366F1; }
+.nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+.nav-link {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);
+  padding: 0.4rem 0.6rem; border-radius: 6px; transition: var(--transition);
+}
+.nav-link:hover { color: #6366F1; background: rgba(99,102,241,0.08); }
+.theme-btn, .sidebar-toggle-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-primary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); font-size: 0.9rem;
+}
+.theme-btn:hover, .sidebar-toggle-btn:hover { border-color: #6366F1; color: #6366F1; }
+.sidebar-toggle-btn { display: none; }
+.doc-layout {
+  max-width: 1400px; margin: 0 auto;
+  display: flex; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  width: 260px; flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 1.5rem 0;
+  position: sticky; top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.sidebar li a {
+  display: block; padding: 0.5rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+}
+.sidebar li a:hover { color: #6366F1; background: rgba(99,102,241,0.05); }
+.sidebar li a.active {
+  color: #6366F1; background: rgba(99,102,241,0.08);
+  border-left-color: #6366F1; font-weight: 600;
+}
+.doc-main {
+  flex: 1; padding: 2rem 2.5rem 4rem;
+  max-width: 900px;
+}
+.doc-main h1 { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border-color); }
+.doc-main h2, .doc-main h3 { margin-top: 2rem; margin-bottom: 0.75rem; }
+.doc-main p, .doc-main li { color: var(--text-secondary); line-height: 1.7; }
+.doc-main ul, .doc-main ol { padding-left: 1.5rem; }
+.doc-main li { margin-bottom: 0.35rem; }
+.doc-main table {
+  width: 100%; border-collapse: collapse;
+  margin: 1rem 0; font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.doc-main th {
+  background: #6366F1; color: #fff;
+  padding: 0.75rem 1rem; text-align: left;
+  font-weight: 600; font-size: 0.82rem;
+}
+.doc-main td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+.doc-main tr:last-child td { border-bottom: none; }
+.doc-main tr:hover td { background: rgba(99,102,241,0.03); }
+.doc-footer {
+  background: #0B1120; color: rgba(255,255,255,0.5);
+  padding: 2rem 1.5rem; text-align: center; font-size: 0.85rem;
+}
+.doc-footer a { color: rgba(255,255,255,0.6); }
+.doc-footer a:hover { color: #fff; }
+.alert-box {
+  padding: 1rem 1.25rem; border-radius: var(--radius-md);
+  margin: 1rem 0; font-size: 0.9rem; line-height: 1.6;
+}
+.alert-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); color: var(--text-primary); }
+.alert-success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--text-primary); }
+.alert-warning { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 60px; z-index: 90; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .sidebar-toggle-btn { display: flex; }
+  .doc-main { padding: 1.5rem 1rem 3rem; }
+  .nav-link { display: none; }
+}
+    </style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<nav class="doc-nav" role="navigation" aria-label="Documentation navigation">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo" aria-label="ASPPY Home">
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><text x="32" y="42" text-anchor="middle" font-family="monospace" font-size="28" font-weight="bold" fill="white">&lt;%</text></svg>
+      <span>ASPPY Docs</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Website</a>
+	  <a href="prompt-builder.html" class="nav-link">Prompt builder</a>	 
+      <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" aria-label="Toggle dark mode"><i class="bi bi-moon-stars-fill"></i></button>
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle sidebar" aria-expanded="false"><i class="bi bi-list"></i></button>
+    </div>
+  </div>
+</nav>
+<div class="doc-layout">
+<aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+  <nav>
+    <ul>
+      <li><a href="index.html">Overview</a></li>
+      <li><a href="cli.html">CLI Runner</a></li>
+      <li><a href="legacy_asp.html" class="active">Legacy ASP Objects</a></li>
+      <li><a href="database.html">Database (ADODB)</a></li>
+      <li><a href="pop3_imap.html">ASPPY Mail</a></li>
+      <li><a href="zip.html">ASPPY.zip</a></li>
+      <li><a href="pdf.html">ASPPY.pdf</a></li>
+      <li><a href="image.html">ASPPY.image</a></li>
+      <li><a href="crypto.html">ASPPY.crypto</a></li>
+      <li><a href="json.html">ASPPY.json</a></li>
+      <li><a href="python.html">ASPPY.ExecutePython</a></li>
+      <li><a href="specifications.html">Specifications</a></li>
+      <li><a href="why_asppy.html">Why ASPPY Exists</a></li>
+      <li><a href="iis_setup.html">IIS Setup</a></li>
+      <li><a href="sample_apps.html">Sample Apps</a></li>
+    </ul>
+  </nav>
+</aside>
+<main id="main-content" class="doc-main">
+<h1>Legacy Classic ASP / VBScript Support</h1>
+<p>ASPPY promises 99% compatibility with legacy Classic ASP. It implements a fully functioning VBScript Virtual Machine and provides Python-based shims for the most common built-in ASP objects (Request, Response, Server, Application, Session) and commonly used COM objects.</p>
+
+<h3>VBScript Language Features</h3>
+<p>ASPPY supports standard VBScript syntax and flow control:</p>
+<ul>
+    <li><strong>Variables & Types:</strong> <code>Dim</code>, <code>Const</code>, Variants (Strings, Integers, Booleans, Arrays).</li>
+    <li><strong>Flow Control:</strong> <code>If...Then...Else</code>, <code>Select Case</code>, <code>For...Next</code>, <code>For Each...In</code>, <code>Do...Loop</code>, <code>While...Wend</code>.</li>
+    <li><strong>Procedures:</strong> <code>Sub</code> and <code>Function</code> (including ByRef and ByVal passing).</li>
+    <li><strong>Classes:</strong> <code>Class</code> definitions, <code>Public</code> / <code>Private</code> members, <code>Property Get/Let/Set</code>.</li>
+    <li><strong>Error Handling:</strong> <code>On Error Resume Next</code>, <code>On Error GoTo 0</code>, and the <code>Err</code> object.</li>
+    <li><strong>Includes:</strong> <code>&lt;!-- #include file="..." --&gt;</code> and <code>&lt;!-- #include virtual="..." --&gt;</code>.</li>
+</ul>
+
+<h3>The Response Object</h3>
+<p>Used to send output to the client.</p>
+<table>
+    <thead><tr><th>Method / Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Response.Write(string)</code></td><td>Writes a string to the HTTP output.</td></tr>
+        <tr><td><code>Response.Redirect(url)</code></td><td>Sends a 302 redirect.</td></tr>
+        <tr><td><code>Response.End()</code></td><td>Stops script execution and flushes the buffer.</td></tr>
+        <tr><td><code>Response.Flush() / Clear()</code></td><td>Flushes or clears the current output buffer.</td></tr>
+        <tr><td><code>Response.File(path, [inline])</code></td><td>Serves a physical file to the client natively (handles mime type and content length automatically).</td></tr>
+        <tr><td><code>Response.BinaryWrite(data)</code></td><td>Writes raw binary data.</td></tr>
+        <tr><td><code>Response.ContentType</code></td><td>Sets the HTTP content type (e.g., "text/html").</td></tr>
+        <tr><td><code>Response.Cookies(name) = value</code></td><td>Sets a cookie. Supports keys: <code>Response.Cookies(name)(key) = value</code> and <code>.Expires</code>.</td></tr>
+        <tr><td><code>Response.Status</code></td><td>Sets the HTTP status line (e.g., "404 Not Found").</td></tr>
+    </tbody>
+</table>
+
+<h3>The Request Object</h3>
+<p>Used to retrieve client information.</p>
+<table>
+    <thead><tr><th>Collection / Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Request.QueryString("key")</code></td><td>Gets GET parameters.</td></tr>
+        <tr><td><code>Request.Form("key")</code></td><td>Gets POST parameters.</td></tr>
+        <tr><td><code>Request.ServerVariables("key")</code></td><td>Gets server vars (e.g., REMOTE_ADDR, HTTP_USER_AGENT).</td></tr>
+        <tr><td><code>Request.Cookies("key")</code></td><td>Gets cookie values.</td></tr>
+        <tr><td><code>Request("key")</code></td><td>Shorthand: searches QueryString, Form, Cookies, then ServerVariables.</td></tr>
+        <tr><td><code>Request.Method</code> / <code>Request.HttpMethod</code></td><td>Returns the HTTP method (e.g., GET, POST, PUT, DELETE).</td></tr>
+    </tbody>
+</table>
+<h3>Native File Uploads & Downloads</h3>
+<p>ASPPY supports native <code>multipart/form-data</code> file uploads via <code>Request.Files</code>, entirely eliminating the need for complex third-party VBScript parser scripts (like freeASPUpload).</p>
+<pre><code class="language-vbscript">&lt;%
+If Request.Files.Count &gt; 0 Then
+    Dim uploadedFile
+    Set uploadedFile = Request.Files("myFile")
+    
+    If Not uploadedFile Is Nothing Then
+        ' Save to disk natively
+        uploadedFile.SaveAs Server.MapPath("/data/uploaded_" &amp; uploadedFile.FileName)
+        Response.Write "Uploaded: " &amp; uploadedFile.FileName &amp; " (" &amp; uploadedFile.Size &amp; " bytes)"
+    End If
+End If
+%&gt;</code></pre>
+
+<p class="mt-3">Similarly, securely streaming files back to the client is natively supported using <code>Response.File</code>. This stops script execution, handles correct Content-Type guessing, Content-Length calculation, and sets the Content-Disposition automatically.</p>
+<pre><code class="language-vbscript">&lt;%
+Dim filePath
+filePath = Server.MapPath("/data/download_test.txt")
+
+' The second parameter determines if it's served inline (True) or as an attachment (False)
+Response.File filePath, False
+%&gt;</code></pre>
+
+<h3>The Server Object</h3>
+<table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Server.CreateObject(progid)</code></td><td>Instantiates COM objects (shimmed by Python equivalents).</td></tr>
+        <tr><td><code>Server.MapPath(path)</code></td><td>Translates a virtual path to a physical filesystem path.</td></tr>
+        <tr><td><code>Server.HTMLEncode(string)</code></td><td>Encodes HTML characters.</td></tr>
+        <tr><td><code>Server.URLEncode(string)</code></td><td>URL-encodes a string.</td></tr>
+        <tr><td><code>Server.Execute(path) / Transfer(path)</code></td><td>Executes another ASP page.</td></tr>
+    </tbody>
+</table>
+
+<h3>Supported COM Objects via Server.CreateObject</h3>
+<p>ASPPY intercepts <code>Server.CreateObject</code> calls and routes them to native Python implementations:</p>
+<ul>
+    <li><code>Scripting.Dictionary</code> - Native dictionary implementation with string/case-insensitive mapping.</li>
+    <li><code>Scripting.FileSystemObject</code> - Native file IO (File, Folder, TextStream).</li>
+    <li><code>ADODB.Connection</code>, <code>ADODB.Recordset</code>, <code>ADODB.Command</code> - SQL database connectivity.</li>
+    <li><code>ADODB.Stream</code> - Binary and Text stream manipulation.</li>
+    <li><code>VBScript.RegExp</code> - Regular expressions (powered by Python <code>re</code>).</li>
+    <li><code>MSXML2.ServerXMLHTTP</code> / <code>MSXML2.DOMDocument</code> - HTTP requests and XML parsing.</li>
+    <li><code>CDO.Message</code> - Email sending.</li>
+</ul>
+<p><strong>Python Bridge:</strong> Beyond COM shims, ASPPY also provides <a href="python.html"><code>ASPPY.ExecutePython</code></a>, which lets you run arbitrary CPython code (including any installed Python package) directly from VBScript and receive a string result. See the <a href="python.html">ASPPY.ExecutePython documentation</a> for details.</p>
+
+</main>
+</div>
+<footer class="doc-footer">
+    <p>ASPPY Framework Documentation &middot; <a href="index.html">Website</a> &middot; <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub</a></p>
+</footer>
+<script>
+(function() {
+  var saved = localStorage.getItem('asppy-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+  updateIcon(theme);
+})();
+function updateIcon(t) {
+  var icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var current = document.documentElement.getAttribute('data-theme');
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('asppy-theme', next);
+  updateIcon(next);
+});
+document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
+  this.setAttribute('aria-expanded', sidebar.classList.contains('open'));
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('pre').forEach(function(el) {
+    var btn = document.createElement('button');
+    btn.innerText = 'Copy';
+    btn.className = 'copy-btn';
+    btn.addEventListener('click', function() {
+      var code = el.querySelector('code');
+      var text = code ? code.innerText : el.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerText = 'Copied!';
+        setTimeout(function() { btn.innerText = 'Copy'; }, 2000);
+      });
+    });
+    el.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>

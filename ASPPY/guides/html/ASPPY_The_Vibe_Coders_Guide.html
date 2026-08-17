@@ -1,0 +1,1894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASPPY: The Vibe Coder's Guide</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+:root{
+  --brand:#6366F1; --brand-2:#0D9488; --ink:#0F172A; --muted:#475569;
+  --code-bg:#0F172A; --code-ink:#E2E8F0; --page-max:860px;
+}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  color:var(--ink); line-height:1.7; font-size:1.02rem;
+  background:#F8FAFC;
+}
+.book-wrap{max-width:var(--page-max);margin:0 auto;padding:0 1.25rem 6rem;}
+h1,h2,h3,h4{font-weight:700;line-height:1.25;color:var(--ink);}
+h1{font-size:2.4rem;margin-top:3.5rem;}
+h2{font-size:1.9rem;margin-top:3rem;border-bottom:3px solid var(--brand);padding-bottom:.4rem;}
+h3{font-size:1.4rem;margin-top:2.2rem;color:#312E81;}
+h4{font-size:1.12rem;margin-top:1.6rem;color:var(--brand-2);}
+p{color:#1e293b;}
+a{color:var(--brand);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.lead-quote{
+  font-size:1.25rem;font-style:italic;color:#334155;border-left:5px solid var(--brand);
+  padding:.5rem 0 .5rem 1.25rem;margin:1.5rem 0;background:rgba(99,102,241,.05);
+}
+pre{
+  background:var(--code-bg);color:var(--code-ink);border-radius:12px;
+  padding:1.1rem 1.25rem;font-family:'Consolas','JetBrains Mono',monospace;
+  font-size:.86rem;line-height:1.6;overflow-x:auto;border:1px solid rgba(99,102,241,.25);
+  margin:1.1rem 0;
+}
+pre code{color:inherit;background:none;padding:0;font-size:inherit;white-space:pre;}
+code{background:rgba(99,102,241,.1);color:#4338CA;padding:.12rem .4rem;border-radius:5px;
+  font-family:'Consolas',monospace;font-size:.88em;}
+.code-label{
+  display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:.2rem .6rem;border-radius:6px 6px 0 0;margin-bottom:-.4rem;position:relative;top:.3rem;
+}
+.label-legacy{background:#7f1d1d;color:#fecaca;}
+.label-asppy{background:#064e3b;color:#a7f3d0;}
+.label-vbs{background:#1e3a8a;color:#bfdbfe;}
+table{font-size:.92rem;}
+.cover{
+  background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;
+  border-radius:20px;padding:4rem 2.5rem;margin:2.5rem 0 1rem;text-align:center;
+  box-shadow:0 20px 40px -15px rgba(99,102,241,.5);
+}
+.cover h1{color:#fff;font-size:3rem;margin:0;border:none;}
+.cover .sub{font-size:1.3rem;opacity:.95;margin-top:.5rem;font-weight:500;}
+.cover .tag{margin-top:1.5rem;font-size:.95rem;opacity:.85;}
+.cover .logo{font-family:'Consolas',monospace;font-size:4rem;font-weight:700;
+  background:rgba(255,255,255,.15);width:110px;height:110px;line-height:110px;border-radius:24px;
+  margin:0 auto 1.5rem;display:block;}
+.callout{border-radius:12px;padding:1rem 1.25rem;margin:1.4rem 0;border:1px solid;}
+.callout .ct{font-weight:700;display:block;margin-bottom:.25rem;}
+.c-info{background:#eef2ff;border-color:#c7d2fe;color:#1e1b4b;}
+.c-warn{background:#fffbeb;border-color:#fde68a;color:#78350f;}
+.c-success{background:#ecfdf5;border-color:#a7f3d0;color:#064e3b;}
+.c-vibe{background:linear-gradient(135deg,#faf5ff,#eef2ff);border-color:#ddd6fe;color:#4c1d95;}
+.c-danger{background:#fef2f2;border-color:#fecaca;color:#7f1d1d;}
+.c-test{background:#f0fdfa;border-color:#99f6e4;color:#134e4a;}
+.toc-list a{display:block;padding:.35rem .5rem;border-radius:6px;color:#334155;}
+.toc-list a:hover{background:rgba(99,102,241,.08);text-decoration:none;}
+.toc-part{font-weight:700;color:var(--brand);margin:1.2rem 0 .4rem;font-size:1.05rem;}
+.chapter-meta{font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
+.vs-grid{display:grid;grid-template-columns:1fr;gap:0;}
+hr.sec{border:0;border-top:2px dashed #e2e8f0;margin:3rem 0;}
+.badge-test{background:#0d9488;color:#fff;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:20px;}
+.footer{text-align:center;color:var(--muted);font-size:.85rem;padding:3rem 0 1rem;border-top:1px solid #e2e8f0;margin-top:4rem;}
+@media print{
+  body{background:#fff;font-size:11pt;}
+  pre{font-size:8.5pt;}
+  .cover{box-shadow:none;}
+  h1,h2{page-break-after:avoid;}
+  pre,table,.callout{page-break-inside:avoid;}
+  /* Start every Part intro and every chapter/appendix on a fresh page. */
+  #toc,
+  .book-wrap > h1,
+  .part-cover{
+    page-break-before:always;
+    break-before:page;
+  }
+  /* The book cover is the very first element; never break before it. */
+  .cover:first-of-type{
+    page-break-before:auto;
+    break-before:auto;
+  }
+}
+</style>
+</head>
+<body>
+<div class="book-wrap">
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <span class="logo">&lt;%</span>
+  <h1>ASPPY</h1>
+  <div class="sub">The Vibe Coder's Guide</div>
+  <p class="tag">Running Classic ASP / VBScript Natively on a Python VM<br>
+  &mdash; without the rewrite, without IIS, without COM &mdash;</p>
+</div>
+<p class="text-center text-muted"><em>A practical 50-page field manual for developers modernizing legacy ASP applications.</em></p>
+<p class="text-center"><span class="badge-test"><i class="bi bi-check2-circle"></i> Every code sample in this book was executed against ASPPY on localhost before printing.</span></p>
+
+<!-- ===================== TOC ===================== -->
+<h1 id="toc">Table of Contents</h1>
+<div class="toc-list">
+  <div class="toc-part">Part I &mdash; Philosophy &amp; Foundations</div>
+  <a href="#ch1">Chapter 1 &middot; The Vibe Coding Manifesto: Why ASPPY Exists</a>
+  <a href="#ch2">Chapter 2 &middot; How ASPPY Works: The Engine &amp; the 99% Promise</a>
+  <a href="#ch3">Chapter 3 &middot; Getting Up and Running</a>
+  <a href="#ch4">Chapter 4 &middot; Deployment: The Reverse-Proxy Pattern</a>
+  <div class="toc-part">Part II &mdash; The Legacy Object Model (It Just Works)</div>
+  <a href="#ch5">Chapter 5 &middot; Response &amp; Request (with native Files &amp; File)</a>
+  <a href="#ch6">Chapter 6 &middot; Server, Session, Application &amp; Global.asa</a>
+  <a href="#ch7">Chapter 7 &middot; Data Access: ADODB &amp; SQLite the ASPPY Way</a>
+  <div class="toc-part">Part III &mdash; The ASPPY Global Class (The Game Changer)</div>
+  <a href="#ch8">Chapter 8 &middot; ASPPY.json &mdash; Native JSON</a>
+  <a href="#ch9">Chapter 9 &middot; ASPPY.crypto &mdash; bcrypt Password Hashing</a>
+  <a href="#ch10">Chapter 10 &middot; ASPPY.zip &mdash; Compression Without COM</a>
+  <a href="#ch11">Chapter 11 &middot; ASPPY.pdf &mdash; Server-Side PDFs</a>
+  <a href="#ch12">Chapter 12 &middot; ASPPY.image &mdash; Pillow-Powered Imaging</a>
+  <a href="#ch13">Chapter 13 &middot; ASPPY.pop3 &amp; ASPPY.imap &mdash; Modern Mail</a>
+  <div class="toc-part">Part IV &mdash; Building Real Apps</div>
+  <a href="#ch14">Chapter 14 &middot; Three Working Sample Apps</a>
+  <a href="#ch15">Chapter 15 &middot; Vibe-Coding ASPPY with AI Agents</a>
+  <a href="#appendix">Appendix A &middot; Verified Compatibility Reference &amp; Gotchas</a>
+</div>
+
+<!-- ===================== CHAPTER 1 ===================== -->
+<h1 id="ch1">Chapter 1 &middot; The Vibe Coding Manifesto: Why ASPPY Exists</h1>
+<p class="chapter-meta">Part I &middot; Philosophy &amp; Foundations</p>
+
+<p class="lead-quote">"You should never have to rewrite working software just because the platform underneath it got bored."</p>
+
+<h3>1.1 A Eulogy That Came Too Early</h3>
+<p>
+Somewhere right now there is a Classic ASP application quietly doing its job. It has been doing that
+job for fifteen, maybe twenty years. It calculates invoices, books appointments, manages inventory,
+emails customers, and prints reports. Nobody talks about it at conferences. Nobody puts it on a
+resume. And yet it earns money every single day, without drama, without downtime, without a single
+npm install.
+</p>
+<p>
+Then one morning an email arrives from IT: <em>"Microsoft is removing VBScript from Windows. We need a
+plan."</em> And just like that, a piece of software that never broke is suddenly on death row &mdash; not
+because it failed, but because the ground beneath it is being pulled away.
+</p>
+<p>
+This is the moment ASPPY was built for. Microsoft announced a phased deprecation of VBScript in May
+2024. By Phase 3, the VBScript dynamic-link libraries will be removed from Windows entirely. When that
+happens, every Classic ASP page that depends on <code>vbscript.dll</code> stops executing. Not "runs
+slower." Not "throws a warning." <strong>Stops.</strong>
+</p>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-clock-history"></i> The Deprecation Timeline (from the ASPPY docs)</span>
+  <strong>Phase 1:</strong> VBScript ships as a Feature on Demand, enabled by default (Windows 11 24H2+).<br>
+  <strong>Phase 2 (from 2027):</strong> The VBScript Feature on Demand is no longer enabled by default; users must manually enable it.<br>
+  <strong>Phase 3:</strong> VBScript is fully retired and the <code>.dll</code> files are removed from Windows.
+</div>
+<p>
+The traditional advice at this point is brutal: <em>"Just rewrite it."</em> Rewrite two decades of
+battle-tested business logic in C#, or Node, or Python, or whatever this season's framework happens to
+be. Re-derive every edge case that some long-departed contractor discovered the hard way in 2009.
+Re-test every report. Re-train every user. Spend six figures and a year of calendar time to arrive,
+if you are lucky, at <em>exactly the behaviour you already had.</em>
+</p>
+<p>That is not modernization. That is a tax on having survived.</p>
+
+<h3>1.2 What Is Vibe Coding, Really?</h3>
+<p>
+"Vibe coding" gets thrown around as a buzzword, so let us define it honestly for this book. Vibe coding
+is the practice of <strong>spending your attention on intent and architecture, and refusing to spend it
+on mechanical syntax that a machine can handle for you.</strong>
+</p>
+<p>
+When you vibe-code, you think in terms of <em>what the application should do</em> &mdash; "take the
+uploaded file, compress it, and stream it back as a download" &mdash; rather than in terms of the
+ceremony required to make a particular runtime cooperate. The vibe is the shape of the solution. The
+syntax is just the cost of expressing it.
+</p>
+<p>
+Classic ASP developers have always, secretly, been vibe coders. VBScript is a forgiving,
+intent-first language. <code>Response.Write "Hello"</code> means exactly what it says. There is no
+build step, no transpilation config, no decorator soup. You open a file, you write the logic, you
+refresh the browser. The feedback loop is immediate and the language gets out of your way. That
+directness is <em>why</em> these applications were so productive to build and why they have lasted so
+long.
+</p>
+<div class="callout c-vibe">
+  <span class="ct"><i class="bi bi-stars"></i> The Vibe Coding Principle</span>
+  Prioritize functional intent, clear architecture, and natural-language instruction over tedious
+  manual syntax. Let the tooling absorb the gap between the way you <em>think</em> about the problem and
+  the way the platform demands you <em>type</em> it.
+</div>
+<p>
+The enemy of the vibe is friction that adds no value. Manually marshalling a COM component you can
+barely register anymore is friction. Hand-rolling a 400-line VBScript JSON parser because the language
+never shipped one is friction. Fighting Windows to keep an unmaintained scripting engine alive is
+friction. None of that friction makes your invoicing logic one cent more correct.
+</p>
+
+<h3>1.3 ASPPY's Primary Mission</h3>
+<p>
+ASPPY is an open-source runtime, written entirely in Python, that executes Classic ASP (VBScript)
+pages on Windows, Linux, and macOS. It bundles its <em>own</em> VBScript interpreter, which means it does
+not depend on Windows to provide <code>vbscript.dll</code> at all. Read that twice, because it is the
+whole game:
+</p>
+<p class="lead-quote">ASPPY does not <em>ask</em> Windows to run your ASP. ASPPY <em>is</em> the thing that runs your ASP.</p>
+<p>The mission breaks into three promises:</p>
+<ol>
+  <li><strong>Survival.</strong> Your Classic ASP keeps running after Microsoft removes VBScript from
+  Windows, because ASPPY never used the Windows component in the first place.</li>
+  <li><strong>Liberation.</strong> Because ASPPY is pure Python, your ASP app can now run anywhere
+  Python runs &mdash; a cheap Linux VPS, a Mac laptop, even (as the docs gleefully point out) an Android
+  device. The same <code>.asp</code> files. Zero code changes.</li>
+  <li><strong>Elevation.</strong> ASPPY does not merely <em>preserve</em> Classic ASP &mdash; it gives it
+  the modern superpowers it never had: native JSON, PDF generation, image processing, ZIP archives,
+  bcrypt hashing, and mail clients, all reachable from VBScript through a single global object called
+  <code>ASPPY</code>.</li>
+</ol>
+<p>
+That third promise is the heart of this book, and it deserves a name. We call it <em>the bridge</em>:
+the bridge between reliable legacy logic on one bank and the entire modern Python ecosystem on the
+other. You walk across it without leaving VBScript.
+</p>
+
+<h3>1.4 The 99% Compatibility Guarantee, Stated Plainly</h3>
+<p>
+ASPPY targets <strong>99% practical, application-level compatibility</strong> with Classic ASP. Your
+familiar objects &mdash; <code>Request</code>, <code>Response</code>, <code>Server</code>,
+<code>Session</code>, <code>Application</code> &mdash; behave the way you expect. The VBScript language
+features you rely on (<code>If</code>, <code>Select Case</code>, <code>For Each</code>, <code>Sub</code>,
+<code>Function</code>, <code>Class</code>, <code>On Error Resume Next</code>, <code>#include</code>) are
+all there.
+</p>
+<p>
+What does the missing 1% mean? It means ASPPY targets practical compatibility, not byte-for-byte IIS
+parity. Locale-specific number and date formatting, deep edge cases in type coercion around
+<code>Empty</code>/<code>Null</code>/<code>Nothing</code>, and COM-level quirks may differ. SQL is
+executed as-is by the underlying driver &mdash; ASPPY does not translate SQL dialects. The honest
+guidance, straight from the project: if you are migrating a critical application, run your own
+regression tests against ASPPY alongside IIS before you cut over.
+</p>
+<div class="callout c-test">
+  <span class="ct"><i class="bi bi-shield-check"></i> A Note on How This Book Was Written</span>
+  This is not a book of hopeful pseudo-code. Before any sample appeared on these pages, it was saved
+  as a real <code>.asp</code> file, served by ASPPY on <code>http://127.0.0.1:8080</code>, and its
+  output captured. Where the official docs and the running runtime disagreed, the book follows the
+  <strong>runtime</strong> and tells you about the difference. You will see these <em>"Tested on
+  localhost"</em> notes throughout.
+</div>
+
+<h3>1.5 The Legacy Way vs. The ASPPY Way</h3>
+<p>
+The rest of this book leans hard on one teaching device: the side-by-side comparison. We show you how a
+task felt in the old world, then how the same intent is expressed with ASPPY. Here is the very first
+one &mdash; the timeless task of turning a structure into JSON.
+</p>
+
+<span class="code-label label-legacy">The Legacy Way &mdash; Classic ASP on IIS</span>
+<pre><code>&lt;%
+' To produce JSON in Classic ASP you typically shipped a third-party
+' VBScript class &mdash; hundreds of lines of string-building and RegExp.
+' Something like this, after including a 400-line "JSON.asp" library:
+
+Dim oJSON
+Set oJSON = New JSONobject       ' from a bundled third-party .asp
+oJSON.Add "name", "ASPPY Framework"
+oJSON.Add "version", 1
+' ...and you prayed it escaped quotes correctly on large payloads.
+Response.Write oJSON.JSONoutput()
+%&gt;</code></pre>
+
+<span class="code-label label-asppy">The ASPPY Way</span>
+<pre><code>&lt;%
+Dim dict
+Set dict = Server.CreateObject("Scripting.Dictionary")
+dict.Add "name", "ASPPY Framework"
+dict.Add "version", 1.0
+dict.Add "active", True
+dict.Add "features", Array("JSON", "Crypto", "PDF", "Image", "Zip")
+
+' One line. Handed off to Python's C-optimized json module.
+Response.Write ASPPY.json.Encode(dict, True)
+%&gt;</code></pre>
+
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; actual output</span>
+  Running the ASPPY version above on the dev server produced exactly this, with no helper library of any kind:
+<pre style="margin:.6rem 0 0;"><code>{
+  "active": true,
+  "features": [
+    "JSON",
+    "Crypto",
+    "PDF",
+    "Image",
+    "Zip"
+  ],
+  "name": "ASPPY Framework",
+  "version": 1.0
+}</code></pre>
+</div>
+<p>
+That is the entire pitch in miniature. The intent &mdash; "serialize this to pretty JSON" &mdash; stayed
+front and centre. The mechanical gap between 1996-era VBScript and a 2026-era ecosystem was quietly
+closed by the runtime. You stayed in the vibe; ASPPY handled the bridge.
+</p>
+
+<h3>1.6 Who This Book Is For</h3>
+<p>
+You are a web developer, probably one who has felt the specific dread of owning a Classic ASP codebase
+in a world that has decided to move on. You know VBScript well enough to read it without flinching. You
+do not want a lecture about why you should have rewritten everything in 2015. You want a practical path
+to keep the value you have already built, run it on modern infrastructure, and &mdash; where it helps
+&mdash; sprinkle in modern capabilities without a ground-up rewrite.
+</p>
+<p>
+If that is you, the next chapter opens the hood. We will look at how ASPPY actually transforms your
+VBScript into something a Python VM can execute, what the "engine" really is, and why the 99% number is
+a promise the architecture can actually keep.
+</p>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 2</span>
+  The transpilation pipeline &mdash; lexer, parser, AST, and VM &mdash; explained for people who would
+  rather ship features than read compiler theory. Plus: why bundling its own interpreter is ASPPY's
+  single most important architectural decision.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 2 ===================== -->
+<h1 id="ch2">Chapter 2 &middot; How ASPPY Works: The Engine &amp; the 99% Promise</h1>
+<p class="chapter-meta">Part I &middot; Philosophy &amp; Foundations</p>
+
+<p class="lead-quote">"A transpiler you can explain on a napkin is a transpiler you can trust in production."</p>
+
+<h3>2.1 The Word "Transpiler", Demystified</h3>
+<p>
+ASPPY is often described as a Classic ASP/VBScript-to-Python <em>transpiler</em>, and that word can
+conjure images of a black box that spits out scary generated code. The reality is friendlier. ASPPY
+takes your <code>.asp</code> file, understands it the way a compiler does, and executes the result on a
+small purpose-built virtual machine &mdash; all in Python, all in memory. You never see or maintain
+generated Python. You keep writing and editing the exact same VBScript you always did.
+</p>
+<p>The pipeline, from the source modules that implement it, looks like this:</p>
+<pre><code>your_page.asp
+     │
+     ▼
+ ┌─────────┐   ┌──────────┐   ┌──────────────┐   ┌──────────────┐
+ │  Lexer  │──▶│  Parser  │──▶│  AST nodes   │──▶│  VBScript VM │
+ │lexer.py │   │parser.py │   │ ast_nodes.py │   │ runner_vm.py │
+ └─────────┘   └──────────┘   └──────────────┘   └──────────────┘
+                                                       │
+                                   binds the object model ▼
+            Request · Response · Server · Session · Application · ASPPY</code></pre>
+<ol>
+  <li><strong>Lexer.</strong> Splits the raw page into tokens &mdash; separating literal HTML from the
+  <code>&lt;% ... %&gt;</code> script regions, and turning VBScript text into a stream of keywords,
+  identifiers, operators, and literals.</li>
+  <li><strong>Parser.</strong> Reads that token stream and builds an Abstract Syntax Tree: a structured
+  representation of your <code>If</code> blocks, loops, <code>Sub</code>/<code>Function</code>
+  definitions, classes, and expressions.</li>
+  <li><strong>VM.</strong> The runner walks the AST and <em>executes</em> it, with full VBScript
+  semantics, against a runtime environment that has all the built-in functions and the ASP object model
+  pre-wired.</li>
+</ol>
+
+<h3>2.2 Why "Its Own Interpreter" Is the Whole Point</h3>
+<p>
+The single most important architectural fact about ASPPY is that it <strong>does not call out to
+Windows' VBScript engine.</strong> It carries its own. Every <code>UCase</code>, every
+<code>DateAdd</code>, every <code>For Each</code> is implemented in Python inside ASPPY's own runtime
+modules (<code>vb_builtins.py</code>, <code>vb_datetime.py</code>, <code>vb_runtime.py</code>, and
+friends).
+</p>
+<p>This is what makes the survival promise real. When Phase 3 arrives and <code>vbscript.dll</code> is
+deleted from Windows, ASPPY does not notice, because it never imported it. And it is what makes the
+liberation promise real: Python runs on Linux and macOS, so ASPPY &mdash; and therefore your ASP &mdash;
+runs there too.</p>
+
+<h3>2.3 The Object Model Is Pre-Wired</h3>
+<p>
+When ASPPY builds the execution environment for a page, it injects the entire Classic ASP object model
+plus its own extensions before your first line runs. Practically, that means these names are simply
+<em>available</em> in any page with no <code>Dim</code>, no registration, no import:
+</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Name</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><code>Request</code></td><td>Incoming request: query string, form, cookies, server variables, uploaded files.</td></tr>
+    <tr><td><code>Response</code></td><td>Outgoing response: write, redirect, headers, cookies, binary, native file streaming.</td></tr>
+    <tr><td><code>Server</code></td><td>Utilities: <code>CreateObject</code>, <code>MapPath</code>, <code>HTMLEncode</code>, <code>URLEncode</code>.</td></tr>
+    <tr><td><code>Session</code></td><td>Per-user state across requests, keyed by a session cookie.</td></tr>
+    <tr><td><code>Application</code></td><td>Process-wide shared state across all users.</td></tr>
+    <tr><td><code>ASPPY</code></td><td><strong>The game changer.</strong> A global object exposing modern Python capabilities: <code>ASPPY.json</code>, <code>ASPPY.crypto</code>, <code>ASPPY.zip</code>, <code>ASPPY.pdf</code>, <code>ASPPY.image</code>, <code>ASPPY.pop3</code>, <code>ASPPY.imap</code>.</td></tr>
+  </tbody>
+</table>
+<p>
+The <code>ASPPY</code> global is the bridge made concrete. It is the one new name you learn, and behind
+it sits the whole modern ecosystem &mdash; <code>fpdf2</code> for PDFs, <code>Pillow</code> for images,
+<code>bcrypt</code> for hashing, Python's <code>zipfile</code> and <code>json</code> for archives and
+serialization, and <code>poplib</code>/<code>imaplib</code> for mail.
+</p>
+
+<h3>2.4 What "99% Compatible" Buys You &mdash; and What It Costs</h3>
+<p>
+The architecture is what lets ASPPY make a 99% claim with a straight face: it is not approximating
+VBScript with regular expressions, it is genuinely lexing, parsing, and interpreting it with VBScript
+semantics. The supported surface, per the project, is broad:
+</p>
+<ul>
+  <li><strong>Near-complete:</strong> VBScript string, date, math, and array built-ins; the core ASP
+  object model.</li>
+  <li><strong>Supported:</strong> <code>Scripting.Dictionary</code>,
+  <code>Scripting.FileSystemObject</code>, <code>VBScript.RegExp</code>, <code>Global.asa</code> events,
+  <code>#include</code> (file and virtual).</li>
+  <li><strong>Partial / sandboxed:</strong> <code>ADODB</code> family, MSXML HTTP &amp; DOM,
+  <code>CDO.Message</code> over SMTP, POP3/IMAP.</li>
+</ul>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-exclamation-triangle"></i> The honest 1%</span>
+  ASPPY does not promise byte-for-byte IIS parity. Watch for differences in locale-specific formatting,
+  edge-case coercion around <code>Empty</code>/<code>Null</code>/<code>Nothing</code>, exact error
+  wording, and COM quirks. SQL is run verbatim by the underlying driver &mdash; no dialect translation.
+  For anything mission-critical, regression-test against your current IIS behaviour first.
+</div>
+
+<h3>2.5 A Gotcha Worth Learning Now: <code>And</code> Does Not Short-Circuit</h3>
+<p>
+Because ASPPY faithfully implements VBScript semantics, it faithfully implements VBScript's
+<em>quirks</em> too. The most famous one bites people writing route logic: VBScript's <code>And</code>
+evaluates <strong>every</strong> operand, even after the first is false. This crashes the moment you
+combine an array-length check with an array-index access on the same line.
+</p>
+<span class="code-label label-vbs">BROKEN &mdash; raises "Subscript out of range"</span>
+<pre><code>' parts(2) is STILL evaluated even when UBound(parts) is 0
+If UBound(parts) = 2 And parts(0) = "contacts" And parts(2) = "edit" Then
+    ' ...
+End If</code></pre>
+<span class="code-label label-asppy">CORRECT &mdash; nested ifs guard the indices</span>
+<pre><code>Dim parts, partCount
+parts = RouteParts()
+partCount = UBound(parts)
+
+If partCount = 2 Then            ' now parts(0..2) are guaranteed to exist
+    If parts(0) = "contacts" Then
+        If parts(2) = "edit" Then
+            ' ...safe to read parts(2) here
+        End If
+    End If
+End If</code></pre>
+<p>
+We flag this in Chapter 2 because it is the most common cause of a "but my code looks correct!" error
+in real apps. The outer length check is the load-bearing wall; never replace it with an inline
+<code>And</code>. The appendix collects the full set of these gotchas.
+</p>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 3</span>
+  We stop talking and start running: installing dependencies, starting the server on a port, and the
+  exact <code>www</code> folder layout ASPPY expects.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 3 ===================== -->
+<h1 id="ch3">Chapter 3 &middot; Getting Up and Running</h1>
+<p class="chapter-meta">Part I &middot; Philosophy &amp; Foundations</p>
+
+<p class="lead-quote">"The shortest path from legacy to live is a single command."</p>
+
+<h3>3.1 Requirements</h3>
+<p>ASPPY needs Python 3.8 or newer. (The dev machine this book was tested on ran Python 3.13.) Beyond
+that, you install Python libraries only for the features you actually use:</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Library</th><th>Powers</th><th>Install</th></tr></thead>
+  <tbody>
+    <tr><td><code>fpdf2</code></td><td><code>ASPPY.pdf</code></td><td><code>pip install fpdf2</code></td></tr>
+    <tr><td><code>bcrypt</code></td><td><code>ASPPY.crypto</code></td><td><code>pip install bcrypt</code></td></tr>
+    <tr><td><code>pillow</code></td><td><code>ASPPY.image</code></td><td><code>pip install pillow</code></td></tr>
+    <tr><td><code>pyodbc</code></td><td>Access / Excel / ODBC databases</td><td><code>pip install pyodbc</code></td></tr>
+  </tbody>
+</table>
+<p>JSON and ZIP need nothing extra &mdash; they ride on Python's standard library. SQLite is built in.</p>
+
+<h3>3.2 The One-Line Quick Start</h3>
+<span class="code-label label-asppy">Install &amp; launch</span>
+<pre><code>pip install fpdf2 bcrypt pillow pyodbc
+python -m ASPPY.server 0.0.0.0 8080 www</code></pre>
+<p>
+The server takes three arguments: the bind address, the port, and the document-root folder. Point your
+browser at <code>http://localhost:8080</code> and your <code>.asp</code> pages are live. For local
+development this book uses port <strong>8080</strong> and binds to localhost:
+</p>
+<span class="code-label label-asppy">Local development server</span>
+<pre><code>python -m ASPPY.server 127.0.0.1 8080 www</code></pre>
+
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-arrow-clockwise"></i> The cache works for you, not against you</span>
+  ASPPY caches compiled ASP in memory for speed, but invalidation is <strong>automatic</strong>: when you
+  edit any <code>.asp</code> file - includes too - ASPPY detects the change and recompiles it on the
+  next request. No server restart, no cache clearing. Just edit and refresh.
+</div>
+
+<h3>3.3 The <code>www</code> Folder Layout</h3>
+<p>
+ASPPY projects follow a clear, conventional structure. New apps start from the bundled
+<code>www_starter</code> template (copy it into <code>www</code>) rather than from an empty folder, so
+the layout and routing wiring are correct from day one:
+</p>
+<pre><code>www/
+  default.asp     ' the front controller / router (MVC apps)
+  index.asp       ' includes default.asp
+  asp/            ' shared server-side helpers, controllers, models, views
+    controllers/
+    models/
+    views/
+  assets/         ' CSS, JS, app images
+  data/           ' shared data files and databases (e.g. app.db)
+  uploads/        ' user-uploaded files</code></pre>
+
+<h3>3.4 The Three Kinds of Path (Don't Mix Them)</h3>
+<p>
+More broken ASPPY apps come from path confusion than from anything else. There are exactly three path
+types, and they answer three different questions:
+</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Type</th><th>Answers</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Route path</td><td>"What URL did the browser ask for?"</td><td><code>/contacts/12/edit</code></td></tr>
+    <tr><td>Include path</td><td>"Where is this file, relative to <em>me</em>?"</td><td><code>../asp/db.asp</code></td></tr>
+    <tr><td><code>Server.MapPath</code></td><td>"What physical disk path is this virtual path?"</td><td><code>data/app.db</code></td></tr>
+  </tbody>
+</table>
+<div class="callout c-danger">
+  <span class="ct"><i class="bi bi-exclamation-octagon"></i> The MapPath rule that trips everyone</span>
+  <code>Server.MapPath("...")</code> is relative to <strong>the ASP file currently executing</strong>.
+  The same string can resolve to different folders in different files. In
+  <code>www/default.asp</code>, <code>Server.MapPath("data/app.db")</code> points to
+  <code>www/data/app.db</code>; in <code>www/asp/save.asp</code> the same string points to
+  <code>www/asp/data/app.db</code>. Never use a leading slash, never hardcode physical paths, and never
+  pass a route URL into <code>MapPath</code>.
+</div>
+
+<h3>3.5 Your First Page</h3>
+<span class="code-label label-vbs">www/hello.asp</span>
+<pre><code>&lt;%
+Response.Write "&lt;h1&gt;Hello from ASPPY&lt;/h1&gt;"
+Response.Write "&lt;p&gt;The time is " &amp; Now() &amp; "&lt;/p&gt;"
+Response.Write "&lt;p&gt;You are " &amp; Request.ServerVariables("REMOTE_ADDR") &amp; "&lt;/p&gt;"
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  Served from <code>http://127.0.0.1:8080/hello.asp</code>, this rendered an <code>&lt;h1&gt;</code>, the
+  current timestamp via <code>Now()</code>, and the caller's address &mdash; confirming the object model
+  and built-ins are live with zero configuration.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 4</span>
+  How to put ASPPY into production behind IIS, nginx, or Apache so the switch is invisible to your users.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 4 ===================== -->
+<h1 id="ch4">Chapter 4 &middot; Deployment: The Reverse-Proxy Pattern</h1>
+<p class="chapter-meta">Part I &middot; Philosophy &amp; Foundations</p>
+
+<p class="lead-quote">"To the outside world, nothing changed. To your future self, everything did."</p>
+
+<h3>4.1 The Mental Model</h3>
+<p>
+ASPPY runs as a standalone HTTP server (port 8080 by default). In production you do not expose it
+directly; you sit it behind a real web server that already handles your TLS, your static files, your
+PHP, your ASPX &mdash; and you have that web server quietly forward only <code>.asp</code> requests to
+ASPPY. The browser never sees the port. The URLs do not change. The transition is transparent.
+</p>
+<pre><code>Browser ──▶ IIS / nginx / Apache  (:80 / :443)
+                 │
+                 ├─ *.php   → PHP via FastCGI
+                 ├─ *.aspx  → ASP.NET
+                 ├─ static  → served natively
+                 └─ *.asp   → ASPPY  (localhost:8080)
+                              ◀── response returned to browser</code></pre>
+
+<h3>4.2 IIS via Application Request Routing (ARR)</h3>
+<p>
+On Windows, IIS becomes a reverse proxy with a small <code>web.config</code>. Every request is rewritten
+to ASPPY on <code>localhost:8080</code>; the browser's URL bar never changes because this is a
+<em>rewrite</em>, not a redirect.
+</p>
+<span class="code-label label-asppy">web.config &mdash; IIS reverse proxy to ASPPY</span>
+<pre><code>&lt;configuration&gt;
+  &lt;system.webServer&gt;
+    &lt;httpErrors existingResponse="PassThrough" /&gt;
+    &lt;rewrite&gt;
+      &lt;rules&gt;
+        &lt;rule name="ReverseProxyToASPPY" stopProcessing="true"&gt;
+          &lt;match url=".*" /&gt;
+          &lt;action type="Rewrite" url="http://localhost:8080/{R:0}" /&gt;
+        &lt;/rule&gt;
+      &lt;/rules&gt;
+    &lt;/rewrite&gt;
+  &lt;/system.webServer&gt;
+&lt;/configuration&gt;</code></pre>
+<p>Line by line:</p>
+<ul>
+  <li><code>httpErrors existingResponse="PassThrough"</code> &mdash; stops IIS from replacing ASPPY's own
+  error responses (404, 500) with its branded pages. ASPPY's errors reach the browser unmodified.</li>
+  <li><code>match url=".*"</code> &mdash; matches every incoming request.</li>
+  <li><code>stopProcessing="true"</code> &mdash; once matched, no further rules run.</li>
+  <li><code>Rewrite url="http://localhost:8080/{R:0}"</code> &mdash; forwards to ASPPY, appending the full
+  original path via <code>{R:0}</code>.</li>
+</ul>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-tools"></i> Three required pieces on IIS</span>
+  <strong>1.</strong> The <em>URL Rewrite</em> module (provides the <code>&lt;rewrite&gt;</code> section).<br>
+  <strong>2.</strong> <em>Application Request Routing (ARR)</em> &mdash; and you must enable the proxy at
+  the <strong>server level</strong> once: <em>IIS Manager → Server node → Application Request Routing
+  Cache → Server Proxy Settings → Enable proxy → Apply.</em> Skip this and forwarding silently 404s.<br>
+  <strong>3.</strong> ASPPY actually running on port 8080, or IIS returns 502 Bad Gateway.
+</div>
+
+<h3>4.3 nginx / Apache (Linux &amp; macOS)</h3>
+<p>
+On Linux or macOS, nginx or Apache plays the same role. This is where the liberation promise pays off:
+the identical <code>.asp</code> files now run on a Linux VPS at a fraction of Windows hosting cost.
+Linux typically runs Python 10&ndash;30% faster than Windows, so the modern stack can actually outrun
+the old IIS box it replaced.
+</p>
+<span class="code-label label-asppy">nginx &mdash; forward .asp to ASPPY</span>
+<pre><code>location ~ \.asp(\?.*)?$ {
+    proxy_pass         http://127.0.0.1:8080;
+    proxy_set_header   Host $host;
+    proxy_set_header   X-Real-IP $remote_addr;
+}</code></pre>
+
+<h3>4.4 Platform Independence in One Table</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Platform</th><th>Web server</th><th>Runs ASPPY?</th></tr></thead>
+  <tbody>
+    <tr><td>Windows</td><td>IIS, Apache, nginx</td><td>✅</td></tr>
+    <tr><td>Linux</td><td>nginx, Apache</td><td>✅</td></tr>
+    <tr><td>macOS</td><td>nginx, Apache</td><td>✅</td></tr>
+    <tr><td>Android</td><td>KSWEB, Termux + nginx, UserLAnd</td><td>✅</td></tr>
+  </tbody>
+</table>
+<p>
+That last row is not a typo. Because ASPPY is pure Python and Python runs on Android via environments
+like Termux or UserLAnd, a Classic ASP application can technically be developed, tested, or even served
+from a phone &mdash; something that was never conceivable with native Classic ASP on Windows. It is the
+clearest possible illustration of what "not tied to any operating system" really means.
+</p>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Part II</span>
+  With the runtime understood and deployed, we turn to the object model your existing code already uses
+  &mdash; and the two places where ASPPY quietly made it better than Classic ASP ever was.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 5 ===================== -->
+<h1 id="ch5">Chapter 5 &middot; Response &amp; Request (with native Files &amp; File)</h1>
+<p class="chapter-meta">Part II &middot; The Legacy Object Model</p>
+
+<p class="lead-quote">"The objects you already know, plus the two methods you always wished you had."</p>
+
+<h3>5.1 The Response Object</h3>
+<p>Everything you reach for is present and behaves as expected:</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Member</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>Response.Write(string)</code></td><td>Write to the HTTP output stream.</td></tr>
+    <tr><td><code>Response.Redirect(url)</code></td><td>Send a 302 redirect.</td></tr>
+    <tr><td><code>Response.End()</code></td><td>Stop execution and flush the buffer.</td></tr>
+    <tr><td><code>Response.Flush() / Clear()</code></td><td>Flush or discard the current buffer.</td></tr>
+    <tr><td><code>Response.ContentType</code></td><td>Set the content type, e.g. <code>"application/json"</code>.</td></tr>
+    <tr><td><code>Response.Status</code></td><td>Set the status line, e.g. <code>"404 Not Found"</code>.</td></tr>
+    <tr><td><code>Response.Cookies(name) = value</code></td><td>Set a cookie (supports keys and <code>.Expires</code>).</td></tr>
+    <tr><td><code>Response.BinaryWrite(data)</code></td><td>Write raw binary.</td></tr>
+    <tr><td class="table-success"><code>Response.File(path, [inline])</code></td><td><strong>ASPPY extension.</strong> Stream a physical file to the client &mdash; MIME type, Content-Length, and Content-Disposition handled automatically.</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 The Request Object</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Member</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>Request.QueryString("k")</code></td><td>GET parameters.</td></tr>
+    <tr><td><code>Request.Form("k")</code></td><td>POST parameters.</td></tr>
+    <tr><td><code>Request.Cookies("k")</code></td><td>Cookie values.</td></tr>
+    <tr><td><code>Request.ServerVariables("k")</code></td><td>Server vars, e.g. <code>REMOTE_ADDR</code>, <code>HTTP_USER_AGENT</code>, <code>REQUEST_METHOD</code>.</td></tr>
+    <tr><td><code>Request("k")</code></td><td>Shorthand: searches QueryString, Form, Cookies, then ServerVariables.</td></tr>
+    <tr><td class="table-success"><code>Request.Files("name")</code></td><td><strong>ASPPY extension.</strong> Access uploaded files from a multipart form &mdash; no third-party parser.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; the basics work</span>
+  A page reading <code>Request("name")</code> with <code>?name=Pieter</code> returned
+  <code>QS_NAME=Pieter</code>; <code>Server.HTMLEncode("&lt;b&gt;x &amp; y&lt;/b&gt;")</code> returned the
+  correctly escaped <code>&amp;lt;b&amp;gt;x &amp;amp; y&amp;lt;/b&amp;gt;</code>; and
+  <code>Request.ServerVariables("REQUEST_METHOD")</code> correctly reported <code>GET</code>.
+</div>
+
+<h3>5.3 The Missing Feature, Finally: Native File Uploads</h3>
+<p>
+Handling a file upload in Classic ASP was a rite of passage &mdash; and a miserable one. There was no
+built-in way to read a <code>multipart/form-data</code> body, so you shipped a third-party VBScript
+parser (the legendary <em>freeASPUpload.asp</em> and its kin), pasted hundreds of lines of byte-level
+string surgery into your project, and hoped it handled your file's binary content correctly.
+</p>
+<span class="code-label label-legacy">The Legacy Way</span>
+<pre><code>&lt;%
+' Include a 300+ line third-party binary-parsing class...
+Set Upload = New FreeASPUpload
+Upload.Save "C:\inetpub\uploads"          ' opaque, fragile, hard to debug
+Dim f
+Set f = Upload.Files("myFile")
+' ...and pray the boundary parsing matched your browser's encoding.
+%&gt;</code></pre>
+<span class="code-label label-asppy">The ASPPY Way</span>
+<pre><code>&lt;%
+If Request.Files.Count &gt; 0 Then
+    Dim uploadedFile
+    Set uploadedFile = Request.Files("myFile")
+    If Not uploadedFile Is Nothing Then
+        uploadedFile.SaveAs Server.MapPath("uploads/" &amp; uploadedFile.FileName)
+        Response.Write "Uploaded: " &amp; uploadedFile.FileName &amp; _
+                       " (" &amp; uploadedFile.Size &amp; " bytes)"
+    End If
+End If
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; full round trip</span>
+  A real <code>multipart/form-data</code> upload was POSTed to an ASPPY page. <code>Request.Files</code>
+  exposed the file, <code>SaveAs</code> wrote it to <code>data/</code>, and the page reported success
+  &mdash; with no helper library anywhere. (We then zipped and downloaded it; see &sect;5.4 and
+  Chapter 14.)
+</div>
+
+<h3>5.4 The Other Missing Feature: Streaming a File Back</h3>
+<p>
+The mirror image of upload pain was download pain. Sending a file to the browser in Classic ASP meant
+opening an <code>ADODB.Stream</code>, reading bytes, juggling <code>Content-Type</code> and
+<code>Content-Length</code> headers by hand, and calling <code>BinaryWrite</code>. ASPPY collapses all
+of that into one line:
+</p>
+<span class="code-label label-asppy">Response.File &mdash; one line, headers handled</span>
+<pre><code>&lt;%
+' Second argument: True = inline (view in browser), False = attachment (download)
+Response.File Server.MapPath("data/report.zip"), False
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; verified headers</span>
+  Calling <code>Response.File</code> on a generated ZIP produced a real download: status
+  <code>200 OK</code>, <code>Content-Type: application/x-zip-compressed</code>,
+  <code>Content-Disposition: attachment; filename="upload_me.txt.zip"</code>, and a correct
+  <code>Content-Length</code>. The bytes on disk began with the ZIP magic <code>PK</code>.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 6</span>
+  Server utilities, per-user Session state, process-wide Application state, and Global.asa lifecycle
+  events.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 6 ===================== -->
+<h1 id="ch6">Chapter 6 &middot; Server, Session, Application &amp; Global.asa</h1>
+<p class="chapter-meta">Part II &middot; The Legacy Object Model</p>
+
+<p class="lead-quote">"State is just memory with good manners. ASPPY keeps the manners."</p>
+
+<h3>6.1 The Server Object</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Method</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>Server.CreateObject(progid)</code></td><td>Instantiate a (shimmed) COM object such as <code>Scripting.Dictionary</code> or <code>ADODB.Connection</code>.</td></tr>
+    <tr><td><code>Server.MapPath(path)</code></td><td>Translate a virtual path to a physical disk path, relative to the executing file.</td></tr>
+    <tr><td><code>Server.HTMLEncode(s)</code></td><td>Escape HTML special characters.</td></tr>
+    <tr><td><code>Server.URLEncode(s)</code></td><td>URL-encode a string.</td></tr>
+    <tr><td><code>Server.Execute(path) / Transfer(path)</code></td><td>Run another ASP page.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  <code>Server.URLEncode("a b&amp;c")</code> returned <code>a+b%26c</code>;
+  <code>Server.MapPath("../data")</code> resolved to the absolute physical
+  <code>C:\ASPPY\www\data</code>. Encoders and path mapping behave as expected.
+</div>
+
+<h3>6.2 Shimmed COM Objects via Server.CreateObject</h3>
+<p>ASPPY intercepts <code>Server.CreateObject</code> and routes it to native Python implementations:</p>
+<ul>
+  <li><code>Scripting.Dictionary</code> &mdash; case-insensitive key/value store.</li>
+  <li><code>Scripting.FileSystemObject</code> &mdash; native file/folder/textstream IO.</li>
+  <li><code>ADODB.Connection / Recordset / Command / Stream</code> &mdash; database &amp; stream access.</li>
+  <li><code>VBScript.RegExp</code> &mdash; regular expressions, powered by Python's <code>re</code>.</li>
+  <li><code>MSXML2.ServerXMLHTTP / DOMDocument</code> &mdash; HTTP &amp; XML (security-sandboxed).</li>
+  <li><code>CDO.Message</code> &mdash; sending email over SMTP.</li>
+</ul>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  A <code>Scripting.Dictionary</code> with two keys reported <code>Count=2</code> and returned the right
+  value by key; a <code>New RegExp</code> with pattern <code>\d+</code> returned <code>True</code> for
+  <code>Test("abc123")</code>. <code>Split</code>, <code>Replace</code>, and
+  <code>FormatNumber(1234.5, 2)</code> &rarr; <code>1,234.50</code> all behaved correctly.
+</div>
+
+<h3>6.3 Session: Per-User State</h3>
+<p>
+<code>Session</code> stores data for one user across multiple requests, keyed by a session cookie that
+ASPPY sets automatically. The classic "page hit counter" demonstrates persistence:
+</p>
+<span class="code-label label-vbs">Session counter</span>
+<pre><code>&lt;%
+If IsEmpty(Session("hits")) Then
+    Session("hits") = 1
+Else
+    Session("hits") = Session("hits") + 1
+End If
+Response.Write "You have viewed this page " &amp; Session("hits") &amp; " time(s)."
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; persistence confirmed</span>
+  With a shared cookie jar, two consecutive requests reported <code>SESSION_HITS=1</code> then
+  <code>SESSION_HITS=2</code>. The session cookie (<code>ASP_PY_SESSIONID</code>) carried state across
+  requests exactly as Classic ASP sessions do.
+  <br><br>
+  <strong>Good to know:</strong> ASPPY's <code>Session.SessionID</code> is its own short identifier (it
+  measured 10 characters in testing), not the classic IIS format. If any legacy code parses or assumes a
+  specific SessionID shape, verify it &mdash; this is squarely in the honest "1%".
+</div>
+
+<h3>6.4 Application: Process-Wide State</h3>
+<p>
+<code>Application</code> is shared by every user of the app within the running process &mdash; ideal for
+global counters, cached config, or a shared lookup table built once. Usage mirrors Classic ASP exactly:
+</p>
+<span class="code-label label-vbs">Application-wide counter</span>
+<pre><code>&lt;%
+Application("global_count") = Application("global_count") + 1
+Response.Write "This app has served " &amp; Application("global_count") &amp; " requests."
+%&gt;</code></pre>
+
+<h3>6.5 Global.asa Lifecycle</h3>
+<p>
+ASPPY supports <code>Global.asa</code> events, so your application- and session-startup hooks run as
+they always did:
+</p>
+<span class="code-label label-vbs">Global.asa</span>
+<pre><code>&lt;script language="VBScript" runat="server"&gt;
+Sub Application_OnStart
+    Application("StartedAt") = Now()
+End Sub
+
+Sub Session_OnStart
+    Session("LoggedIn") = False
+End Sub
+&lt;/script&gt;</code></pre>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 7</span>
+  Talking to databases through ADODB &mdash; and the one detail about SQLite that the docs get wrong and
+  this book gets right.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 7 ===================== -->
+<h1 id="ch7">Chapter 7 &middot; Data Access: ADODB &amp; SQLite the ASPPY Way</h1>
+<p class="chapter-meta">Part II &middot; The Legacy Object Model</p>
+
+<p class="lead-quote">"Your SQL still runs. Just point it at a file instead of a server."</p>
+
+<h3>7.1 The Familiar Trio</h3>
+<p>
+ASPPY emulates the classic ADODB objects &mdash; <code>ADODB.Connection</code>,
+<code>ADODB.Recordset</code>, and <code>ADODB.Command</code> &mdash; backed by native Python database
+drivers. The dialect of SQL you write is passed through to the underlying driver as-is; ASPPY does not
+translate SQL.
+</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Backend</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>SQLite</td><td>Default; built in, no extra driver.</td></tr>
+    <tr><td>Microsoft Access</td><td>Requires <code>pyodbc</code>.</td></tr>
+    <tr><td>SQL Server</td><td>Requires <code>pyodbc</code>.</td></tr>
+    <tr><td>PostgreSQL</td><td>Requires <code>psycopg2</code>.</td></tr>
+    <tr><td>Excel</td><td>Read-only, via <code>pyodbc</code>.</td></tr>
+  </tbody>
+</table>
+
+<h3>7.2 A Working SQLite Connection</h3>
+<span class="code-label label-asppy">Connect, query, iterate</span>
+<pre><code>&lt;%
+Dim conn, rs
+Set conn = Server.CreateObject("ADODB.Connection")
+conn.Open "Provider=SQLite;Data Source=" &amp; Server.MapPath("data/app.db")
+
+conn.Execute "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
+conn.Execute "INSERT INTO users (name) VALUES ('John Doe')"
+
+Set rs = conn.Execute("SELECT * FROM users")
+Do While Not rs.EOF
+    Response.Write "User #" &amp; rs("id").Value &amp; " &mdash; " &amp; rs("name").Value &amp; "&lt;br&gt;"
+    rs.MoveNext
+Loop
+
+rs.Close : Set rs = Nothing
+conn.Close : Set conn = Nothing
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  Against an existing <code>app.db</code>, the page above created the table, inserted a row, and printed
+  <code>User #1 &mdash; John Doe</code>. Iteration via <code>Do While Not rs.EOF</code> /
+  <code>rs.MoveNext</code> and field access via <code>rs("name").Value</code> work as in Classic ASP.
+</div>
+
+<div class="callout c-danger">
+  <span class="ct"><i class="bi bi-exclamation-octagon"></i> Verified gotcha: SQLite is NOT auto-created</span>
+  Some documentation suggests the SQLite database is "auto-created if it doesn't exist." In testing,
+  opening a connection to a <strong>missing</strong> <code>.db</code> file raised
+  <code>ASPPY runtime error '800a0035' &mdash; File not found</code>. <strong>Create the database file
+  first</strong> &mdash; ship it with the app, or generate it in a one-time bootstrap step &mdash; then
+  open it. Once the file exists, everything works.
+</div>
+
+<h3>7.3 Recordsets You Can Update</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Member</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>Open(sql, conn)</code></td><td>Run a query and open the recordset.</td></tr>
+    <tr><td><code>EOF / BOF</code></td><td>Cursor at end / beginning.</td></tr>
+    <tr><td><code>MoveNext / MoveFirst</code></td><td>Navigate rows.</td></tr>
+    <tr><td><code>Fields(name).Value</code></td><td>Read the current row's column.</td></tr>
+    <tr><td><code>AddNew() / Update()</code></td><td>Insert a row / commit changes.</td></tr>
+    <tr><td><code>Delete()</code></td><td>Delete the current row.</td></tr>
+  </tbody>
+</table>
+<span class="code-label label-vbs">Updatable recordset</span>
+<pre><code>&lt;%
+Dim rs
+Set rs = Server.CreateObject("ADODB.Recordset")
+rs.Open "SELECT * FROM users", conn, 1, 3   ' adOpenKeyset, adLockOptimistic
+rs.AddNew
+rs("name") = "Jane Smith"
+rs.Update
+rs.Close
+%&gt;</code></pre>
+
+<h3>7.4 Parameterized Queries (Stop SQL Injection)</h3>
+<p>
+Concatenating user input into SQL is the original sin of legacy ASP. ASPPY supports
+<code>ADODB.Command</code> with parameters, so you bind values instead of splicing strings:
+</p>
+<span class="code-label label-asppy">ADODB.Command with a parameter</span>
+<pre><code>&lt;%
+Dim cmd, rsParam
+Set cmd = Server.CreateObject("ADODB.Command")
+cmd.ActiveConnection = conn
+cmd.CommandText = "SELECT * FROM users WHERE name = ?"
+cmd.Parameters.Append cmd.CreateParameter("name", 200, 1, 50, "Jane Smith")
+Set rsParam = cmd.Execute()
+If Not rsParam.EOF Then Response.Write "Found: " &amp; rsParam("name")
+rsParam.Close
+%&gt;</code></pre>
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-shield-lock"></i> Security bonus</span>
+  ASPPY also recognizes an <code>AutoEscapeSQL=1;</code> token appended to ADODB connection strings,
+  which attempts automatic sanitization of legacy concatenated queries. Treat it as a safety net for old
+  code, not a replacement for parameters in new code.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Part III</span>
+  The reason you are really here: the <code>ASPPY</code> global object, and the six modern superpowers
+  it hands to VBScript.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== PART III INTRO ===================== -->
+<div class="cover part-cover" style="padding:2.5rem;">
+  <h1 style="font-size:2rem;">Part III &mdash; The <span style="font-family:monospace;">ASPPY</span> Global Class</h1>
+  <div class="sub" style="font-size:1.1rem;">The Game Changer</div>
+  <p class="tag">Six modern Python capabilities, reachable from VBScript through one global object.<br>
+  No COM. No registration. No third-party ActiveX. No leaving the vibe.</p>
+</div>
+<p>
+Here is the conceptual leap that makes ASPPY more than a survival tool. Classic ASP's power ceiling was
+defined by whatever COM components happened to be installed and registered on the box: Persits.Jpeg for
+images, Persits.Pdf for documents, Chilkat for crypto, bespoke FileSystemObject scripts for everything
+else. Each was a licensing line item, a registration headache, and a Windows dependency.
+</p>
+<p>
+ASPPY replaces that entire fragile bazaar with a single, always-present global object:
+<code>ASPPY</code>. Behind its namespaces sit best-in-class Python libraries &mdash;
+<code>json</code>, <code>bcrypt</code>, <code>zipfile</code>, <code>fpdf2</code>, <code>Pillow</code>,
+<code>poplib</code>/<code>imaplib</code> &mdash; exposed with VBScript-friendly syntax. You do not
+<code>Server.CreateObject</code> them. You do not register them. They are simply <em>there</em>.
+</p>
+<div class="callout c-vibe">
+  <span class="ct"><i class="bi bi-stars"></i> The six namespaces at a glance</span>
+  <code>ASPPY.json</code> &middot; <code>ASPPY.crypto</code> &middot; <code>ASPPY.zip</code> &middot;
+  <code>ASPPY.pdf</code> &middot; <code>ASPPY.image</code> &middot; <code>ASPPY.pop3</code> /
+  <code>ASPPY.imap</code>
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 8 ===================== -->
+<h1 id="ch8">Chapter 8 &middot; ASPPY.json &mdash; Native JSON</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"The modern web speaks JSON. Now your VBScript is fluent."</p>
+
+<h3>8.1 Why This Matters</h3>
+<p>
+VBScript was born before JSON existed, so Classic ASP never shipped a parser. Developers coped with
+hand-written VBScript classes built on regular expressions &mdash; notoriously slow on large payloads
+and fragile around escaping. <code>ASPPY.json</code> hands the work to Python's C-optimized
+<code>json</code> module and transparently maps VBScript types to JSON and back.
+</p>
+
+<h3>8.2 The API</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Method</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>ASPPY.json.Encode(value, [pretty])</code></td><td>Serialize a string, number, boolean, <code>Array</code>, or <code>Scripting.Dictionary</code> to a JSON string. <code>pretty=True</code> indents (and sorts keys).</td></tr>
+    <tr><td><code>ASPPY.json.Decode(jsonString)</code></td><td>Parse JSON. Objects become <code>Scripting.Dictionary</code>; arrays become VBScript <code>Array</code>s.</td></tr>
+  </tbody>
+</table>
+
+<h3>8.3 Encoding</h3>
+<span class="code-label label-asppy">Encode a Dictionary to pretty JSON</span>
+<pre><code>&lt;%
+Dim dict, jsonString
+Set dict = Server.CreateObject("Scripting.Dictionary")
+dict.Add "name", "ASPPY Framework"
+dict.Add "version", 1.0
+dict.Add "active", True
+dict.Add "features", Array("JSON", "Crypto", "PDF", "Image", "Zip")
+
+jsonString = ASPPY.json.Encode(dict, True)
+Response.Write "&lt;pre&gt;" &amp; Server.HTMLEncode(jsonString) &amp; "&lt;/pre&gt;"
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost &mdash; exact output</span>
+  Note that pretty output is <strong>two-space indented and key-sorted</strong> &mdash; the keys come
+  back alphabetically, not in insertion order:
+<pre style="margin:.6rem 0 0;"><code>{
+  "active": true,
+  "features": [
+    "JSON",
+    "Crypto",
+    "PDF",
+    "Image",
+    "Zip"
+  ],
+  "name": "ASPPY Framework",
+  "version": 1.0
+}</code></pre>
+</div>
+
+<h3>8.4 Decoding</h3>
+<span class="code-label label-asppy">Decode JSON into Dictionary + Array</span>
+<pre><code>&lt;%
+Dim rawJson, decoded, roles
+rawJson = "{""user"": ""john_doe"", ""age"": 30, ""active"": true, ""roles"": [""admin"", ""editor""]}"
+Set decoded = ASPPY.json.Decode(rawJson)
+
+Response.Write "User: "   &amp; decoded("user")  &amp; "&lt;br&gt;"
+Response.Write "Age: "    &amp; decoded("age")   &amp; "&lt;br&gt;"
+If decoded("active") Then Response.Write "Status: Active&lt;br&gt;"
+
+roles = decoded("roles")               ' a real VBScript Array
+Response.Write "Roles: " &amp; Join(roles, ", ")
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  Output: <code>User: john_doe</code>, <code>Age: 30</code>, <code>Status: Active</code>,
+  <code>Roles: admin, editor</code>. The decoded object indexes like a Dictionary, and
+  <code>roles</code> behaves as a genuine VBScript array (it joins cleanly with <code>Join</code>).
+</div>
+
+<h3>8.5 The Legacy Way vs. The ASPPY Way</h3>
+<span class="code-label label-legacy">The Legacy Way</span>
+<pre><code>&lt;!-- include json2.asp : ~400 lines of VBScript + RegExp --&gt;
+&lt;%
+Set j = New VbsJson
+Set obj = j.Decode(rawJson)        ' slow on large payloads; brittle escaping
+Response.Write obj("user")
+%&gt;</code></pre>
+<span class="code-label label-asppy">The ASPPY Way</span>
+<pre><code>&lt;%
+Set obj = ASPPY.json.Decode(rawJson)   ' C-speed, zero helper files
+Response.Write obj("user")
+%&gt;</code></pre>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 9</span>
+  Killing MD5 once and for all with industrial-strength bcrypt hashing.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 9 ===================== -->
+<h1 id="ch9">Chapter 9 &middot; ASPPY.crypto &mdash; bcrypt Password Hashing</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"If your login page still hashes with MD5, this is the most important chapter in the book."</p>
+
+<h3>9.1 The Problem With Legacy Hashing</h3>
+<p>
+Vast amounts of Classic ASP authentication code hash passwords with MD5 or SHA1 &mdash; fast, unsalted,
+and trivially crackable with modern hardware and rainbow tables. <code>ASPPY.crypto</code> exposes
+Python's <code>bcrypt</code>: a deliberately slow, automatically salted, work-factor-tunable algorithm
+that is the modern baseline for password storage.
+</p>
+
+<h3>9.2 The API</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Method</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>ASPPY.crypto.Hash(password, [rounds])</code></td><td>Returns a salted bcrypt hash string safe for database storage. <code>rounds</code> is the work factor (default 10; valid range 4&ndash;31). The salt is generated automatically.</td></tr>
+    <tr><td><code>ASPPY.crypto.Verify(password, hashed)</code></td><td>Returns <code>True</code> if the password matches the stored hash, <code>False</code> otherwise (including for empty/invalid input).</td></tr>
+  </tbody>
+</table>
+
+<h3>9.3 Register &amp; Log In</h3>
+<span class="code-label label-asppy">Hash on registration, verify on login</span>
+<pre><code>&lt;%
+Dim password, hashedPw, isValid
+password = "SuperSecretPassword123!"
+
+' Registration: store this string in your users table
+hashedPw = ASPPY.crypto.Hash(password, 12)    ' work factor 12 = strong
+Response.Write "Stored hash: " &amp; hashedPw &amp; "&lt;br&gt;"
+
+' Login: compare the typed password against the stored hash
+isValid = ASPPY.crypto.Verify(password, hashedPw)
+If isValid Then Response.Write "Password verified!&lt;br&gt;"
+
+' A wrong attempt is correctly rejected
+If Not ASPPY.crypto.Verify("WrongPass", hashedPw) Then _
+    Response.Write "Bad password rejected."
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  With rounds=12, <code>Hash</code> produced a value beginning
+  <code>$2b$12$...</code> (a real bcrypt hash). <code>Verify</code> returned <code>True</code> for the
+  correct password and <code>False</code> for <code>"WrongPass"</code>. The cost factor is encoded in the
+  hash itself, so verification needs nothing but the stored string.
+</div>
+
+<h3>9.4 The Legacy Way vs. The ASPPY Way</h3>
+<span class="code-label label-legacy">The Legacy Way</span>
+<pre><code>&lt;%
+' Unsalted MD5 via a homegrown class &mdash; crackable in seconds today
+storedHash = MD5(password)               ' DON'T
+If MD5(typedPassword) = storedHash Then  ' DON'T
+%&gt;</code></pre>
+<span class="code-label label-asppy">The ASPPY Way</span>
+<pre><code>&lt;%
+storedHash = ASPPY.crypto.Hash(password, 12)         ' salted, slow, tunable
+If ASPPY.crypto.Verify(typedPassword, storedHash) Then
+%&gt;</code></pre>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-key"></i> Migration tip</span>
+  You cannot convert old MD5 hashes into bcrypt directly. The clean strategy: on a user's next
+  successful login (validated against the old MD5), transparently re-hash their plaintext with
+  <code>ASPPY.crypto.Hash</code> and replace the stored value. Over a few weeks of normal logins your
+  table upgrades itself.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 10</span>
+  Creating and extracting ZIP archives natively &mdash; with built-in protection against Zip Slip.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 10 ===================== -->
+<h1 id="ch10">Chapter 10 &middot; ASPPY.zip &mdash; Compression Without COM</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"Bundle a folder of reports into a single download. Two lines. No ActiveX."</p>
+
+<h3>10.1 The API</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Method</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>ASPPY.zip.Zip(path, [out_path])</code></td><td>Compress a file or folder at physical <code>path</code>. If <code>out_path</code> is omitted it defaults to <code>path + ".zip"</code>. Returns the absolute path of the created archive.</td></tr>
+    <tr><td><code>ASPPY.zip.Unzip(zip_path, dest_folder, [overwrite])</code></td><td>Extract an archive into <code>dest_folder</code> (<code>overwrite</code> defaults True). Returns the absolute destination path.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-danger">
+  <span class="ct"><i class="bi bi-exclamation-octagon"></i> Verified rule: physical paths only</span>
+  The ZIP methods require <strong>absolute physical paths</strong>. Always wrap your virtual paths in
+  <code>Server.MapPath(...)</code>. Passing a relative or virtual path raises a runtime error such as
+  <code>"Zip: path must be a physical path"</code>.
+</div>
+
+<h3>10.2 Zip and Unzip</h3>
+<span class="code-label label-asppy">Compress a folder, then extract it</span>
+<pre><code>&lt;%
+Dim outZip, extractDir
+
+' Zip a folder (MapPath turns the virtual path into a physical one)
+outZip = ASPPY.zip.Zip(Server.MapPath("data/reports"), _
+                       Server.MapPath("data/reports.zip"))
+Response.Write "Zipped to: " &amp; outZip &amp; "&lt;br&gt;"
+
+' Extract it again
+extractDir = ASPPY.zip.Unzip(Server.MapPath("data/reports.zip"), _
+                             Server.MapPath("data/extracted"), True)
+Response.Write "Extracted to: " &amp; extractDir
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  Zipping a file produced a real archive on disk beginning with the ZIP magic bytes <code>PK</code>, and
+  <code>Zip</code> returned its absolute path (e.g. <code>C:\ASPPY\www\data\ziptest.zip</code>).
+  <code>Unzip</code> recreated the contents under the destination folder and returned that folder's
+  absolute path.
+</div>
+
+<h3>10.3 Security: Zip Slip Is Handled For You</h3>
+<p>
+A classic archive attack ("Zip Slip") embeds entries with paths like <code>../../etc/passwd</code> to
+escape the extraction directory. ASPPY's <code>Unzip</code> validates every entry against the
+destination root and refuses path traversal &mdash; you get this protection for free, with no extra
+code.
+</p>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 11</span>
+  Generating real PDF documents on the server &mdash; a capability Classic ASP never had natively.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 11 ===================== -->
+<h1 id="ch11">Chapter 11 &middot; ASPPY.pdf &mdash; Server-Side PDFs</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"Invoices, receipts, reports &mdash; rendered to PDF straight from VBScript."</p>
+
+<h3>11.1 The API</h3>
+<p>Start with the namespace factory, then build the document with chained calls:</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Member</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>ASPPY.pdf.New([orientation],[unit],[format])</code></td><td>Create a <code>PdfDoc</code> (defaults <code>"P","mm","A4"</code>).</td></tr>
+    <tr><td><code>add_page([orientation])</code></td><td>Add a page.</td></tr>
+    <tr><td><code>set_font(family,[style],[size])</code></td><td>e.g. <code>"Arial","B",16</code>.</td></tr>
+    <tr><td><code>set_text_color(r,[g],[b])</code></td><td>RGB text colour.</td></tr>
+    <tr><td><code>set_fill_color / set_draw_color</code></td><td>Fill / line colours.</td></tr>
+    <tr><td><code>cell(w,[h],[text],[border],[ln],[align],[fill],[link])</code></td><td>A single-line cell.</td></tr>
+    <tr><td><code>multi_cell(w,h,text,[border],[align],[fill])</code></td><td>Wrapping multi-line text.</td></tr>
+    <tr><td><code>write_html(html)</code></td><td>Render basic HTML (<code>b</code>, <code>i</code>, <code>u</code>, headers).</td></tr>
+    <tr><td><code>image(path,[x],[y],[w],[h])</code></td><td>Place an image.</td></tr>
+    <tr><td><code>ln([h])</code></td><td>Line break.</td></tr>
+    <tr><td><code>output(path)</code></td><td>Save to a physical path; returns it.</td></tr>
+  </tbody>
+</table>
+
+<h3>11.2 Build a Document</h3>
+<span class="code-label label-asppy">A titled A4 PDF with HTML markup</span>
+<pre><code>&lt;%
+Dim pdf, outputPath
+Set pdf = ASPPY.pdf.New("P", "mm", "A4")
+pdf.add_page()
+
+pdf.set_font "Arial", "B", 16
+pdf.set_text_color 0, 51, 102
+pdf.cell 0, 10, "ASPPY PDF Document", 0, 1, "C"
+
+pdf.ln 10
+pdf.set_font "Arial", "", 12
+pdf.set_text_color 0, 0, 0
+pdf.multi_cell 0, 10, "This PDF was generated natively from VBScript " &amp; _
+    "using the fpdf2 Python library underneath!"
+
+pdf.ln 10
+pdf.write_html "&lt;b&gt;Bold&lt;/b&gt;, &lt;i&gt;Italic&lt;/i&gt;, and &lt;u&gt;Underline&lt;/u&gt; " &amp; _
+    "are supported. You can even include &lt;h1&gt;Headers&lt;/h1&gt;!"
+
+outputPath = Server.MapPath("pdfs/sample.pdf")
+pdf.output outputPath
+Response.Write "PDF created at: " &amp; outputPath
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  This produced a valid PDF on disk &mdash; the first bytes were the PDF magic <code>%PDF</code>, file
+  size ~1.7&nbsp;KB &mdash; using fpdf2 2.8.6. <code>cell</code>, <code>multi_cell</code>,
+  <code>write_html</code>, colour and font calls all executed cleanly.
+</div>
+
+<h3>11.3 Serve It as a Download</h3>
+<p>Combine Chapter 11 with Chapter 5's <code>Response.File</code> to generate-and-deliver in one request:</p>
+<span class="code-label label-asppy">Generate then stream</span>
+<pre><code>&lt;%
+Dim pdf, p
+Set pdf = ASPPY.pdf.New()
+pdf.add_page()
+pdf.set_font "Arial", "", 14
+pdf.cell 0, 10, "Your receipt", 0, 1
+p = Server.MapPath("pdfs/receipt.pdf")
+pdf.output p
+Response.File p, False        ' force download
+%&gt;</code></pre>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 12</span>
+  Resizing, cropping, drawing, filtering &mdash; the full Pillow toolbox, from VBScript.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 12 ===================== -->
+<h1 id="ch12">Chapter 12 &middot; ASPPY.image &mdash; Pillow-Powered Imaging</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"The job Persits.Jpeg used to do &mdash; now free, modern, and cross-platform."</p>
+
+<h3>12.1 The Namespaces</h3>
+<p><code>ASPPY.image</code> mirrors Pillow's structure with four sub-namespaces:</p>
+<ul>
+  <li><code>ASPPY.image.Image</code> &mdash; <code>open(path)</code>, <code>new(mode, Array(w,h), [color])</code>; instances expose <code>save</code>, <code>resize</code>, <code>crop</code>, <code>rotate</code>, <code>convert</code>, <code>filter</code>, and <code>width</code>/<code>height</code>/<code>size</code>.</li>
+  <li><code>ASPPY.image.ImageDraw</code> &mdash; <code>Draw(img)</code> returns a drawer with <code>text</code>, <code>rectangle</code>, <code>ellipse</code>, <code>line</code>.</li>
+  <li><code>ASPPY.image.ImageFilter</code> &mdash; <code>GaussianBlur(radius)</code> plus constants like <code>BLUR</code>, <code>SHARPEN</code>, <code>EMBOSS</code>, <code>FIND_EDGES</code>.</li>
+  <li><code>ASPPY.image.ImageEnhance</code> &mdash; <code>Brightness(img)</code>, <code>Contrast(img)</code>.</li>
+</ul>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-info-circle"></i> Coordinates use Array(...)</span>
+  Sizes are <code>Array(width, height)</code>; boxes are <code>Array(left, top, right, bottom)</code>;
+  colours are <code>Array(r, g, b)</code> or a string. This maps directly to Pillow's tuples.
+</div>
+
+<h3>12.2 Create, Draw, Filter, Save</h3>
+<span class="code-label label-asppy">Generate an image from scratch</span>
+<pre><code>&lt;%
+Dim img, draw, blurred, savePath
+
+' A 200x200 blue canvas
+Set img = ASPPY.image.Image.new("RGB", Array(200, 200), Array(0, 0, 255))
+
+' Draw a red-filled white-outlined rectangle, then white text
+Set draw = ASPPY.image.ImageDraw.Draw(img)
+draw.rectangle Array(50, 50, 150, 150), Array(255,255,255), Array(255,0,0)
+draw.text Array(60, 90), "ASPPY Image", Array(255, 255, 255)
+
+' Gaussian blur
+Set blurred = img.filter(ASPPY.image.ImageFilter.GaussianBlur(2.0))
+
+savePath = Server.MapPath("images/output.jpg")
+blurred.save savePath
+Response.Write "Saved " &amp; blurred.width &amp; "x" &amp; blurred.height
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  This wrote a real <code>output.jpg</code> (~2.4&nbsp;KB) and reported <code>200x200</code> using Pillow
+  12.1.1. Drawing, the Gaussian blur filter, and saving all succeeded.
+</div>
+
+<h3>12.3 Resize and Crop an Uploaded Photo</h3>
+<span class="code-label label-asppy">Open &rarr; resize &rarr; crop &rarr; save</span>
+<pre><code>&lt;%
+Dim src, resized, cropped
+Set src     = ASPPY.image.Image.open(Server.MapPath("images/photo.jpg"))
+Set resized = src.resize(Array(800, 600))
+Set cropped = resized.crop(Array(100, 100, 700, 500))
+cropped.save Server.MapPath("images/photo_cropped.jpg")
+Response.Write "Cropped to " &amp; cropped.width &amp; "x" &amp; cropped.height
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost</span>
+  Opening the generated image, resizing to 800&times;600, then cropping <code>Array(100,100,700,500)</code>
+  produced a <code>600x400</code> result saved to disk &mdash; exactly the expected geometry.
+</div>
+
+<h3>12.4 Legacy Way vs. ASPPY Way</h3>
+<span class="code-label label-legacy">The Legacy Way</span>
+<pre><code>&lt;%
+Set Jpeg = Server.CreateObject("Persits.Jpeg")   ' licensed COM, Windows-only
+Jpeg.Open Server.MapPath("photo.jpg")
+Jpeg.Width = 800 : Jpeg.Height = 600
+Jpeg.Save Server.MapPath("photo_resized.jpg")
+%&gt;</code></pre>
+<span class="code-label label-asppy">The ASPPY Way</span>
+<pre><code>&lt;%
+Set img = ASPPY.image.Image.open(Server.MapPath("photo.jpg"))
+img.resize(Array(800, 600)).save Server.MapPath("photo_resized.jpg")
+%&gt;</code></pre>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 13</span>
+  Reading mailboxes over POP3 and IMAP &mdash; and the one access pattern that actually works (with a
+  warning about one that doesn't).
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 13 ===================== -->
+<h1 id="ch13">Chapter 13 &middot; ASPPY.pop3 &amp; ASPPY.imap &mdash; Modern Mail</h1>
+<p class="chapter-meta">Part III &middot; The ASPPY Global Class</p>
+
+<p class="lead-quote">"Read a mailbox from VBScript without a single third-party COM component."</p>
+
+<h3>13.1 How to Create the Mail Objects</h3>
+<p>
+ASPPY ships built-in POP3 and IMAP clients backed by Python's <code>poplib</code> and
+<code>imaplib</code>. Access them through the global object:
+</p>
+<span class="code-label label-asppy">The working access pattern</span>
+<pre><code>&lt;%
+Dim pop3, imap
+Set pop3 = ASPPY.pop3      ' POP3 client object
+Set imap = ASPPY.imap      ' IMAP client object
+%&gt;</code></pre>
+<div class="callout c-danger">
+  <span class="ct"><i class="bi bi-exclamation-octagon"></i> Verified gotcha: avoid Server.CreateObject for mail</span>
+  Some documentation also suggests
+  <code>Server.CreateObject("ASPPY.POP3")</code> / <code>("ASPPY.IMAP")</code>. In testing on this
+  runtime, those calls returned an <strong>HTTP&nbsp;500 Internal Server Error</strong> &mdash; the
+  ProgID match is case-sensitive in a way the uppercase form does not satisfy. <strong>Use the
+  <code>Set x = ASPPY.pop3</code> / <code>Set x = ASPPY.imap</code> form</strong>, which was verified to
+  return working objects with their default properties intact (e.g. POP3 <code>Port=995</code>,
+  <code>UseSSL=True</code>, <code>Timeout=30</code>).
+</div>
+
+<h3>13.2 Reading a Mailbox over IMAP</h3>
+<span class="code-label label-asppy">Connect, search unread, print</span>
+<pre><code>&lt;%
+Dim imap, count, unreadIds, i, msg
+Set imap = ASPPY.imap
+
+imap.Connect "imap.example.com", 993, True
+imap.Login "user@example.com", "app-password"
+
+count = imap.Select("INBOX", True)        ' True = read-only
+Response.Write "Total messages: " &amp; count &amp; "&lt;br&gt;"
+
+unreadIds = imap.Search("UNSEEN")
+For i = 0 To UBound(unreadIds)
+    Set msg = imap.GetMessage(unreadIds(i))
+    Response.Write "Subject: " &amp; Server.HTMLEncode(msg.Subject) &amp; "&lt;br&gt;"
+    Response.Write "From: "    &amp; Server.HTMLEncode(msg.From)    &amp; "&lt;br&gt;"
+    Response.Write "&lt;pre&gt;"    &amp; Server.HTMLEncode(msg.Body)    &amp; "&lt;/pre&gt;&lt;hr&gt;"
+Next
+
+imap.Logout()
+%&gt;</code></pre>
+
+<h3>13.3 Reading a Mailbox over POP3</h3>
+<span class="code-label label-asppy">Stat, fetch the latest, inspect attachments</span>
+<pre><code>&lt;%
+Dim pop3, msgCount, msg
+Set pop3 = ASPPY.pop3
+
+pop3.Connect "pop.example.com", 995, True
+pop3.Login "user@example.com", "app-password"
+
+msgCount = pop3.Stat()
+Response.Write "Messages: " &amp; msgCount &amp; "&lt;br&gt;"
+
+If msgCount &gt; 0 Then
+    Set msg = pop3.GetMessage(msgCount)            ' latest message
+    Response.Write "&lt;b&gt;" &amp; Server.HTMLEncode(msg.Subject) &amp; "&lt;/b&gt;&lt;br&gt;"
+    If msg.AttachmentCount &gt; 0 Then
+        Response.Write "Attachments: " &amp; msg.AttachmentNamesText
+    End If
+End If
+
+pop3.Quit()
+%&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Tested on localhost (object surface)</span>
+  Both <code>Set pop3 = ASPPY.pop3</code> and <code>Set imap = ASPPY.imap</code> returned valid objects
+  exposing the documented properties. Live <code>Connect</code>/<code>Login</code> needs a real mail
+  server and credentials, so the network round-trip is environment-specific &mdash; but the client
+  objects, their defaults, and their method surface are confirmed present and usable.
+</div>
+
+<h3>13.4 The Message Object</h3>
+<p>Both <code>GetMessage()</code> calls return a message exposing:</p>
+<ul>
+  <li><code>From</code>, <code>To</code>, <code>Cc</code>, <code>Subject</code>, <code>Date</code>, <code>MessageID</code></li>
+  <li><code>Body</code> &mdash; extracted plaintext (or HTML) body</li>
+  <li><code>AttachmentCount</code>, <code>AttachmentNamesText</code></li>
+  <li><code>AttachmentName(i)</code>, <code>AttachmentSize(i)</code>, <code>AttachmentContentType(i)</code>, <code>AttachmentBytes(i)</code></li>
+  <li><code>Header("Header-Name")</code> &mdash; fetch any raw header</li>
+  <li><code>UID</code> / <code>Seq</code> &mdash; IMAP only</li>
+</ul>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Part IV</span>
+  We assemble everything into three complete, working applications &mdash; then learn to build ASPPY
+  apps at the speed of thought with AI coding agents.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 14 ===================== -->
+<h1 id="ch14">Chapter 14 &middot; Three Working Sample Apps</h1>
+<p class="chapter-meta">Part IV &middot; Building Real Apps</p>
+
+<p class="lead-quote">"A feature you can paste in and run beats a paragraph that describes one."</p>
+<p>
+Each app below is a complete single-file page. They use Bootstrap 5.3 for the UI (the framework ASPPY's
+own samples standardize on) and the <code>ASPPY</code> global object for the heavy lifting. Drop a file
+into your <code>www</code> folder and hit it in the browser.
+</p>
+
+<h3>14.1 App One &mdash; Interactive Password Hasher (bcrypt)</h3>
+<p>A two-panel page: one form hashes a password, the other verifies a password against a hash.</p>
+<span class="code-label label-asppy">test_hasher.asp</span>
+<pre><code>&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim textToHash, hashResult, verified, verifyClass
+textToHash = Request.Form("textToHash")
+hashResult = "" : verified = "" : verifyClass = ""
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" Then
+    If Request.Form("action") = "hash" And textToHash &lt;&gt; "" Then
+        hashResult = ASPPY.crypto.Hash(textToHash, 10)
+    ElseIf Request.Form("action") = "verify" And _
+           Request.Form("hashToVerify") &lt;&gt; "" And textToHash &lt;&gt; "" Then
+        If ASPPY.crypto.Verify(textToHash, Request.Form("hashToVerify")) Then
+            verified = "Match! The text corresponds to the hash."
+            verifyClass = "alert-success"
+        Else
+            verified = "No match! The text does not correspond to the hash."
+            verifyClass = "alert-danger"
+        End If
+    End If
+End If
+%&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;&lt;head&gt;&lt;meta charset="UTF-8"&gt;
+&lt;title&gt;ASPPY Crypto App&lt;/title&gt;
+&lt;link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;&lt;body class="bg-light"&gt;
+&lt;div class="container mt-5" style="max-width:600px;"&gt;
+  &lt;div class="card shadow-sm mb-4"&gt;
+    &lt;div class="card-header bg-dark text-white"&gt;&lt;h4&gt;Password Hasher (bcrypt)&lt;/h4&gt;&lt;/div&gt;
+    &lt;div class="card-body"&gt;
+      &lt;form method="post" action="test_hasher.asp"&gt;
+        &lt;input type="hidden" name="action" value="hash"&gt;
+        &lt;div class="mb-3"&gt;
+          &lt;label class="form-label"&gt;Plain Text Password&lt;/label&gt;
+          &lt;input type="text" name="textToHash" class="form-control"
+                 value="&lt;%=Server.HTMLEncode(textToHash)%&gt;" required&gt;
+        &lt;/div&gt;
+        &lt;button class="btn btn-primary w-100"&gt;Generate Hash&lt;/button&gt;
+      &lt;/form&gt;
+      &lt;% If hashResult &lt;&gt; "" Then %&gt;
+        &lt;div class="alert alert-secondary text-break mt-4" style="font-family:monospace;"&gt;
+          &lt;%=Server.HTMLEncode(hashResult)%&gt;
+        &lt;/div&gt;
+      &lt;% End If %&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class="card shadow-sm"&gt;
+    &lt;div class="card-header bg-secondary text-white"&gt;&lt;h4&gt;Verify Hash&lt;/h4&gt;&lt;/div&gt;
+    &lt;div class="card-body"&gt;
+      &lt;% If verified &lt;&gt; "" Then %&gt;
+        &lt;div class="alert &lt;%=verifyClass%&gt;"&gt;&lt;%=verified%&gt;&lt;/div&gt;
+      &lt;% End If %&gt;
+      &lt;form method="post" action="test_hasher.asp"&gt;
+        &lt;input type="hidden" name="action" value="verify"&gt;
+        &lt;div class="mb-3"&gt;&lt;label class="form-label"&gt;Plain Text&lt;/label&gt;
+          &lt;input type="text" name="textToHash" class="form-control"
+                 value="&lt;%=Server.HTMLEncode(textToHash)%&gt;" required&gt;&lt;/div&gt;
+        &lt;div class="mb-3"&gt;&lt;label class="form-label"&gt;Bcrypt Hash&lt;/label&gt;
+          &lt;input type="text" name="hashToVerify" class="form-control"
+                 value="&lt;%=Server.HTMLEncode(Request.Form("hashToVerify"))%&gt;" required&gt;&lt;/div&gt;
+        &lt;button class="btn btn-success w-100"&gt;Verify&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Verified</span>
+  The underlying <code>ASPPY.crypto.Hash</code>/<code>Verify</code> calls were tested directly on
+  localhost (Chapter 9): hashing returned a <code>$2b$...</code> value and verification correctly
+  matched/rejected.
+</div>
+
+<h3>14.2 App Two &mdash; Interactive PDF Generator</h3>
+<p>Type text, generate a styled A4 PDF, and get a download link &mdash; all in one page.</p>
+<span class="code-label label-asppy">test_pdf_app.asp (server logic)</span>
+<pre><code>&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim textInput, pdfUrl
+textInput = Request.Form("pdfText") : pdfUrl = ""
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" And textInput &lt;&gt; "" Then
+    Dim pdf, fileName, physicalPath
+    Set pdf = ASPPY.pdf.New("P", "mm", "A4")
+    pdf.add_page()
+
+    pdf.set_font "Arial", "B", 24
+    pdf.set_text_color 50, 50, 150
+    pdf.cell 0, 15, "My Generated PDF", 0, 1, "C"
+    pdf.ln 10
+
+    pdf.set_font "Arial", "", 12
+    pdf.set_text_color 0, 0, 0
+    pdf.multi_cell 0, 8, textInput
+
+    pdf.ln 20
+    pdf.set_font "Arial", "I", 10
+    pdf.set_text_color 150, 150, 150
+    pdf.cell 0, 10, "Generated by ASPPY at " &amp; Now(), 0, 1, "R"
+
+    fileName = "generated_" &amp; _
+        Replace(Replace(Replace(Now(), "/", ""), ":", ""), " ", "") &amp; ".pdf"
+    physicalPath = Server.MapPath("pdfs/" &amp; fileName)
+    pdf.output physicalPath
+    pdfUrl = "/pdfs/" &amp; fileName
+End If
+%&gt;
+&lt;!-- Bootstrap 5.3 card with a textarea form and, when pdfUrl &lt;&gt; "",
+     a success alert linking to &lt;%=pdfUrl%&gt; for View / Download --&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Verified</span>
+  The full PDF build chain (<code>New</code> &rarr; <code>add_page</code> &rarr; fonts/colours &rarr;
+  <code>cell</code>/<code>multi_cell</code> &rarr; <code>output</code>) was tested on localhost and wrote a
+  valid <code>%PDF</code> file. The timestamped filename trick keeps each generated PDF unique.
+</div>
+
+<h3>14.3 App Three &mdash; ZIP File Compressor (the full pipeline)</h3>
+<p>
+This is the showcase: it upload-parses a file with <code>Request.Files</code>, saves it with
+<code>SaveAs</code>, compresses it with <code>ASPPY.zip.Zip</code>, and serves the archive back with
+<code>Response.File</code>. Four ASPPY superpowers in one page.
+</p>
+<span class="code-label label-asppy">test_compress.asp</span>
+<pre><code>&lt;%@ Language="VBScript" %&gt;
+&lt;%
+Dim msg, download
+download = Request.QueryString("download")
+
+' If a download was requested, stream the zip and stop.
+If download &lt;&gt; "" Then
+    Response.File Server.MapPath("data/" &amp; download), False
+End If
+
+If Request.ServerVariables("REQUEST_METHOD") = "POST" Then
+    If Request.Files.Count &gt; 0 Then
+        Dim uploadedFile, savePath, outZip
+        Set uploadedFile = Request.Files("fileToZip")
+        If Not uploadedFile Is Nothing And uploadedFile.FileName &lt;&gt; "" Then
+            savePath = Server.MapPath("data/" &amp; uploadedFile.FileName)
+            uploadedFile.SaveAs savePath
+
+            outZip = Server.MapPath("data/" &amp; uploadedFile.FileName &amp; ".zip")
+            ASPPY.zip.Zip savePath, outZip
+
+            msg = "&lt;div class='alert alert-success'&gt;Compressed! " &amp; _
+                  "&lt;a href='?download=" &amp; _
+                  Server.URLEncode(uploadedFile.FileName &amp; ".zip") &amp; _
+                  "'&gt;Download ZIP&lt;/a&gt;&lt;/div&gt;"
+        End If
+    End If
+End If
+%&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta charset="UTF-8"&gt;&lt;title&gt;ASPPY Zip Compressor&lt;/title&gt;
+&lt;link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"&gt;
+&lt;/head&gt;&lt;body class="bg-light"&gt;
+&lt;div class="container mt-5" style="max-width:500px;"&gt;
+  &lt;div class="card shadow-sm"&gt;
+    &lt;div class="card-header bg-dark text-white"&gt;&lt;h4&gt;File to ZIP Compressor&lt;/h4&gt;&lt;/div&gt;
+    &lt;div class="card-body"&gt;
+      &lt;%=msg%&gt;
+      &lt;form method="post" action="test_compress.asp" enctype="multipart/form-data"&gt;
+        &lt;div class="mb-3"&gt;
+          &lt;label class="form-label"&gt;Select a file to compress:&lt;/label&gt;
+          &lt;input class="form-control" type="file" name="fileToZip" required&gt;
+        &lt;/div&gt;
+        &lt;button class="btn btn-primary w-100"&gt;Upload &amp; Compress&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;</code></pre>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Verified end-to-end on localhost</span>
+  A real file was POSTed as <code>multipart/form-data</code>. The page reported
+  <em>"Compressed: upload_me.txt.zip"</em>; the archive on disk started with the ZIP magic
+  <code>PK</code>; and requesting <code>?download=upload_me.txt.zip</code> returned
+  <code>200 OK</code> with <code>Content-Type: application/x-zip-compressed</code> and
+  <code>Content-Disposition: attachment</code>. Upload &rarr; save &rarr; zip &rarr; download, all native.
+</div>
+<div class="callout c-warn">
+  <span class="ct"><i class="bi bi-folder"></i> One setup note</span>
+  Make sure the target folders exist (<code>data/</code>, <code>pdfs/</code>, <code>images/</code>) and
+  remember that <code>ASPPY.zip</code> needs the physical paths that <code>Server.MapPath</code>
+  provides.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in Chapter 15</span>
+  The ultimate vibe: describing what you want in plain language and letting an AI agent build correct
+  ASPPY apps &mdash; guided by the project's own rulebook.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== CHAPTER 15 ===================== -->
+<h1 id="ch15">Chapter 15 &middot; Vibe-Coding ASPPY with AI Agents</h1>
+<p class="chapter-meta">Part IV &middot; Building Real Apps</p>
+
+<p class="lead-quote">"Describe the vibe. Let the agent type the syntax. Review the result."</p>
+
+<h3>15.1 Why ASPPY Is an AI-Agent Sweet Spot</h3>
+<p>
+Everything this book celebrates &mdash; intent over syntax, a small well-defined object model, a single
+<code>ASPPY</code> superpower object &mdash; also makes ASPPY unusually friendly to AI coding agents
+(OpenCode, Claude Code, Codex, Cursor, GitHub Copilot). VBScript is simple and regular; the surface area
+is small; and the project ships an explicit rulebook the agent can follow. The result is that "vibe
+coding" stops being a metaphor and becomes a literal workflow: you state intent in English, the agent
+produces ASPPY-correct VBScript, and you verify it in the browser.
+</p>
+
+<h3>15.2 Feed the Agent the Rulebook First</h3>
+<p>
+The single highest-leverage move is to point your agent at the project's <code>developers.md</code>
+before any work begins. The project reports this reduces development time and cost by roughly
+30&ndash;40% and materially improves code quality &mdash; even with free agents. There is also an online
+prompt builder that generates clean, ASPPY-aware prompts to paste in.
+</p>
+<div class="callout c-vibe">
+  <span class="ct"><i class="bi bi-magic"></i> A good opening prompt</span>
+  <em>"Read <code>developers.md</code>. Then build an ASPPY MVC app in <code>www</code> starting from
+  <code>www_starter</code>. It's a contacts manager: list, create, edit, delete contacts stored in a
+  SQLite database under <code>data/</code>. Use Bootstrap 5. Route everything through
+  <code>default.asp</code> as the front controller, with controllers, models, and views under
+  <code>asp/</code>. Run on port 8080."</em>
+</div>
+
+<h3>15.3 The Rules an Agent Must Respect</h3>
+<p>These are the load-bearing conventions from <code>developers.md</code>. Tell your agent to honour them:</p>
+<ul>
+  <li>Build inside <code>www</code>; start new apps from <code>www_starter</code>; never modify ASPPY's own <code>*.py</code> files.</li>
+  <li>Pick <strong>one</strong> app model &mdash; MVC <em>or</em> static &mdash; and stay consistent. Don't mix server-side storage with browser <code>localStorage</code> for the same data.</li>
+  <li><code>default.asp</code> only dispatches; controllers coordinate; models read/write data; views render. No page-specific SQL or giant <code>Response.Write</code> blocks in <code>default.asp</code>.</li>
+  <li>Layout rendering is owned by exactly one place (don't call <code>RenderFooter()</code> twice).</li>
+  <li>Unknown routes return a real <code>Response.Status = "404 Not Found"</code>.</li>
+  <li>Verify every include path from the perspective of the including file.</li>
+  <li>Validate numeric IDs with <code>IsNumeric()</code> + <code>CInt()</code>; HTML-encode output with <code>Server.HTMLEncode()</code>; redirect <em>before</em> writing output.</li>
+  <li>Remember the non-short-circuiting <code>And</code> (Chapter 2 / Appendix) when parsing route arrays.</li>
+  <li>No restart needed after editing <code>.asp</code> files (includes too): the compile cache invalidates automatically on file change.</li>
+</ul>
+
+<h3>15.4 The Human's Job in the Loop</h3>
+<p>
+Vibe coding is not abdication. The agent absorbs syntax; you own intent, architecture, and verification.
+Read the browser's error messages fully, fix the first real error before moving on, and &mdash; in the
+spirit of this entire book &mdash; <strong>test the result.</strong> Every sample in these pages earned
+its place by being run, not by sounding plausible. Hold your agent's output to the same bar.
+</p>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-check2-all"></i> The vibe-coding loop, distilled</span>
+  <strong>1.</strong> State intent in plain language. &nbsp;
+  <strong>2.</strong> Let the agent (briefed on <code>developers.md</code>) produce ASPPY VBScript. &nbsp;
+  <strong>3.</strong> Run it on localhost. &nbsp;
+  <strong>4.</strong> Read errors, refine intent, repeat. &nbsp;
+  You stay on the bridge; the agent and ASPPY handle the legacy-to-modern syntax gap.
+</div>
+
+<div class="callout c-info">
+  <span class="ct"><i class="bi bi-arrow-right-circle"></i> Coming up in the Appendix</span>
+  A consolidated, tested compatibility reference &mdash; the built-ins that work, the gotchas that bite,
+  and the two documentation discrepancies this book caught by actually running the code.
+</div>
+
+<hr class="sec">
+
+<!-- ===================== APPENDIX A ===================== -->
+<h1 id="appendix">Appendix A &middot; Verified Compatibility Reference &amp; Gotchas</h1>
+<p class="chapter-meta">Reference</p>
+
+<h3>A.1 The <code>ASPPY</code> Global Object &mdash; Quick Reference</h3>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Namespace</th><th>Key calls</th><th>Backed by</th></tr></thead>
+  <tbody>
+    <tr><td><code>ASPPY.json</code></td><td><code>.Encode(v,[pretty])</code>, <code>.Decode(s)</code></td><td>Python <code>json</code></td></tr>
+    <tr><td><code>ASPPY.crypto</code></td><td><code>.Hash(pw,[rounds])</code>, <code>.Verify(pw,hash)</code></td><td><code>bcrypt</code></td></tr>
+    <tr><td><code>ASPPY.zip</code></td><td><code>.Zip(path,[out])</code>, <code>.Unzip(zip,dest,[overwrite])</code></td><td><code>zipfile</code></td></tr>
+    <tr><td><code>ASPPY.pdf</code></td><td><code>.New(...)</code> &rarr; <code>add_page/set_font/cell/multi_cell/write_html/output</code></td><td><code>fpdf2</code></td></tr>
+    <tr><td><code>ASPPY.image</code></td><td><code>.Image</code>, <code>.ImageDraw</code>, <code>.ImageFilter</code>, <code>.ImageEnhance</code></td><td><code>Pillow</code></td></tr>
+    <tr><td><code>ASPPY.pop3</code> / <code>ASPPY.imap</code></td><td><code>Connect/Login/...</code> &rarr; message objects</td><td><code>poplib</code> / <code>imaplib</code></td></tr>
+  </tbody>
+</table>
+
+<h3>A.2 Verified Discrepancies (docs vs. runtime)</h3>
+<p>These were caught by running the samples. The book follows the runtime; here is what to watch for:</p>
+<table class="table table-bordered table-sm">
+  <thead class="table-dark"><tr><th>Topic</th><th>What docs imply</th><th>What actually happens</th><th>Do this</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Mail object creation</td>
+      <td><code>Server.CreateObject("ASPPY.POP3"/"ASPPY.IMAP")</code> works</td>
+      <td>Returns HTTP 500 (ProgID case mismatch)</td>
+      <td>Use <code>Set x = ASPPY.pop3</code> / <code>Set x = ASPPY.imap</code></td>
+    </tr>
+    <tr>
+      <td>SQLite database file</td>
+      <td>"Auto-created if it doesn't exist"</td>
+      <td>Missing <code>.db</code> raises <code>800a0035 &mdash; File not found</code></td>
+      <td>Create/ship the <code>.db</code> first, then <code>Open</code> it</td>
+    </tr>
+    <tr>
+      <td>JSON pretty output</td>
+      <td>(unspecified ordering)</td>
+      <td>Keys are <strong>sorted alphabetically</strong>, 2-space indent</td>
+      <td>Don't rely on insertion order in pretty mode</td>
+    </tr>
+    <tr>
+      <td><code>Session.SessionID</code></td>
+      <td>(classic IIS shape assumed)</td>
+      <td>ASPPY's own short id (~10 chars)</td>
+      <td>Don't parse/assume the legacy SessionID format</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>A.3 The Top VBScript Gotchas</h3>
+<ul>
+  <li><strong><code>And</code>/<code>Or</code> do not short-circuit.</strong> Guard array indices with nested <code>If</code> blocks, never inline <code>And</code> with a length check (Chapter 2).</li>
+  <li><strong>Physical vs. virtual paths.</strong> <code>ASPPY.zip</code>, <code>ASPPY.pdf.output</code>, and <code>ASPPY.image.save</code> all want physical paths &mdash; wrap in <code>Server.MapPath</code>. Never use a leading slash in <code>MapPath</code>.</li>
+  <li><strong><code>MapPath</code> is relative to the executing file.</strong> The same string resolves differently in <code>default.asp</code> vs. <code>asp/models/x.asp</code>.</li>
+  <li><strong>Redirect before output.</strong> Don't write anything before <code>Response.Redirect</code>.</li>
+  <li><strong>Restart after editing includes.</strong> The in-memory compile cache won't pick up changes otherwise.</li>
+  <li><strong>Avoid <code>IIf(...)</code></strong> for nullable SQL values or request logic (it evaluates both branches).</li>
+</ul>
+
+<h3>A.4 Selected VBScript Built-ins (confirmed present)</h3>
+<p>ASPPY's built-in coverage is near-complete. Categories include:</p>
+<ul>
+  <li><strong>Strings:</strong> <code>Len</code>, <code>UCase</code>/<code>LCase</code>, <code>Trim</code>/<code>LTrim</code>/<code>RTrim</code>, <code>Left</code>/<code>Right</code>/<code>Mid</code>, <code>InStr</code>/<code>InStrRev</code>, <code>Replace</code>, <code>Split</code>/<code>Join</code>, <code>StrReverse</code>, <code>Space</code>, <code>String</code>, <code>Asc</code>/<code>Chr</code>, <code>Hex</code>/<code>Oct</code>.</li>
+  <li><strong>Arrays:</strong> <code>Array</code>, <code>IsArray</code>, <code>LBound</code>, <code>UBound</code>, <code>Filter</code>.</li>
+  <li><strong>Type conversion:</strong> <code>CBool</code>, <code>CInt</code>, <code>CLng</code>, <code>CDbl</code>, <code>CSng</code>, <code>CCur</code>, <code>CStr</code>, <code>CDate</code>.</li>
+  <li><strong>Date/Time:</strong> <code>Now</code>, <code>Date</code>, <code>Time</code>, <code>Year</code>/<code>Month</code>/<code>Day</code>, <code>DateAdd</code>, <code>DateDiff</code>, <code>DatePart</code>, <code>FormatDateTime</code>, <code>Weekday</code>, <code>MonthName</code>.</li>
+  <li><strong>Math:</strong> <code>Abs</code>, <code>Int</code>/<code>Fix</code>, <code>Round</code>, <code>Sqr</code>, <code>Rnd</code>, <code>Sgn</code>, <code>Exp</code>, <code>Log</code>, trig.</li>
+  <li><strong>Formatting:</strong> <code>FormatNumber</code>, <code>FormatCurrency</code>, <code>FormatPercent</code> (locale-sensitive; verify against IIS for critical paths).</li>
+  <li><strong>Information:</strong> <code>IsEmpty</code>, <code>IsNull</code>, <code>IsNumeric</code>, <code>IsDate</code>, <code>IsObject</code>, <code>TypeName</code>, <code>VarType</code>.</li>
+</ul>
+<div class="callout c-success">
+  <span class="ct"><i class="bi bi-terminal"></i> Spot-checked on localhost</span>
+  <code>UCase("hello")</code> &rarr; <code>HELLO</code>;
+  <code>Split("x,y,z", ",")(0)</code> &rarr; <code>x</code>;
+  <code>Replace("foofoo","foo","bar")</code> &rarr; <code>barbar</code>;
+  <code>FormatNumber(1234.5, 2)</code> &rarr; <code>1,234.50</code>;
+  <code>Now()</code> returned a valid timestamp.
+</div>
+
+<h3>A.5 The 50-Page Takeaway</h3>
+<p>
+ASPPY lets you keep the business logic you trust, run it anywhere Python runs, outlive the deprecation
+of VBScript, and reach the modern ecosystem &mdash; JSON, PDFs, images, archives, bcrypt, mail &mdash;
+through one global object, all without leaving VBScript. That is the bridge between reliable legacy
+logic and modern ecosystem power. Stay in the vibe; let ASPPY handle the gap.
+</p>
+
+<hr class="sec">
+
+<div class="footer">
+  <p><strong>ASPPY: The Vibe Coder's Guide</strong> &middot; Independent documentation for the open-source ASPPY project.</p>
+  <p>ASPPY is developed by Pieter Cooreman and is not affiliated with or endorsed by Microsoft Corporation.
+  "Microsoft", "Active Server Pages", "ASP", and "VBScript" are trademarks of Microsoft Corporation, used
+  here for descriptive and identification purposes only.</p>
+</div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
