@@ -10,8 +10,8 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
-authors = [{ name = "Pieter Cooreman", email = "pietercooreman@gmail.com" }]
-maintainers = [{ name = "Pieter Cooreman", email = "pietercooreman@gmail.com" }]
+authors = [{ name = "Pieter Cooreman", email = "47208869+PieterCooreman@users.noreply.github.com" }]
+maintainers = [{ name = "Pieter Cooreman", email = "47208869+PieterCooreman@users.noreply.github.com" }]
 keywords = [
     "asp",
     "classic-asp",
