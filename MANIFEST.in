@@ -1,0 +1,36 @@
+# Source distribution contents.
+#
+# The sdist is meant to be a buildable snapshot of the runtime, not a mirror of
+# the git repo: the demo apps (www/, www_starter/, www_test/) ship SQLite
+# databases and the docs/ folder ships ~1 MB of HTML and screenshots. Those live
+# on GitHub - https://github.com/PieterCooreman/ASPPY - and are linked from the
+# README instead.
+
+include LICENSE
+include README.md
+include developers.md
+include pyproject.toml
+
+# Repo-root convenience shims for `python asppycli.py ...` /
+# `python asppycheck.py ...`. Not installed (the real code lives in ASPPY/cli.py
+# and ASPPY/check.py, exposed as the asppy-render / asppy-check commands).
+include asppycli.py
+include asppycheck.py
+
+# Runtime data that must travel with the package.
+include ASPPY/locale_data.json
+recursive-include ASPPY/tools *.py *.md *.bat
+
+# Never ship build/CI noise.
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.dll
+global-exclude .DS_Store
+prune docs
+prune www
+prune www_starter
+prune www_test
+prune .github
+prune build
+prune dist

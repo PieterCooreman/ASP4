@@ -1,0 +1,112 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asppy"
+version = "0.1.0"
+description = "Classic ASP / VBScript runtime for Python - run legacy .asp pages on Windows, Linux and macOS without IIS or COM."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+authors = [{ name = "Pieter Cooreman", email = "pietercooreman@gmail.com" }]
+maintainers = [{ name = "Pieter Cooreman", email = "pietercooreman@gmail.com" }]
+keywords = [
+    "asp",
+    "classic-asp",
+    "vbscript",
+    "iis",
+    "legacy",
+    "migration",
+    "modernization",
+    "interpreter",
+    "runtime",
+    "web-server",
+    "adodb",
+    "wsgi-alternative",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Basic",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Interpreters",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+# The runtime core is deliberately dependency-free: it runs on nothing but the
+# Python standard library. Every third-party package below is imported lazily,
+# only by the feature that needs it, and raises a clear "pip install ..." error
+# when missing. Install only the extras your .asp pages actually use.
+dependencies = []
+
+[project.optional-dependencies]
+# ASPPY.CreatePDF / vb_pdf.py
+pdf = ["fpdf2>=2.7"]
+# ASPPY image helpers / vb_image.py
+image = ["pillow>=9.0"]
+# ASPPY.BcryptHash / BcryptVerify - vb_crypto.py
+crypto = ["bcrypt>=4.0"]
+# ADODB providers backed by ODBC: Access, Excel, SQL Server, PostgreSQL, MySQL.
+# SQLite needs nothing - it is in the standard library.
+odbc = ["pyodbc>=4.0.39"]
+# MSXML: real XPath 1.0, XSLT (transformNode) and CDATA round-tripping, plus a
+# CA bundle for ServerXMLHTTP over TLS.
+xml = ["lxml>=4.9", "certifi>=2023.5.7"]
+# Everything above, for a full-fidelity install.
+all = [
+    "fpdf2>=2.7",
+    "pillow>=9.0",
+    "bcrypt>=4.0",
+    "pyodbc>=4.0.39",
+    "lxml>=4.9",
+    "certifi>=2023.5.7",
+]
+
+[project.scripts]
+# Serve a docroot over HTTP:            asppy 0.0.0.0 8080 www
+asppy = "ASPPY.__main__:main"
+# Render one .asp page to stdout/file:  asppy-render www/default.asp
+asppy-render = "ASPPY.cli:main"
+# Batch-check a whole app for errors:   asppy-check www
+asppy-check = "ASPPY.check:main"
+
+[project.urls]
+Homepage = "https://pietercooreman.github.io/ASPPY/"
+Documentation = "https://pietercooreman.github.io/ASPPY/"
+Source = "https://github.com/PieterCooreman/ASPPY"
+Issues = "https://github.com/PieterCooreman/ASPPY/issues"
+Changelog = "https://github.com/PieterCooreman/ASPPY/releases"
+"Vibe Coder's Guide" = "https://pietercooreman.github.io/ASPPY/ASPPY_The_Vibe_Coders_Guide.html"
+"Prompt Builder (MVC)" = "https://pietercooreman.github.io/ASPPY/prompt-builder.html"
+"Prompt Builder (SPA)" = "https://pietercooreman.github.io/ASPPY/prompt-builder-SPA.html"
+
+[tool.setuptools]
+# Only the runtime ships. The demo apps (www/, www_starter/, www_test/), the
+# HTML docs and the prompt builders stay in the git repo - they are examples,
+# not library code, and would bloat the wheel with SQLite databases and PNGs.
+packages = ["ASPPY", "ASPPY.vm"]
+
+[tool.setuptools.package-data]
+# locale_data.json is the generated 60-locale table used by vb_locale.py; the
+# tools/ folder carries the standalone Access-to-SQLite migration utility.
+ASPPY = ["locale_data.json", "tools/*.py", "tools/*.md", "tools/*.bat"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.pyc", "__pycache__/*"]

@@ -62,14 +62,14 @@ ASPPY isn't a proof of concept. It runs **production websites in the wild**, fro
   <tr>
     <td width="50%" valign="top">
       <a href="https://lifeadmin.be">
-        <img src="docs/screenshots/lifeadmin.png" alt="LifeAdmin - team & personal organization SaaS built on ASPPY" />
+        <img src="https://raw.githubusercontent.com/PieterCooreman/ASPPY/main/docs/screenshots/lifeadmin.png" alt="LifeAdmin - team &amp; personal organization SaaS built on ASPPY" />
       </a>
       <p align="center"><strong><a href="https://lifeadmin.be">lifeadmin.be</a></strong></p>
       <p align="center">A multilingual SaaS platform for organizing life and work: shared workspaces, task management, project tracking, and real-time collaboration - all served by ASPPY.</p>
     </td>
     <td width="50%" valign="top">
       <a href="https://flowdent.be">
-        <img src="docs/screenshots/flowdent.png" alt="FlowDent - dental practice management built on ASPPY" />
+        <img src="https://raw.githubusercontent.com/PieterCooreman/ASPPY/main/docs/screenshots/flowdent.png" alt="FlowDent - dental practice management built on ASPPY" />
       </a>
       <p align="center"><strong><a href="https://flowdent.be">flowdent.be</a></strong></p>
       <p align="center">A complete, GDPR-compliant management suite for dental practices: waiting lists, inventory, digital signatures, tasks, and more - trilingual, 8+ modules, running on ASPPY.</p>
@@ -78,14 +78,14 @@ ASPPY isn't a proof of concept. It runs **production websites in the wild**, fro
   <tr>
     <td width="50%" valign="top">
       <a href="https://nomenclatuur.flowdent.be">
-        <img src="docs/screenshots/nomenclatuur-flowdent.png" alt="FlowDent Nomenclature - RIZIV nomenclature browser built on ASPPY" />
+        <img src="https://raw.githubusercontent.com/PieterCooreman/ASPPY/main/docs/screenshots/nomenclatuur-flowdent.png" alt="FlowDent Nomenclature - RIZIV nomenclature browser built on ASPPY" />
       </a>
       <p align="center"><strong><a href="https://nomenclatuur.flowdent.be">nomenclatuur.flowdent.be</a></strong></p>
       <p align="center">A searchable database of 31,000+ Belgian RIZIV/INAMI nomenclature codes with filters, tariffs, and cumulation rules - data-heavy pages served fast by ASPPY.</p>
     </td>
     <td width="50%" valign="top">
       <a href="https://learnasppy.quickersite.com">
-        <img src="docs/screenshots/learnasppy.png" alt="Learn ASPPY - e-learning platform built on ASPPY" />
+        <img src="https://raw.githubusercontent.com/PieterCooreman/ASPPY/main/docs/screenshots/learnasppy.png" alt="Learn ASPPY - e-learning platform built on ASPPY" />
       </a>
       <p align="center"><strong><a href="https://learnasppy.quickersite.com">learnasppy.quickersite.com</a></strong></p>
       <p align="center">A full e-learning platform (courses, lessons, enrollments, user accounts) built with Classic ASP and SQLite on ASPPY - and it teaches you ASPPY itself.</p>
@@ -97,36 +97,91 @@ ASPPY isn't a proof of concept. It runs **production websites in the wild**, fro
 
 ---
 
-## Requirements
+## Installation
 
 ### Prerequisites
 
-**Python 3.8 or higher must be installed on your server** (Windows, Linux, or macOS).  
+**Python 3.9 or higher must be installed on your server** (Windows, Linux, or macOS).  
 Download Python at [https://www.python.org/downloads/](https://www.python.org/downloads/).
 
 > ASPPY is a Python application - Python is required on any machine that runs it, including your production hosting server.
 
-### Python packages
-
-Install the required packages with pip:
+### Install from PyPI
 
 ```bash
-pip install fpdf2 bcrypt pillow pyodbc
+pip install asppy
 ```
 
-> Not all packages are needed for every use case - install only what your application uses.
+That's it. **The core runtime has zero third-party dependencies** - it runs on nothing but the Python standard library, and SQLite works out of the box.
+
+### Optional extras
+
+Some features reach for a third-party library. Each one is imported lazily and only by the feature that needs it, so you install just what your application actually uses:
+
+| Extra | Command | Enables |
+|---|---|---|
+| `pdf` | `pip install "asppy[pdf]"` | PDF generation (`fpdf2`) |
+| `image` | `pip install "asppy[image]"` | Image resize/crop/filter/watermark (`pillow`) |
+| `crypto` | `pip install "asppy[crypto]"` | bcrypt password hashing (`bcrypt`) |
+| `odbc` | `pip install "asppy[odbc]"` | ADODB via ODBC: Access, Excel, SQL Server, PostgreSQL, MySQL (`pyodbc`) |
+| `xml` | `pip install "asppy[xml]"` | MSXML full XPath 1.0, XSLT and CDATA (`lxml`, `certifi`) |
+| `all` | `pip install "asppy[all]"` | All of the above |
+
+> Skip an extra and the matching feature raises a clear error naming the package to install - nothing else breaks.
+
+### Install from source
+
+```bash
+git clone https://github.com/PieterCooreman/ASPPY.git
+cd ASPPY
+pip install -e ".[all]"
+```
 
 ---
 
 ## Quick Start
 
-Once Python and the packages above are in place, click `start_www.bat`, or open a new Powershell/CMD terminal:
+Put your `.asp` files in a folder - say `www` - and serve it:
 
 ```bash
-python -m ASPPY.server 0.0.0.0 8080 www
+asppy 0.0.0.0 8080 www
 ```
 
 Point your browser at `http://localhost:8080` and your `.asp` pages are live.
+
+On Windows you can also just click `start_www.bat` in a source checkout.
+
+> No `.asp` files yet? The repo ships ready-to-run examples the PyPI package deliberately leaves out: [`www_starter/`](https://github.com/PieterCooreman/ASPPY/tree/main/www_starter) (an MVC scaffold to copy), [`www/`](https://github.com/PieterCooreman/ASPPY/tree/main/www) (a minimal welcome page) and [`www_test/`](https://github.com/PieterCooreman/ASPPY/tree/main/www_test) (the language conformance suite, 34 pages covering the whole VBScript surface).
+
+### The three commands
+
+| Command | What it does |
+|---|---|
+| `asppy [host] [port] [docroot]` | Serve a folder of `.asp` pages over HTTP. Defaults: `0.0.0.0 8080 web`. Pass `::` as host for IPv6. |
+| `asppy-render PAGE.asp` | Render one page to stdout or a file - no socket, no browser. Great for diffing output and CI. |
+| `asppy-check FOLDER` | Recursively render every `.asp` page in a folder and report the ones that fail, with file and line number. |
+
+```bash
+# render a single page, with a query string and response headers
+asppy-render www/default.asp --query "id=42" --show-headers
+
+# render a protected page without logging in
+asppy-render www/admin.asp --docroot www --session authed=True
+
+# health-check a whole app (exit code 1 if anything fails - CI friendly)
+asppy-check www
+```
+
+Every command also works as a module, which is handy in `.bat` files, systemd units and Docker `CMD` lines:
+
+```bash
+python -m ASPPY 0.0.0.0 8080 www     # same as: asppy 0.0.0.0 8080 www
+python -m ASPPY.server 0.0.0.0 8080 www
+python -m ASPPY.cli www/default.asp
+python -m ASPPY.check www
+```
+
+From a source checkout, `python asppycli.py ...` and `python asppycheck.py ...` keep working exactly as before.
 
 ---
 
@@ -143,7 +198,7 @@ Point your browser at `http://localhost:8080` and your `.asp` pages are live.
 
 ## The Perfect Prompt ?
 
-Refer AI vibe-coding agents (like OpenCode, Claude Code, Codex agents, Cursor, GitHub Copilot) to the developers.md file, which provides important context and guidelines before starting any development in ASPPY. This reduces development time and cost by 30–40% and significantly improves code quality, even when using free AI coding agents.
+Refer AI vibe-coding agents (like OpenCode, Claude Code, Codex agents, Cursor, GitHub Copilot) to the [developers.md](https://github.com/PieterCooreman/ASPPY/blob/main/developers.md) file, which provides important context and guidelines before starting any development in ASPPY. This reduces development time and cost by 30–40% and significantly improves code quality, even when using free AI coding agents.
 
 The prompt builder comes in two flavours:
 
@@ -192,7 +247,7 @@ Two deliberate divergences, both chosen so that behaviour is deterministic acros
 - **Default locale is 1033 (en-US)** when nothing is set, rather than the host's system locale.
 - **`CStr(date)` stays ISO** (`2024-03-05 14:07:09`) while no locale has been selected, so apps that concatenate dates into SQL keep working. Selecting a locale switches it to full IIS formatting.
 
-See [docs/specifications.html](docs/specifications.html) for the supported locale list and details.
+See the [specifications page](https://pietercooreman.github.io/ASPPY/specifications.html) for the supported locale list and details.
 
 ### Character encoding: UTF-8 by default - an intentional break from IIS
 
@@ -222,7 +277,7 @@ Response.Charset = "windows-1252"
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+ASPPY is released under the MIT License. See [LICENSE](https://github.com/PieterCooreman/ASPPY/blob/main/LICENSE) for details.
 
 ---
 
