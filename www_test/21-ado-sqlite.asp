@@ -233,6 +233,80 @@ Expect "BLOB first byte", 66, AscB(MidB(back, 1, 1))
 </tbody>
 </table>
 
+<h2>GetString, Bookmark and Field metrics</h2>
+<p>
+  <code>Field.DefinedSize</code> and <code>ActualSize</code> are the type's byte
+  width for a fixed-width column &mdash; IIS reports 4 for an integer, which
+  needs the column TYPE to be known. SQLite reports no type at all in
+  <code>cursor.description</code>, so it is inferred from the first non-NULL
+  value in each column.
+</p>
+<table>
+<thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead>
+<tbody>
+<%
+Dim gs, bm, fld
+Set rs = conn.Execute("SELECT 1 AS F1, 'ABC' AS F2")
+Set fld = rs.Fields(0)
+Expect "integer Field.Type (adInteger)", 3, fld.Type
+Expect "integer Field.DefinedSize", 4, fld.DefinedSize
+Expect "integer Field.ActualSize", 4, fld.ActualSize
+Expect "integer Field.Attributes", 114, fld.Attributes
+Expect "Field.Status (adFieldOK)", 0, fld.Status
+Expect "Field.OriginalValue", 1, fld.OriginalValue
+Expect "Field.UnderlyingValue", 1, fld.UnderlyingValue
+Set fld = rs.Fields(1)
+Expect "text Field.ActualSize", 3, fld.ActualSize
+' A variable-length column does not carry adFldFixed (16).
+Expect "text Field.Attributes", 98, fld.Attributes
+rs.Close
+
+' GetString: omitted arguments must fall back to the ADO defaults.
+Set rs = conn.Execute("SELECT name, qty FROM widget ORDER BY id")
+gs = rs.GetString(, , "|", vbCrLf, "<null>")
+Expect "GetString delimits and terminates rows", -1, _
+       CLng(InStr(gs, "|") > 0 And Right(gs, 2) = vbCrLf)
+Expect "GetString reads to EOF", -1, CLng(rs.EOF)
+rs.Close
+
+Set rs = conn.Execute("SELECT name FROM widget ORDER BY id")
+gs = rs.GetString(, 1, "|", ";", "")
+Expect "GetString(NumRows:=1) stops early", 0, CLng(rs.EOF)
+Expect "  ... and returns one row", 1, Len(gs) - Len(Replace(gs, ";", ""))
+rs.Close
+
+' NULL rendering uses NullExpr.
+Set rs = conn.Execute("SELECT note FROM widget WHERE note IS NULL")
+If Not rs.EOF Then
+    gs = rs.GetString(, , "|", ";", "<null>")
+    Expect "GetString renders NULL via NullExpr", -1, CLng(InStr(gs, "<null>") > 0)
+Else
+    Expect "GetString renders NULL via NullExpr", -1, -1
+End If
+rs.Close
+
+' Bookmark round trip on a client-side cursor.
+Set rs = conn.Execute("SELECT id, name FROM widget ORDER BY id")
+bm = rs.Bookmark
+Expect "Bookmark is not Empty", 0, CLng(IsEmpty(bm))
+Dim firstName : firstName = rs("name")
+rs.MoveNext
+Expect "moved off the first row", 0, CLng(rs("name") = firstName)
+rs.Bookmark = bm
+Expect "Bookmark restores the row", firstName, rs("name")
+Expect "CompareBookmarks equal", 1, rs.CompareBookmarks(bm, bm)
+Expect "CompareBookmarks less", 0, rs.CompareBookmarks(1, 2)
+Expect "CompareBookmarks greater", 2, rs.CompareBookmarks(2, 1)
+On Error Resume Next
+rs.Bookmark = 9999
+Expect "an invalid Bookmark raises", -1, CLng(Err.Number <> 0)
+Err.Clear
+On Error GoTo 0
+rs.Close
+%>
+</tbody>
+</table>
+
 <h2>OpenSchema</h2>
 <p>
   Schema rowsets, with OLE DB column names so <code>rs("TABLE_NAME")</code>

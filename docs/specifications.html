@@ -457,6 +457,39 @@ pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
 </table>
 <hr />
 <h1>Classic ASP Objects</h1>
+<h2>Server-Side Includes</h2>
+<p>
+    <code>&lt;!--#include file="..." --&gt;</code> and <code>&lt;!--#include virtual="..." --&gt;</code>
+    are resolved before the page runs. The two forms differ only in what the path is relative to:
+</p>
+<table>
+    <thead><tr><th>Form</th><th>Resolved relative to</th></tr></thead>
+    <tbody>
+        <tr><td><code>file="x.inc"</code></td><td>The folder of the file <em>containing the directive</em>. Inside a nested include this is the include's own folder, not the requesting page's, so an <code>.inc</code> can pull in its siblings without knowing who included it.</td></tr>
+        <tr><td><code>virtual="/x.inc"</code></td><td>The application root, at every nesting depth. A bare <code>virtual="x.inc"</code> (no leading slash) is also accepted and is treated as application-root relative.</td></tr>
+    </tbody>
+</table>
+<p>Matching IIS, the scanner accepts backslashes as separators, <code>./</code> and <code>../</code> segments, single or double quotes, and loose whitespace around <code>#include</code> and <code>=</code>. Paths that climb above the application root are refused.</p>
+<p>
+    <strong>A file included twice is expanded twice.</strong> The directive is a textual
+    splice, not an idempotent import, so including a snippet at two points in a page emits it
+    at both &mdash; there is no <code>#pragma once</code> behaviour and no de-duplication.
+    That also applies when the same file is reached by two different spellings
+    (<code>file=</code> in one place, <code>virtual=</code> in another), or directly in one
+    place and transitively through another include. Because definitions are hoisted before
+    execution, a duplicated include that declares a <code>Sub</code> or <code>Function</code>
+    does not raise a redefinition error; only its top-level statements and markup repeat.
+</p>
+<p>
+    A genuine <em>cycle</em> &mdash; <code>a.inc</code> including <code>b.inc</code> including
+    <code>a.inc</code> &mdash; is an error, not a silently truncated expansion, and fails the
+    request as IIS does. Detection walks the current include chain, which is what keeps
+    legitimate repeats working; nesting deeper than 32 levels is also refused.
+</p>
+<p>
+    Text that merely looks like a directive is left alone: <code>#include</code> inside a
+    VBScript string literal or inside an ASP comment is inert.
+</p>
 <h2>Server Object</h2>
 <h3>Methods</h3>
 <table>
@@ -923,8 +956,23 @@ ASPPY.ExecutePythonFile(path [, args] [, timeout])   ' Executes a .py file (rela
         <tr><td><code>Update()</code></td><td>Commits pending field changes</td></tr>
         <tr><td><code>Delete()</code></td><td>Deletes current record</td></tr>
         <tr><td><code>Resync</code></td><td>Resyncs with database</td></tr>
+        <tr><td><code>GetRows([rows[, start[, fields]]])</code></td><td>Rows as a 2-D array, field-major</td></tr>
+        <tr><td><code>GetString([format[, rows[, colDelim[, rowDelim[, nullExpr]]]]])</code></td><td>Rows as a delimited string &mdash; see below</td></tr>
+        <tr><td><code>Bookmark</code></td><td>Marker for the current row; read it, move away, assign it back</td></tr>
+        <tr><td><code>CompareBookmarks(a, b)</code></td><td>CompareEnum: 0 less, 1 equal, 2 greater, 4 not equal</td></tr>
+        <tr><td><code>AbsolutePosition</code>, <code>PageSize</code>, <code>PageCount</code>, <code>AbsolutePage</code></td><td>Positioning and paging</td></tr>
+        <tr><td><code>Filter</code>, <code>Sort</code>, <code>Find</code>, <code>Clone</code>, <code>Requery</code>, <code>Supports</code></td><td>Client-side cursor operations</td></tr>
     </tbody>
 </table>
+<h4><code>GetString</code></h4>
+<p>Reads forward from the current row and leaves the recordset at EOF (or just past the last row taken), as ADO does. Omitted arguments take the ADO defaults: TAB between columns, CR between rows, <code>""</code> for Null. Every row is terminated, including the last.</p>
+<pre><code class="language-vbscript">' Pipe-separated, CRLF-terminated, empty string for NULL
+gs = rs.GetString(, , "|", vbCrLf, "")
+</code></pre>
+<p><code>StringFormat</code> only has one legal value, <code>adClipString</code> (2); anything else raises.</p>
+<h4><code>Bookmark</code></h4>
+<p>ASPPY recordsets are client-side cursors over an in-memory row list, so bookmarks are always available and are the row's ordinal. Assigning a bookmark outside the recordset raises rather than moving anywhere.</p>
+<p><strong>Divergence worth knowing:</strong> on IIS, bookmark support depends on the provider and cursor &mdash; a Jet <code>OpenSchema</code> recordset reports <code>Supports(adBookmark) = False</code>. ASPPY supports them everywhere, so code guarded by <code>If rs.Supports(adBookmark)</code> takes the <em>enabled</em> branch here and the disabled one there.</p>
 <h4>OpenSchema</h4>
 <p>Returns schema information as a Recordset, with the OLE DB rowset column names, so <code>rs("TABLE_NAME")</code> works as it does on IIS. Supported <code>SchemaEnum</code> values:</p>
 <table>
@@ -941,6 +989,23 @@ Set rs = conn.OpenSchema(20, Array(Empty, Empty, "widget"))  ' one table
 Set rs = conn.OpenSchema(4,  Array(Empty, Empty, "widget"))  ' its columns
 </code></pre>
 <p><code>criteria</code> is an array of restriction values positionally matched to the rowset's restriction columns; <code>Empty</code> entries mean "no restriction". Any other <code>queryType</code> raises rather than returning an empty recordset. System tables are excluded.</p>
+<h2>ADODB.Field</h2>
+<p>Reached through <code>rs.Fields(n)</code>, <code>rs.Fields("name")</code> or <code>rs("name")</code>. Its default property is <code>Value</code>, so a Field reads as its value in any expression.</p>
+<table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+        <tr><td><code>Name</code>, <code>Value</code></td><td>Column name and current value</td></tr>
+        <tr><td><code>Type</code></td><td>DataTypeEnum. SQLite reports no type in its cursor metadata, so it is inferred from the first non-NULL value in the column &mdash; <code>SELECT 1 AS F1</code> gives <code>adInteger</code> (3), matching IIS</td></tr>
+        <tr><td><code>DefinedSize</code></td><td>Declared size. For a fixed-width type this is the type's BYTE width (an <code>adInteger</code> column gives 4, as on IIS), otherwise the declared maximum</td></tr>
+        <tr><td><code>ActualSize</code></td><td>Length in bytes of the stored value: the type width for fixed types, the character or byte count for variable ones, 0 for Null</td></tr>
+        <tr><td><code>Attributes</code></td><td>FieldAttributeEnum. 114 for a nullable fixed-width column (<code>adFldMayDefer</code> | <code>adFldFixed</code> | <code>adFldIsNullable</code> | <code>adFldMayBeNull</code>), 98 for a variable-length one</td></tr>
+        <tr><td><code>Status</code></td><td>FieldStatusEnum; <code>adFieldOK</code> (0) for a field read from a resultset</td></tr>
+        <tr><td><code>OriginalValue</code>, <code>UnderlyingValue</code></td><td>The bound row's value. No separate pre-edit copy is kept, and there is no re-fetch, so both report the current row value</td></tr>
+        <tr><td><code>Precision</code>, <code>NumericScale</code></td><td>Reported as 0; IIS gets these from the provider (10 and 255 for a Jet integer)</td></tr>
+        <tr><td><code>Properties</code></td><td>Empty collection &mdash; see the note under ADODB.Command</td></tr>
+        <tr><td><code>AppendChunk(data)</code></td><td>Appends to a long binary/text value</td></tr>
+    </tbody>
+</table>
 <h2>ADODB.Command</h2>
 <pre><code class="language-vbscript">Set cmd = Server.CreateObject("ADODB.Command")
 </code></pre>
