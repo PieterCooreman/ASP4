@@ -307,6 +307,23 @@ def parse_connection_string(conn_str: str) -> ParsedConnectionString:
     )
 
 
+# Byte width of the fixed-size DataTypeEnum values. A field of one of these
+# types reports the width as both DefinedSize and ActualSize, and carries the
+# adFldFixed attribute - matching what IIS reports (adInteger -> 4).
+_FIXED_TYPE_WIDTHS = {
+    adSmallInt: 2,
+    adInteger: 4,
+    adSingle: 4,
+    adDouble: 8,
+    adCurrency: 8,
+    adDate: 8,
+    adBoolean: 2,
+    adTinyInt: 1,
+    adBigInt: 8,
+    adDBTimeStamp: 16,
+}
+
+
 def _schema_criteria(criteria) -> list:
     """Normalise the OpenSchema Criteria argument to a list of restrictions.
 
@@ -831,14 +848,92 @@ class ADOField:
         self.Name = name
         self._value = value
         self.Type = col_type
-        self.DefinedSize = defined_size
-        self.ActualSize = len(str(value)) if value is not None else 0
+        self._defined_size = int(defined_size or 0)
         self.NumericScale = 0
         self.Precision = 0
+        # FieldStatusEnum; adFieldOK for a field read from a resultset.
+        self.Status = 0
+        # Provider property collection - empty, as everywhere else in ASPPY.
+        self.Properties = ADOProperties()
         self._pending = value  # for AddNew/Update
         self._row = None  # type: Any
         self._col_idx = None  # type: Any
         self._owner = owner
+
+    @property
+    def DefinedSize(self):
+        """Declared maximum size of the field.
+
+        For a fixed-width type this is the type's byte width, which is what IIS
+        reports (an adInteger column gives 4). For a variable-length type it is
+        the declared maximum, falling back to the current value's length when
+        the provider did not supply one.
+        """
+        if self._defined_size:
+            return self._defined_size
+        fixed = _FIXED_TYPE_WIDTHS.get(int(self.Type))
+        if fixed is not None:
+            return fixed
+        return self.ActualSize
+
+    @DefinedSize.setter
+    def DefinedSize(self, value):
+        try:
+            self._defined_size = int(value)
+        except Exception:
+            self._defined_size = 0
+
+    @property
+    def ActualSize(self):
+        """Length in bytes of the value actually stored in this field."""
+        fixed = _FIXED_TYPE_WIDTHS.get(int(self.Type))
+        if fixed is not None:
+            return fixed
+        try:
+            v = self.Value
+        except Exception:
+            v = self._value
+        if v is None or v is VBNull:
+            return 0
+        if isinstance(v, (bytes, bytearray)):
+            return len(v)
+        return len(vbs_cstr(v))
+
+    @property
+    def Attributes(self):
+        """FieldAttributeEnum bitmask.
+
+        IIS reports 114 for a nullable fixed-width column:
+        adFldMayDefer(2) | adFldFixed(16) | adFldIsNullable(32) |
+        adFldMayBeNull(64). A variable-length column drops adFldFixed.
+        """
+        attrs = 2 | 32 | 64          # MayDefer | IsNullable | MayBeNull
+        if int(self.Type) in _FIXED_TYPE_WIDTHS:
+            attrs |= 16              # adFldFixed
+        if int(self.Type) in (adLongVarChar, adLongVarWChar, adLongVarBinary):
+            attrs |= 0x80            # adFldLong
+        return attrs
+
+    @property
+    def OriginalValue(self):
+        """Value as it was when the row was last fetched or updated.
+
+        No pending edit is tracked separately here, so this reports the bound
+        row's value - the same source Value uses. (Reading self._value alone
+        gave Null for every field fetched from a resultset, since only the
+        AddNew/Update path ever populates it.)
+        """
+        if self._row is not None and self._col_idx is not None:
+            try:
+                return _coerce_field_value(self, _coerce_value(self._row[self._col_idx]))
+            except Exception:
+                pass
+        return _coerce_field_value(self, _coerce_value(self._value))
+
+    @property
+    def UnderlyingValue(self):
+        """Current value in the database. No re-fetch here, so same as Value."""
+        return self.Value
 
     @property
     def Value(self):
@@ -1062,6 +1157,30 @@ class ADORecordset:
         self._col_names = names
         self._col_names_lower = [n.lower() for n in names]
         self._col_types = types
+
+    def _infer_col_types_from_rows(self):
+        """Fill in column types the provider did not report.
+
+        sqlite3's cursor.description carries no type information at all, so
+        every column would otherwise report adVariant - and Field.Type,
+        DefinedSize and ActualSize with it. IIS reports adInteger (3) for
+        `SELECT 1 AS F1`, so the type is inferred from the first non-NULL value
+        in each column, which is what a client-side cursor does anyway.
+        """
+        if not self._col_types or not self._rows:
+            return
+        for i, t in enumerate(self._col_types):
+            if t not in (adVariant, adEmpty, None):
+                continue
+            for row in self._rows:
+                try:
+                    v = row[i]
+                except Exception:
+                    break
+                if v is None:
+                    continue
+                self._col_types[i] = _python_value_to_ado(v)
+                break
 
     # --- Navigation ---
 
@@ -1645,6 +1764,96 @@ class ADORecordset:
     def Supports(self, options):
         return True
 
+    @property
+    def Bookmark(self):
+        """Opaque marker for the current row.
+
+        This is a client-side cursor over an in-memory row list, so the row's
+        1-based ordinal is a perfectly good bookmark: stable for the life of
+        the recordset and non-Empty, which is what scripts test for.
+        """
+        if not self._is_open:
+            raise_runtime('ADO_OBJECT_CLOSED')
+        if self.BOF or self.EOF or not self._rows:
+            raise_runtime('ADO_BOF_EOF')
+        from .vb_runtime import VBLong
+        return VBLong(self._cur_idx + 1)
+
+    @Bookmark.setter
+    def Bookmark(self, value):
+        if not self._is_open:
+            raise_runtime('ADO_OBJECT_CLOSED')
+        try:
+            pos = int(value)
+        except Exception:
+            raise_runtime('ADO_ARGS_WRONG_TYPE', "Bookmark: invalid bookmark value")
+        if pos < 1 or pos > len(self._rows):
+            # ADO reports an invalid bookmark rather than moving anywhere.
+            raise_runtime('ADO_ARGS_WRONG_TYPE', "Bookmark: the bookmark is invalid")
+        self._cur_idx = pos - 1
+        self._invalidate_fields_cache()
+
+    def CompareBookmarks(self, bookmark1, bookmark2):
+        """CompareEnum: 0 less, 1 equal, 2 greater, 4 not equal."""
+        try:
+            a, b = int(bookmark1), int(bookmark2)
+        except Exception:
+            return 4                      # adCompareNotEqual
+        if a < b:
+            return 0                      # adCompareLessThan
+        if a > b:
+            return 2                      # adCompareGreaterThan
+        return 1                          # adCompareEqual
+
+    def GetString(self, string_format=None, num_rows=None, column_delimiter=None,
+                  row_delimiter=None, null_expr=None):
+        """Render rows as a delimited string, from the current row onward.
+
+        Defaults follow ADO: TAB between columns, CR between rows and "" for
+        Null. Reads forward and leaves the recordset at EOF (or after the last
+        row taken), exactly as ADO does.
+        """
+        if not self._is_open:
+            raise_runtime('ADO_OBJECT_CLOSED')
+        # StringFormat only has one legal value, adClipString (2).
+        if string_format is not None and not _is_omitted(string_format):
+            try:
+                if int(string_format) != 2:
+                    raise_runtime('ADO_ARGS_WRONG_TYPE',
+                                  "GetString: only adClipString (2) is supported")
+            except (TypeError, ValueError):
+                pass
+
+        col_sep = "\t" if _is_omitted(column_delimiter) else vbs_cstr(column_delimiter)
+        row_sep = "\r" if _is_omitted(row_delimiter) else vbs_cstr(row_delimiter)
+        null_text = "" if _is_omitted(null_expr) else vbs_cstr(null_expr)
+
+        limit = None
+        if not _is_omitted(num_rows):
+            try:
+                n = int(num_rows)
+                if n > 0:
+                    limit = n
+            except Exception:
+                limit = None
+
+        out = []
+        taken = 0
+        while not self.EOF and (limit is None or taken < limit):
+            row = self._rows[self._cur_idx]
+            cells = []
+            for v in row:
+                cv = _coerce_value(v)
+                cells.append(null_text if (cv is None or cv is VBNull) else vbs_cstr(cv))
+            out.append(col_sep.join(cells))
+            taken += 1
+            self._cur_idx += 1
+            self._invalidate_fields_cache()
+        if not out:
+            return ""
+        # ADO terminates every row, including the last.
+        return row_sep.join(out) + row_sep
+
     def UpdateBatch(self, affect_records=0):
         if not self._batch_updates:
             return
@@ -1884,6 +2093,7 @@ class ADOConnection:
                     )
                     rs._rows = cur.fetchall()
                     rs._base_rows = list(rs._rows)
+                    rs._infer_col_types_from_rows()
                     rs._cur_idx = 0
                     rs._is_open = True
                     rs.State = adStateOpen
@@ -2001,6 +2211,7 @@ class ADOConnection:
         rs._set_col_names(list(cols), [adVarChar] * len(cols))
         rs._rows = [tuple(r) for r in rows]
         rs._base_rows = list(rs._rows)
+        rs._infer_col_types_from_rows()
         rs._cur_idx = 0
         rs._is_open = True
         rs.State = adStateOpen
@@ -2297,6 +2508,37 @@ class ADOCommand:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _is_omitted(v) -> bool:
+    """True when VBScript did not really supply this optional argument.
+
+    `rs.GetString(, , "|", vbCrLf, "")` passes None for the elided slots, and
+    Empty/Null for an uninitialised variable.
+    """
+    from .vm.values import VBEmpty, VBNothing
+    return v is None or v is VBEmpty or v is VBNull or v is VBNothing
+
+
+def _python_value_to_ado(v: Any) -> int:
+    """DataTypeEnum for a value, used when the provider reports no column type."""
+    import datetime as _dt
+    from decimal import Decimal as _Dec
+    if isinstance(v, bool):
+        return adBoolean
+    if isinstance(v, int):
+        return adInteger if -2147483648 <= v <= 2147483647 else adBigInt
+    if isinstance(v, float):
+        return adDouble
+    if isinstance(v, _Dec):
+        return adCurrency
+    if isinstance(v, (bytes, bytearray)):
+        return adLongVarBinary
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return adDate
+    if isinstance(v, str):
+        return adVarWChar
+    return adVariant
+
 
 def _column_type_to_ado(type_meta: Any) -> int:
     if type_meta is None:

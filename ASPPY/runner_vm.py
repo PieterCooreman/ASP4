@@ -352,6 +352,15 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
     return res
 
 
+_MAX_INCLUDE_DEPTH = 32
+
+
+def _include_cycle_message(stack, node) -> str:
+    """Name the file that closes the loop, and show the chain that got there."""
+    chain = [os.path.basename(p) for p in stack] + [os.path.basename(node.path)]
+    return "Include cycle: %s (%s)" % (node.virtual, " -> ".join(chain))
+
+
 def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBInterpreter):
     """Execute an ASP file using granular compilation (caching ASTs)."""
     
@@ -373,20 +382,27 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
     
     from .vm.interpreter import _UserProc
     
-    visited = set()
-    
-    def collect(n_list, cur_virt_path):
+    # Definitions are idempotent, so each file is hoisted at most once. Cycles
+    # are caught by the include STACK, not by this set - see run() below for why
+    # the distinction matters.
+    hoisted: set = set()
+
+    def collect(n_list, cur_virt_path, stack=()):
         for n in n_list:
             if isinstance(n, IncludeNode):
-                if n.path in visited:
-                    continue
-                visited.add(n.path)
+                if n.path in stack:
+                    e = IncludeError(_include_cycle_message(stack, n))
+                    _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
+                    raise e
                 inc_nodes = get_cached_asp_nodes(n.path, parse_fn)
                 if inc_nodes is None:
                     e = IncludeError(f"Include file not found: {n.virtual}")
                     _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
                     raise e
-                collect(inc_nodes, n.virtual)
+                if n.path in hoisted:
+                    continue
+                hoisted.add(n.path)
+                collect(inc_nodes, n.virtual, stack + (n.path,))
             elif isinstance(n, ScriptNode):
                 # Ensure program is parsed (cached on node after first request)
                 if n.program is None:
@@ -437,20 +453,28 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
     # 3. Execute Global Code
     # We walk the tree again and execute statements.
     
-    visited_exec = set()
-    
-    def run(n_list, cur_virt_path):
+    def run(n_list, cur_virt_path, stack=()):
         for n in n_list:
             if isinstance(n, IncludeNode):
-                if n.path in visited_exec:
-                    continue
-                visited_exec.add(n.path)
+                # Cycle detection uses the CURRENT include chain, not a set of
+                # everything seen so far. A global "visited" set also suppressed
+                # legitimate repeats: including the same snippet twice on one
+                # page emitted it once here and twice on IIS.
+                if n.path in stack:
+                    e = IncludeError(_include_cycle_message(stack, n))
+                    _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
+                    raise e
+                if len(stack) >= _MAX_INCLUDE_DEPTH:
+                    e = IncludeError(
+                        "Include nesting deeper than %d levels" % _MAX_INCLUDE_DEPTH)
+                    _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
+                    raise e
                 inc_nodes = get_cached_asp_nodes(n.path, parse_fn)
                 if inc_nodes is None:
                     e = IncludeError(f"Include file not found: {n.virtual}")
                     _attach_location(e, interp, n.start_line, n.start_col, "", cur_virt_path)
                     raise e
-                run(inc_nodes, n.virtual)
+                run(inc_nodes, n.virtual, stack + (n.path,))
             elif isinstance(n, DirectiveNode):
                 # <%@ LCID=... CODEPAGE=... %> - same effect as assigning
                 # Response.LCID / Response.CodePage at the top of the page.
