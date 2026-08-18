@@ -35,8 +35,10 @@ from .ast_nodes import ClassDef, SubDef, FuncDef, OptionExplicitStmt
 from .vm.context import ExecutionContext
 from .server_object import ServerTransferException, make_asp_error
 from .asp_include import IncludeError
+import hashlib as _hashlib
 import os
-from .vm.interpreter import VBInterpreter
+from .ast_nodes import StringLit
+from .vm.interpreter import VBInterpreter, _UserProc
 from .vm.values import VBNothing, VBEmpty, VBNull
 
 
@@ -355,6 +357,96 @@ def render_asp_vm(vb_text: str, request=None, session=None, application=None, se
 _MAX_INCLUDE_DEPTH = 32
 
 
+def _native_sha256_digest(s: str) -> str:
+    """SHA-256 the way QuickerSite's includes/sha256.asp computes it.
+
+    That script hashes one byte per character, taken via AscB(Mid(s, i, 1)) -
+    in this runtime the first byte of the character's UTF-16LE encoding - with
+    a bit length of Len(s) * 8, and returns lowercase hex. That is exactly a
+    plain SHA-256 over that byte stream.
+    """
+    data = bytearray()
+    for c in s:
+        data.append(c.encode('utf-16le')[0])
+    return _hashlib.sha256(bytes(data)).hexdigest()
+
+
+# Verdicts of runtime verification, keyed by a hash of the VBScript source
+# block that defined SHA256. True: the interpreted implementation matched the
+# native digest on all probes, so the native fast path may be used. False: it
+# diverged (someone customized sha256.asp), so every call runs interpreted.
+# Editing the file changes the source hash, which triggers re-verification.
+_sha256_verified_sources: dict = {}
+
+# Probe inputs covering the empty string, an ordinary password, a >1-block
+# message (64-byte boundary) and a non-ASCII character.
+_SHA256_PROBES = ("", "admin", "x" * 65, "caf\u00e9")
+
+
+class _VerifiedNativeSha256(_UserProc):
+    """Drop-in replacement for the hoisted VBScript SHA256 _UserProc.
+
+    Being a _UserProc, it uses the interpreter's normal invoke() dispatch and
+    can therefore delegate to the original interpreted implementation whenever
+    the native fast path is not proven equivalent for this exact source text.
+    """
+
+    def __init__(self, original: _UserProc):
+        super().__init__(original.name, original.kind, original.params, original.body)
+        self._dim_decls = original._dim_decls
+        self.asp_file = original.asp_file
+        self.asp_line = original.asp_line
+        self.asp_src = original.asp_src
+        self._original = original
+        src = original.asp_src if isinstance(original.asp_src, str) else ''
+        self._src_key = _hashlib.sha256(src.encode('utf-8', 'replace')).hexdigest() if src else None
+
+    def _verify(self, interp) -> bool:
+        """Run the interpreted SHA256 against known inputs once per source text."""
+        if self._src_key is None:
+            return False
+        verdict = _sha256_verified_sources.get(self._src_key)
+        if verdict is not None:
+            return verdict
+        verdict = True
+        try:
+            for probe in _SHA256_PROBES:
+                got = interp._invoke_user_proc(self._original, [StringLit(probe)])
+                if got != _native_sha256_digest(probe):
+                    verdict = False
+                    break
+        except Exception:
+            verdict = False
+        _sha256_verified_sources[self._src_key] = verdict
+        return verdict
+
+    def invoke(self, interp, arg_exprs):
+        # Match the interpreted proc's arity behavior exactly.
+        if len(arg_exprs) == 1 and self._verify(interp):
+            try:
+                arg = interp.eval_expr(arg_exprs[0])
+            except Exception:
+                return interp._invoke_user_proc(self._original, arg_exprs)
+            if isinstance(arg, str):
+                return _native_sha256_digest(arg)
+            # Non-string arguments (Null, objects, numbers...) keep the exact
+            # interpreted semantics, including its error behavior.
+        return interp._invoke_user_proc(self._original, arg_exprs)
+
+
+def _install_native_proc_overrides(interp):
+    """Wrap hot hoisted VBScript procs in verified native fast paths.
+
+    Runs after hoisting on every request (the interpreter and its _procs table
+    are rebuilt per request). Pages that never define SHA256 are untouched.
+    """
+    p = interp._procs.get('SHA256')
+    if isinstance(p, _UserProc) and not isinstance(p, _VerifiedNativeSha256):
+        wrapped = _VerifiedNativeSha256(p)
+        interp._procs['SHA256'] = wrapped
+        interp.env['SHA256'] = wrapped
+
+
 def _include_cycle_message(stack, node) -> str:
     """Name the file that closes the loop, and show the chain that got there."""
     chain = [os.path.basename(p) for p in stack] + [os.path.basename(node.path)]
@@ -449,7 +541,10 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
                             p.asp_src = n.code
 
     collect(nodes, virt_path)
-    
+
+    # Wrap hot hoisted procs (sha256) in content-verified native fast paths.
+    _install_native_proc_overrides(interp)
+
     # 3. Execute Global Code
     # We walk the tree again and execute statements.
     

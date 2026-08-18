@@ -447,13 +447,24 @@ class _SQLiteProviderAdapter(_ADOProviderAdapter):
         if not phys:
             raise_runtime('ADO_UNSPECIFIED', "Invalid data source")
         assert phys is not None
+        raw = (info.data_source or '').strip()
+        in_memory = raw.lower() == ':memory:' or raw.lower().startswith(':memory:')
         try:
-            db = _ensure_sqlite3().connect(phys, check_same_thread=False)
-            db.isolation_level = None
-            db.row_factory = None
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute("PRAGMA foreign_keys=ON")
+            # File-backed databases reuse the shared connection pool keyed by
+            # the resolved path; in-memory databases cannot (each sqlite3
+            # handle is a separate database), so they always get a fresh one.
+            if in_memory:
+                db = None
+            else:
+                db = _pool_take(phys)
+            if db is None:
+                db = _ensure_sqlite3().connect(phys, check_same_thread=False)
+                db.isolation_level = None
+                db.row_factory = None
+                db.execute("PRAGMA journal_mode=WAL")
+                db.execute("PRAGMA foreign_keys=ON")
             conn._conn = db
+            conn._pool_key = None if in_memory else phys
             conn._is_open = True
             conn.State = adStateOpen
             conn._db_path = phys
@@ -2043,18 +2054,21 @@ def close_all_connections():
 
 
 # ---------------------------------------------------------------------------
-# Driver connection pool (pyodbc-backed providers only)
+# Driver connection pool (pyodbc-backed providers and SQLite)
 #
 # Classic ASP apps build a fresh ADODB.Connection per request, and the runner
 # closes every connection when the request ends. On IIS that is nearly free
 # because OLE DB / the ODBC driver manager pool the physical connection
 # underneath. pyodbc gives us no such reuse, so a Jet/ACE open+close costs
-# ~130ms + ~95ms on *every* page view.
+# ~130ms + ~95ms on *every* page view, and a plain sqlite3.connect()+close()
+# is a file open/close plus a WAL check on every page view too.
 #
-# This pool caches the physical connection instead, keyed by the exact ODBC
-# connection string. Connections are handed out exclusively (taken out of the
-# pool for the duration of a request, returned on Close), so a connection is
-# never used by two threads at once even though the server is threaded.
+# This pool caches the physical connection instead. It is keyed by the exact
+# ODBC connection string for the pyodbc-backed providers and by the resolved
+# database path for SQLite. Connections are handed out exclusively (taken out
+# of the pool for the duration of a request, returned on Close), so a
+# connection is never used by two threads at once even though the server is
+# threaded.
 # ---------------------------------------------------------------------------
 
 _pool_lock = threading.Lock()
@@ -2068,6 +2082,42 @@ except Exception:
     _POOL_MAX_PER_KEY = 4
 
 
+# A pooled SQLite handle never closes, so SQLite never gets the "last
+# connection closed" moment at which it folds the -wal file back into the .db
+# and deletes the -wal/-shm sidecars. The database stays crash-safe either way,
+# but between requests the .db on its own can be missing every committed row,
+# which silently breaks any file-level backup that copies *.db and skips the
+# sidecars. Checkpointing as the connection goes idle keeps the .db
+# self-contained. Set ASP_PY_DB_WAL_CHECKPOINT=0 to trade that back for the
+# last bit of write throughput.
+try:
+    _WAL_CHECKPOINT_ON_IDLE = os.environ.get('ASP_PY_DB_WAL_CHECKPOINT', '1').strip().lower() \
+        not in ('0', 'false', 'no', 'off')
+except Exception:
+    _WAL_CHECKPOINT_ON_IDLE = True
+
+
+def _is_sqlite_conn(db) -> bool:
+    return type(db).__module__.split('.')[0] == 'sqlite3'
+
+
+def _sqlite_checkpoint(db) -> None:
+    """Fold the -wal back into the .db and drop the sidecars, best effort.
+
+    TRUNCATE (rather than PASSIVE) is what actually empties the -wal file. It
+    is skipped harmlessly when another connection still holds a read lock, so
+    a busy database just checkpoints on a later return to the pool.
+    """
+    if not _WAL_CHECKPOINT_ON_IDLE:
+        return
+    try:
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        # Never let housekeeping fail a Close(); a non-WAL or busy database
+        # simply keeps its journal until next time.
+        pass
+
+
 def _pool_reset(db) -> bool:
     """Return a connection to a neutral state. False if it looks unusable."""
     ok = True
@@ -2077,10 +2127,21 @@ def _pool_reset(db) -> bool:
         # Harmless on an autocommit connection; a hard failure here usually
         # means the handle is dead, but Execute() will surface that clearly.
         ok = True
-    try:
-        db.autocommit = True
-    except Exception:
-        ok = False
+    if _is_sqlite_conn(db):
+        # sqlite3 has no .autocommit attribute; autocommit mode is
+        # isolation_level=None. Restore the per-connection state the fresh
+        # open path applies so a reused handle behaves like a new one.
+        try:
+            db.isolation_level = None
+            db.row_factory = None
+            db.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            ok = False
+    else:
+        try:
+            db.autocommit = True
+        except Exception:
+            ok = False
     return ok
 
 
@@ -2106,8 +2167,18 @@ def _pool_give(key: str, db) -> bool:
     """Hand a connection back. False means the caller must close it."""
     if db is None or _POOL_MAX_PER_KEY <= 0:
         return False
+    # A pooled SQLite handle keeps the database file open. If the file was
+    # deleted or replaced while the connection was checked out, don't return
+    # a handle to a database that no longer exists - let Close() drop it so
+    # the unlink/replace can actually complete.
+    if _is_sqlite_conn(db) and not os.path.exists(key):
+        return False
     if not _pool_reset(db):
         return False
+    if _is_sqlite_conn(db):
+        # Only on the way in: the handle is now idle, so this cost is off the
+        # request path, and on checkout there is nothing new to checkpoint.
+        _sqlite_checkpoint(db)
     with _pool_lock:
         lst = _conn_pool.setdefault(key, [])
         if len(lst) >= _POOL_MAX_PER_KEY:
@@ -2136,8 +2207,9 @@ class ADOConnection:
     def __init__(self, docroot: str = ''):
         self._docroot = docroot or _docroot_ref[0] or '.'
         self._conn: Optional[Any] = None
-        # Set by the pyodbc-backed adapters to the exact ODBC connection string,
-        # so Close() can return the physical connection to the pool.
+        # Set by the pooling adapters (pyodbc-backed: exact ODBC connection
+        # string; SQLite: resolved database path) so Close() can return the
+        # physical connection to the pool.
         self._pool_key: Optional[str] = None
         self._is_open: bool = False
         self._provider_kind: str = 'unknown'
