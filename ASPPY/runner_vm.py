@@ -365,6 +365,7 @@ def _native_sha256_digest(s: str) -> str:
     a bit length of Len(s) * 8, and returns lowercase hex. That is exactly a
     plain SHA-256 over that byte stream.
     """
+    s = str(s)  # collapse IStringList (str subclass w/ value-based __iter__) to its text
     data = bytearray()
     for c in s:
         data.append(c.encode('utf-16le')[0])
