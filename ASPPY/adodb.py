@@ -504,6 +504,44 @@ class _AccessProviderAdapter(_ADOProviderAdapter):
         notes="Requires pyodbc + Microsoft Access ODBC driver",
     )
 
+    # Resolved once per process; the installed ODBC driver set does not change
+    # while we are running.
+    _driver_cache: Optional[str] = None
+
+    def _resolve_access_driver(self, odb, explicit: str, lower_phys: str) -> str:
+        """Pick an installed Access ODBC driver.
+
+        Classic ASP connection strings name an OLE DB *provider* (Jet/ACE), not
+        an ODBC driver, so in the common case we must choose one ourselves. The
+        modern ACE name is preferred, but fall back to whatever Access driver
+        the box actually has (e.g. only the 32-bit-era 'Microsoft Access Driver
+        (*.mdb)' when ACE is not installed), instead of failing with IM002.
+        """
+        if explicit:
+            return explicit
+        if _AccessProviderAdapter._driver_cache is not None:
+            return _AccessProviderAdapter._driver_cache
+
+        preferred = 'Microsoft Access Driver (*.mdb, *.accdb)'
+        chosen = preferred
+        try:
+            installed = [str(d) for d in odb.drivers()]
+        except Exception:
+            installed = []
+        if installed and preferred not in installed:
+            # Any driver advertising .mdb support (ACE localized names keep the
+            # '(*.mdb' part; the legacy Jet driver is 'Microsoft Access Driver
+            # (*.mdb)'). Exclude the Text/dBASE drivers.
+            candidates = [d for d in installed if '(*.mdb' in d.lower() and 'text' not in d.lower() and 'dbase' not in d.lower()]
+            if candidates:
+                # Legacy Jet ODBC cannot open .accdb; only use it for .mdb.
+                if lower_phys.endswith('.accdb'):
+                    candidates = [d for d in candidates if '.accdb' in d.lower()]
+                if candidates:
+                    chosen = candidates[0]
+        _AccessProviderAdapter._driver_cache = chosen
+        return chosen
+
     def open(self, conn: 'ADOConnection', info: ParsedConnectionString):
         odb = _ensure_pyodbc()
         if odb is None:
@@ -524,9 +562,7 @@ class _AccessProviderAdapter(_ADOProviderAdapter):
         if not (lower_phys.endswith('.mdb') or lower_phys.endswith('.accdb')):
             raise_runtime('ADO_UNSPECIFIED', f"Access data source must be .mdb or .accdb: {phys}")
 
-        driver = info.attrs.get('driver', '').strip()
-        if not driver:
-            driver = 'Microsoft Access Driver (*.mdb, *.accdb)'
+        driver = self._resolve_access_driver(odb, info.attrs.get('driver', '').strip(), lower_phys)
         if not driver.startswith('{'):
             driver = '{' + driver
         if not driver.endswith('}'):
@@ -546,8 +582,11 @@ class _AccessProviderAdapter(_ADOProviderAdapter):
         odbc_cs = ';'.join(parts) + ';'
 
         try:
-            db = odb.connect(odbc_cs, autocommit=True)
+            db = _pool_take(odbc_cs)
+            if db is None:
+                db = odb.connect(odbc_cs, autocommit=True)
             conn._conn = db
+            conn._pool_key = odbc_cs
             conn._is_open = True
             conn.State = adStateOpen
             conn._db_path = phys
@@ -557,6 +596,22 @@ class _AccessProviderAdapter(_ADOProviderAdapter):
             if conn not in conns:
                 conns.append(conn)
         except Exception as e:
+            if 'IM002' in str(e):
+                try:
+                    installed = ', '.join(str(d) for d in odb.drivers()) or '(none)'
+                except Exception:
+                    installed = '(unknown)'
+                import struct as _struct
+                bits = _struct.calcsize('P') * 8
+                raise_runtime(
+                    'ADO_UNSPECIFIED',
+                    (
+                        f"Access ODBC driver {driver} is not installed for {bits}-bit Python. "
+                        f"Installed ODBC drivers: {installed}. "
+                        "Install the Microsoft Access Database Engine Redistributable "
+                        f"({'x64' if bits == 64 else 'x86'}) from Microsoft, then restart ASPPY."
+                    ),
+                )
             raise_runtime('ADO_UNSPECIFIED', f"Connection Open error: {e}")
 
 
@@ -608,8 +663,11 @@ class _ExcelProviderAdapter(_ADOProviderAdapter):
         odbc_cs = ';'.join(parts) + ';'
 
         try:
-            db = odb.connect(odbc_cs, autocommit=True)
+            db = _pool_take(odbc_cs)
+            if db is None:
+                db = odb.connect(odbc_cs, autocommit=True)
             conn._conn = db
+            conn._pool_key = odbc_cs
             conn._is_open = True
             conn.State = adStateOpen
             conn._db_path = phys
@@ -746,8 +804,11 @@ class _ODBCProviderAdapter(_ADOProviderAdapter):
             odbc_cs += ';'
 
         try:
-            db = odb.connect(odbc_cs, autocommit=True)
+            db = _pool_take(odbc_cs)
+            if db is None:
+                db = odb.connect(odbc_cs, autocommit=True)
             conn._conn = db
+            conn._pool_key = odbc_cs
             conn._is_open = True
             conn.State = adStateOpen
             conn._db_path = ''
@@ -1981,12 +2042,103 @@ def close_all_connections():
             pass
 
 
+# ---------------------------------------------------------------------------
+# Driver connection pool (pyodbc-backed providers only)
+#
+# Classic ASP apps build a fresh ADODB.Connection per request, and the runner
+# closes every connection when the request ends. On IIS that is nearly free
+# because OLE DB / the ODBC driver manager pool the physical connection
+# underneath. pyodbc gives us no such reuse, so a Jet/ACE open+close costs
+# ~130ms + ~95ms on *every* page view.
+#
+# This pool caches the physical connection instead, keyed by the exact ODBC
+# connection string. Connections are handed out exclusively (taken out of the
+# pool for the duration of a request, returned on Close), so a connection is
+# never used by two threads at once even though the server is threaded.
+# ---------------------------------------------------------------------------
+
+_pool_lock = threading.Lock()
+_conn_pool: dict[str, list[Any]] = {}
+
+# Idle connections kept per distinct connection string. Enough to cover normal
+# request concurrency without holding open an unbounded number of file handles.
+try:
+    _POOL_MAX_PER_KEY = max(0, int(os.environ.get('ASP_PY_DB_POOL_MAX', '4')))
+except Exception:
+    _POOL_MAX_PER_KEY = 4
+
+
+def _pool_reset(db) -> bool:
+    """Return a connection to a neutral state. False if it looks unusable."""
+    ok = True
+    try:
+        db.rollback()
+    except Exception:
+        # Harmless on an autocommit connection; a hard failure here usually
+        # means the handle is dead, but Execute() will surface that clearly.
+        ok = True
+    try:
+        db.autocommit = True
+    except Exception:
+        ok = False
+    return ok
+
+
+def _pool_take(key: str):
+    """Check out an idle connection for `key`, or None if the pool is empty."""
+    if _POOL_MAX_PER_KEY <= 0:
+        return None
+    while True:
+        with _pool_lock:
+            lst = _conn_pool.get(key)
+            db = lst.pop() if lst else None
+        if db is None:
+            return None
+        if _pool_reset(db):
+            return db
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _pool_give(key: str, db) -> bool:
+    """Hand a connection back. False means the caller must close it."""
+    if db is None or _POOL_MAX_PER_KEY <= 0:
+        return False
+    if not _pool_reset(db):
+        return False
+    with _pool_lock:
+        lst = _conn_pool.setdefault(key, [])
+        if len(lst) >= _POOL_MAX_PER_KEY:
+            return False
+        lst.append(db)
+    return True
+
+
+def close_pooled_connections():
+    """Close every idle pooled connection. Call on server shutdown so the
+    Access/Excel file locks are released instead of lingering until exit."""
+    with _pool_lock:
+        pools = list(_conn_pool.values())
+        _conn_pool.clear()
+    for lst in pools:
+        for db in lst:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+
 class ADOConnection:
     """Classic ADO Connection shim backed by SQLite."""
 
     def __init__(self, docroot: str = ''):
         self._docroot = docroot or _docroot_ref[0] or '.'
         self._conn: Optional[Any] = None
+        # Set by the pyodbc-backed adapters to the exact ODBC connection string,
+        # so Close() can return the physical connection to the pool.
+        self._pool_key: Optional[str] = None
         self._is_open: bool = False
         self._provider_kind: str = 'unknown'
         self.ConnectionString: str = ''
@@ -2017,6 +2169,10 @@ class ADOConnection:
 
     def Open(self, connection_string: str = '', user_id: str = '',
              password: str = '', options: int = -1):
+        # Re-opening an already-open connection would orphan the current handle
+        # (and with pooling, lose it for good), so hand it back first.
+        if self._conn is not None:
+            self.Close()
         if connection_string:
             self.ConnectionString = vbs_cstr(connection_string)
         cs = self.ConnectionString.strip()
@@ -2047,12 +2203,21 @@ class ADOConnection:
 
     def Close(self):
         if self._conn is not None:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
+            db = self._conn
+            key = self._pool_key
+            # Pooled providers keep the physical connection alive for the next
+            # request; _pool_give rolls back any transaction the page left open
+            # and returns False when the pool is full, in which case we really
+            # do close it.
+            if key is None or not _pool_give(key, db):
+                try:
+                    db.close()
+                except Exception:
+                    pass
         self._conn = None
+        self._pool_key = None
         self._is_open = False
+        self._in_transaction = False
         self.State = adStateClosed
         try:
             conns = _get_open_conns()

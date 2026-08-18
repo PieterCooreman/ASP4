@@ -253,6 +253,11 @@ class _UserProc:
         self.kind = kind  # 'SUB' or 'FUNCTION'
         self.params = params
         self.body = body
+        # Dim declarations collected from `body`, filled lazily on first
+        # invocation under Option Explicit. The body AST never changes after
+        # construction, so re-walking it on every call (hot pages invoke the
+        # same proc hundreds of times per request) is pure waste.
+        self._dim_decls = None
         # ASP source location where this proc was defined (set by runner_vm)
         self.asp_file = None   # virtual path of the ASP file
         self.asp_line = None   # ASP line number of the <% block
@@ -2812,9 +2817,13 @@ class VBInterpreter:
             frame[fn_name] = VBEmpty
 
         if self.option_explicit:
-            decls = []
-            self._collect_dim_decls(proc.body, decls)
-            self._predeclare_dim_decls(frame, decls)
+            decls = proc._dim_decls
+            if decls is None:
+                decls = []
+                self._collect_dim_decls(proc.body, decls)
+                proc._dim_decls = decls
+            if decls:
+                self._predeclare_dim_decls(frame, decls)
 
         for i, p in enumerate(proc.params):
             pnm = p.name # parser ensures upper
@@ -3000,9 +3009,13 @@ class VBInterpreter:
             frame[fn_name] = VBEmpty
 
         if self.option_explicit:
-            decls = []
-            self._collect_dim_decls(proc.body, decls)
-            self._predeclare_dim_decls(frame, decls)
+            decls = proc._dim_decls
+            if decls is None:
+                decls = []
+                self._collect_dim_decls(proc.body, decls)
+                proc._dim_decls = decls
+            if decls:
+                self._predeclare_dim_decls(frame, decls)
 
         # evaluate/bind args
         for i, p in enumerate(proc.params):
