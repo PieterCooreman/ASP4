@@ -1266,12 +1266,34 @@ class ADORecordset:
     def BOF(self) -> bool:
         if not self._is_open:
             return True
+        # An EMPTY recordset reports BOF and EOF both True - there is no current
+        # record to be positioned on. Verified on IIS 10 for every cursor type.
+        # `If rs.BOF And rs.EOF Then` is THE canonical "no rows?" test in
+        # Classic ASP, so reporting False here made those checks silently fail
+        # and code then read fields off an empty recordset.
+        if not self._rows:
+            return True
         return self._cur_idx < 0
 
     @property
     def RecordCount(self) -> int:
         if not self._is_open:
             return -1
+        # A forward-only cursor cannot know how many rows follow, so ADO reports
+        # -1 (adOpenForwardOnly is the DEFAULT for Conn.Execute and for
+        # Recordset.Open without a CursorType). Keyset/static/dynamic cursors
+        # report the real count, including 0 for an empty set. Verified on
+        # IIS 10. Returning a true count for a forward-only cursor let
+        # `If rs.RecordCount > 0` succeed where IIS takes the -1 path (and hid
+        # paging bugs that only appear on real ADO).
+        # The cursor type decides first: a forward-only cursor reports -1 even
+        # when the set is empty (verified on IIS 10), so this cannot be
+        # short-circuited on "no rows".
+        try:
+            if int(self.CursorType) == adOpenForwardOnly:
+                return -1
+        except Exception:
+            pass
         return len(self._rows)
 
     @property

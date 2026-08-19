@@ -4,8 +4,52 @@ from __future__ import annotations
 
 
 class VBErr:
+    # The Err object's DEFAULT property is Number, so bare `Err` reads as the
+    # error code. Verified on IIS 10: CStr(Err) is "0", (Err = 0) is True and
+    # Err + 5 is 5 on a clean Err. Legacy code relies on this constantly:
+    #     Conn.Open ConnStr
+    #     If Err Then ...            ' i.e. If Err.Number <> 0
+    __vbs_default__ = 'Number'
+
+    # ... and that default property is WRITABLE, so `Err = 0` is a property-put
+    # that clears only Number (Description/Source survive - it is not
+    # Err.Clear), leaving Err an Object. Verified on IIS 10. Without this the
+    # name would be rebound to the Integer 0, destroying the intrinsic Err for
+    # the rest of the page and silently breaking every later
+    # `If Err.Number <> 0` check.
+    __vbs_default_put__ = 'Number'
+
     def __init__(self):
         self.Clear()
+
+    # Err.Number and Err.HelpContext are declared Long on the COM interface, so
+    # their subtype never depends on the value: TypeName(Err.Number) is "Long"
+    # and VarType(Err.Number) is 3 (vbLong) even for 0 or 6, where ASPPY would
+    # otherwise infer "Integer" from the magnitude. Verified on IIS 10. Scripts
+    # that branch on VarType/TypeName of an error code need this.
+    @property
+    def Number(self):
+        from .vb_runtime import VBLong
+        return VBLong(self._number)
+
+    @Number.setter
+    def Number(self, value):
+        try:
+            self._number = int(value)
+        except (TypeError, ValueError):
+            self._number = 0
+
+    @property
+    def HelpContext(self):
+        from .vb_runtime import VBLong
+        return VBLong(self._helpcontext)
+
+    @HelpContext.setter
+    def HelpContext(self, value):
+        try:
+            self._helpcontext = int(value)
+        except (TypeError, ValueError):
+            self._helpcontext = 0
 
     def Clear(self):
         self.Number = 0

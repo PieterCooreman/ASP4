@@ -103,6 +103,52 @@ def _elementpath_unsupported(xp: str) -> str:
     return ""
 
 
+def _normalize_xml_encoding(data: bytes) -> bytes:
+    """Re-encode a document to UTF-8 when the parser cannot read its charset.
+
+    MSXML supports every codepage Windows knows, so legacy apps declare
+    whatever their language used: GB2312/GBK (Simplified Chinese), Big5
+    (Traditional), Shift-JIS (Japanese), EUC-KR (Korean), windows-125x /
+    ISO-8859-x (Cyrillic, Greek, Turkish, Western), and so on.
+
+    lxml handles all of those natively, but it is an optional dependency. The
+    stdlib ``expat`` parser only knows UTF-8, UTF-16, ISO-8859-1 and US-ASCII
+    and raises "multi-byte encodings are not supported" for the CJK ones. This
+    keeps the runtime encoding-agnostic on a stdlib-only install: decode with
+    the declared codec ourselves (Python ships them all) and hand the parser
+    equivalent UTF-8 bytes.
+
+    No-ops when the document is already parseable, so lxml installs and plain
+    UTF-8 documents are unaffected.
+    """
+    if not data:
+        return data
+    m = re.match(rb'\s*<\?xml.*?\?>', data, re.S)
+    if not m:
+        return data  # No declaration: the parser assumes UTF-8, as it should.
+    decl = m.group(0)
+    em = re.search(rb'encoding\s*=\s*(["\'])(.*?)\1', decl, re.I)
+    if not em:
+        return data
+    try:
+        enc = em.group(2).decode('ascii', errors='replace').strip()
+    except Exception:
+        return data
+    if not enc or enc.lower().replace('_', '-') in (
+            'utf-8', 'utf8', 'us-ascii', 'ascii', 'iso-8859-1', 'latin-1',
+            'latin1', 'utf-16', 'utf-16le', 'utf-16be'):
+        return data  # Natively supported by every backend.
+    try:
+        text = data.decode(enc, errors='replace')
+    except (LookupError, UnicodeError, TypeError):
+        return data  # Unknown codec: let the parser report the problem.
+    # Drop the now-inaccurate encoding= so the parser trusts the UTF-8 bytes.
+    new_decl = re.sub(r'\s+encoding\s*=\s*(["\']).*?\1', '',
+                      decl.decode('ascii', errors='replace'), count=1,
+                      flags=re.I)
+    return (new_decl + text[m.end():]).encode('utf-8', errors='replace')
+
+
 def _parse_selection_namespaces(decl: str) -> dict[str, str]:
     """Parse `xmlns:a='urn:x' xmlns:b="urn:y"` into {prefix: uri}."""
     out: dict[str, str] = {}
@@ -1675,6 +1721,7 @@ class DOMDocument:
         # Capture namespaces while parsing.
         self._ns_uri_to_prefix = {}
         self._prefix_to_uri = {}
+        data = _normalize_xml_encoding(data)
         try:
             ns_events = ("start", "start-ns")
             bio = io.BytesIO(data)
@@ -1730,19 +1777,46 @@ class DOMDocument:
             self._url = r.url
             return self._parse_xml_bytes(r.body)
 
-        # Local file paths are blocked by default (SSRF / sandbox).
-        if not _env_bool("ASP_PY_XML_ALLOW_LOCAL", False):
-            self.parseError.errorCode = 1
-            self.parseError.reason = "MSXML: local paths blocked (set ASP_PY_XML_ALLOW_LOCAL=1 to allow)"
-            self.readyState = 4
-            self._fire_ready_state()
-            return False
-
-        # If explicitly allowed, read from docroot if provided, else from absolute path.
+        # Resolve the local path first so we can tell "inside the application"
+        # from "anywhere on disk".
         try:
             path = u
             if self._docroot and not os.path.isabs(path):
                 path = os.path.abspath(os.path.join(self._docroot, path.lstrip("/\\")))
+            else:
+                path = os.path.abspath(path)
+        except Exception as e:
+            self.parseError.errorCode = 1
+            self.parseError.reason = str(e)
+            self.readyState = 4
+            self._fire_ready_state()
+            return False
+
+        # Loading an XML file that ships with the application is a core Classic
+        # ASP idiom - PowerEasy keeps its whole language pack in
+        # /Language/Gb2312.xml and reads it via
+        # XmlDoc.load(Server.MapPath("/Language/Gb2312.xml")) on every request.
+        # So allow anything that resolves INSIDE the docroot; that keeps the
+        # sandbox's actual purpose (no reading arbitrary files elsewhere on the
+        # box, no '..' escapes) while matching IIS for in-application files.
+        # Outside the docroot still needs ASP_PY_XML_ALLOW_LOCAL=1.
+        inside_docroot = False
+        if self._docroot:
+            try:
+                root = os.path.abspath(self._docroot)
+                inside_docroot = os.path.commonpath([root, path]) == root
+            except Exception:
+                inside_docroot = False
+        if not inside_docroot and not _env_bool("ASP_PY_XML_ALLOW_LOCAL", False):
+            self.parseError.errorCode = 1
+            self.parseError.reason = (
+                "MSXML: local paths outside the application are blocked "
+                "(set ASP_PY_XML_ALLOW_LOCAL=1 to allow)")
+            self.readyState = 4
+            self._fire_ready_state()
+            return False
+
+        try:
             with open(path, "rb") as f:
                 data = f.read(_max_bytes())
             self._url = path
@@ -1759,7 +1833,26 @@ class DOMDocument:
         self.readyState = 1
         self._fire_ready_state()
         try:
-            data = str(xml_text).encode("utf-8", errors="replace")
+            s = str(xml_text)
+            # loadXML() takes a STRING, which is already decoded text, so the
+            # `encoding="..."` declaration inside it describes bytes that no
+            # longer exist. MSXML therefore IGNORES that declaration here and
+            # keeps every character as-is; verified on IIS 10 with declarations
+            # that contradict the content (encoding="us-ascii" holding U+00E9,
+            # encoding="Shift-JIS" holding U+4E2D, and a bogus encoding name):
+            # all of them load and round-trip the original character.
+            #
+            # So serialise to UTF-8 - which represents ALL of Unicode, whatever
+            # the application's language - and neutralise the declaration so the
+            # parser reads the bytes we actually produced. Encoding to the
+            # declared codepage instead would silently mangle any character
+            # outside it (that is how "us-ascii" turned U+00E9 into "?").
+            decl = re.match(r'\s*<\?xml.*?\?>', s, re.S)
+            if decl and re.search(r'encoding\s*=', decl.group(0), re.I):
+                head = re.sub(r'\s+encoding\s*=\s*(["\']).*?\1', '',
+                              decl.group(0), count=1, flags=re.I)
+                s = head + s[decl.end():]
+            data = s.encode("utf-8", errors="replace")
         except Exception:
             data = b""
         return self._parse_xml_bytes(data)

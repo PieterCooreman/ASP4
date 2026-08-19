@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_EVEN, InvalidOperation
 import struct as _struct
 
 from .vb_errors import raise_runtime
-from .vb_runtime import VBSingle, VBLong, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
+from .vb_runtime import VBSingle, VBLong, VBByte, vbs_cbool, vbs_cstr, vbs_get_lcid, vbs_set_lcid
 from . import vb_locale
 from .vm.values import VBEmpty, VBNull, VBNothing
 
@@ -151,6 +151,15 @@ def Unescape(string):
     return "".join(out)
 
 def UBound(arrayname, dimension=1):
+    # VBScript fixes this function's return SUBTYPE at Long (VarType 3)
+    # regardless of magnitude - TypeName is "Long" even for 0 or 1.
+    # Verified on IIS 10. ASPPY otherwise infers Integer from the value,
+    # which changes TypeName/VarType results and any arithmetic that
+    # overflows an Integer.
+    from .vb_runtime import VBLong
+    return VBLong(_ubound_raw(arrayname, dimension))
+
+def _ubound_raw(arrayname, dimension=1):
     from .vm.values import VBArray
     if isinstance(arrayname, VBArray):
         try: return arrayname.ubound(dimension)
@@ -164,6 +173,15 @@ def UBound(arrayname, dimension=1):
     raise_runtime('TYPE_MISMATCH')
 
 def LBound(arrayname, dimension=1):
+    # VBScript fixes this function's return SUBTYPE at Long (VarType 3)
+    # regardless of magnitude - TypeName is "Long" even for 0 or 1.
+    # Verified on IIS 10. ASPPY otherwise infers Integer from the value,
+    # which changes TypeName/VarType results and any arithmetic that
+    # overflows an Integer.
+    from .vb_runtime import VBLong
+    return VBLong(_lbound_raw(arrayname, dimension))
+
+def _lbound_raw(arrayname, dimension=1):
     from .vm.values import VBArray
     if isinstance(arrayname, VBArray):
         try: return arrayname.lbound(dimension)
@@ -238,6 +256,7 @@ def TypeName(varname):
     if v is VBNull: return "Null"
     if v is VBNothing: return "Nothing"
     if isinstance(v, bool): return "Boolean"
+    if isinstance(v, VBByte): return "Byte"
     if isinstance(v, VBLong): return "Long"
     # VBScript quirk (verified on IIS): -32768 reports as Long even though it
     # fits in an Integer, because the literal is negated from a Long.
@@ -282,6 +301,7 @@ def VarType(varname):
     if v is VBEmpty or v is None: return 0
     if v is VBNull: return 1
     if isinstance(v, bool): return 11
+    if isinstance(v, VBByte): return 17  # vbByte
     if isinstance(v, VBLong): return 3
     # vbInteger (2) for values in Integer range, vbLong (3) beyond - keep
     # consistent with TypeName so VarType(42) = 2 like IIS (including the
@@ -339,15 +359,27 @@ def Asc(s):
 def AscW(s):
     t = vbs_cstr(s)
     if t == "": raise_runtime('INVALID_PROC_CALL')
-    return ord(t[0])
+    cp = ord(t[0])
+    # AscW returns a VBScript Integer, which is SIGNED 16-bit, so every code
+    # point above U+7FFF comes back negative: AscW(ChrW(&HFFFF)) is -1, not
+    # 65535 (verified on IIS 10). That covers most non-Latin scripts - CJK,
+    # Hangul, and the U+8000+ range generally - so scripts doing
+    # `If AscW(c) > &H7FF Then` or round-tripping through ChrW() need the wrap.
+    # ChrW() already accepts the negative form, so the pair stays symmetric.
+    if cp > 0x7FFF:
+        cp -= 0x10000
+    return cp
 
 def AscB(s):
+    # AscB yields a Byte (TypeName "Byte", VarType 17) on IIS, not an
+    # Integer. Verified on IIS 10.
     if s is VBNull:
         return VBNull
     b = bytes(s) if isinstance(s, (bytes, bytearray)) else vbs_cstr(s).encode('utf-16le')
     if len(b) == 0:
         raise_runtime('INVALID_PROC_CALL')
-    return b[0]
+    from .vb_runtime import VBByte
+    return VBByte(b[0])
 
 def Chr(charcode):
     n = int(_to_int(charcode))
@@ -502,6 +534,12 @@ def MidB(expr, start, length=None):
     return b[i:i + ln]
 
 def InStr(*args):
+    # InStr/InStrRev return Long on IIS (TypeName "Long", VarType 3),
+    # even for 0 or 1. Verified on IIS 10.
+    from .vb_runtime import VBLong
+    return VBLong(_instr_raw(*args))
+
+def _instr_raw(*args):
     start = 1
     compare = 0
     s1 = None

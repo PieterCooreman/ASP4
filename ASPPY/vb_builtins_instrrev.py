@@ -12,6 +12,10 @@ from .vm.values import VBEmpty, VBNull, VBNothing
 from .vb_builtins import _to_int
 
 def InStrRev(string1, string2, start=-1, compare=0):
+    from .vb_runtime import VBLong
+    return VBLong(_instrrev_raw(string1, string2, start, compare))
+
+def _instrrev_raw(string1, string2, start=-1, compare=0):
 
     # InStrRev differs from InStr: IIS raises Invalid use of Null (94) here,
     # whereas InStr(Null, s) propagates Null. Verified against IIS.

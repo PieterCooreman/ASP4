@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import urllib.parse
 import os
+import re
+
+# Literal whitespace inside a Cookie header name/value (IIS discards it).
+_WS_RE = re.compile(r'\s+')
 
 
 class NameValueCollection:
@@ -458,6 +462,34 @@ class Request:
         return NameValueCollection({})
 
 
+def _iis_url_encode(s) -> str:
+    """URL-encode a value the way IIS encodes cookie data.
+
+    Verified against IIS 10 (Server.URLEncode and the Request.Cookies raw
+    string both use this): ONLY letters and digits survive, a space becomes
+    '+', and every other byte becomes an uppercase %XX escape. Note this is
+    stricter than Python's quote_plus, which leaves '-', '.', '_' and '~'
+    alone.
+    """
+    out = []
+    for ch in str(s):
+        if ch.isascii() and ch.isalnum():
+            out.append(ch)
+        elif ch == ' ':
+            out.append('+')
+        else:
+            for b in ch.encode('utf-8', errors='replace'):
+                out.append('%%%02X' % b)
+    return ''.join(out)
+
+
+def _unquote_plus(s: str) -> str:
+    try:
+        return urllib.parse.unquote_plus(str(s))
+    except Exception:
+        return str(s)
+
+
 class CookieIn:
     # `Request.Cookies("x")` with no sub-key reads as the cookie's VALUE on
     # IIS, so `If Request.Cookies("visits") = "" Then` works. Private attribute
@@ -466,9 +498,18 @@ class CookieIn:
 
     def __init__(self, name: str, value: str, keys=None):
         self.Name = name
-        self._value = value or ""
-        # keys: list[(k,v)] in insertion order
-        self._keys = keys or []
+        # keys: list[(k,v)] in the order IIS enumerates them (already
+        # reversed relative to how they appear in the Cookie header).
+        self._keys = list(keys or [])
+        if self._keys:
+            # IIS: reading a cookie DICTIONARY without a key yields all the
+            # keys as one URL-encoded query string (documented on MSDN and
+            # verified on IIS 10), not the raw header text.
+            self._value = "&".join(
+                "%s=%s" % (_iis_url_encode(k), _iis_url_encode(v))
+                for (k, v) in self._keys)
+        else:
+            self._value = value or ""
         self._kmap = {}
         for (k, v) in self._keys:
             lk = str(k).lower()
@@ -479,11 +520,39 @@ class CookieIn:
     def HasKeys(self):
         return len(self._keys) > 0
 
+    @property
+    def Count(self):
+        # IIS reports the number of sub-keys (0 for a plain cookie) as a Long.
+        from .vb_runtime import VBLong
+        return VBLong(len(self._keys))
+
+    # VBScript is case-insensitive; keep .count resolving to the key count.
+    count = Count
+
+    def Key(self, index):
+        i = int(index)
+        if i < 1 or i > len(self._keys):
+            raise IndexError("Index out of range")
+        return self._keys[i - 1][0]
+
+    def _raw_value(self) -> str:
+        """This cookie as it appears inside Request.Cookies' raw string."""
+        if self._keys:
+            # Already an encoded query string.
+            return self._value
+        return _iis_url_encode(self._value)
+
     def __iter__(self):
         return iter([k for (k, _v) in self._keys])
 
     def __vbs_index_get__(self, key):
         k = str(key)
+        # IIS also allows 1-based positional access: Request.Cookies("d")(1).
+        if isinstance(key, (int, float)) and not isinstance(key, bool):
+            i = int(key)
+            if 1 <= i <= len(self._keys):
+                return self._keys[i - 1][1]
+            return ""
         # case-insensitive
         lk = k.lower()
         if lk in self._kmap:
@@ -498,17 +567,29 @@ class CookiesCollection:
     """Request.Cookies collection.
 
     Iterates cookie names. Indexing returns a CookieIn object.
+
+    Used WITHOUT a cookie name (`If Request.Cookies <> "" Then`, a very common
+    idiom in legacy anti-SQL-injection headers), IIS invokes the collection's
+    default property, which yields "a URL-encoded list of the cookies"
+    (IRequestDictionary::get_Item on MSDN). Verified on IIS 10, that string is
+    `name=value` pairs joined with ';', listed in REVERSE order, with the
+    values URL-encoded but the names left as-is. Without this default property
+    the idiom above died with error 450.
     """
+
+    # See _raw(): the whole-collection default property.
+    __vbs_default__ = '_raw_text'
 
     def __init__(self, mapping: dict):
         # mapping: name -> list[str]
         # Canonicalize cookie names by percent-decoding and merging duplicates.
+        # IIS keeps the FIRST value when a name repeats in the Cookie header.
         raw = mapping or {}
         merged = {}
         for k, vals in raw.items():
             nk = str(k)
             try:
-                nk = urllib.parse.unquote(nk)
+                nk = urllib.parse.unquote_plus(nk)
             except Exception:
                 pass
             if nk not in merged:
@@ -567,6 +648,36 @@ class CookiesCollection:
                 names.append(n)
         return names
 
+    @property
+    def _raw_text(self):
+        """The collection's default property: IIS's URL-encoded cookie list.
+
+        Verified against IIS 10:
+          * `name=value` pairs joined with ';' (no space)
+          * REVERSE order: cookies written this request via Response.Cookies
+            come first (also reversed), then the client's cookies reversed
+          * values URL-encoded (space -> '+'), names emitted as-is
+          * a cookie dictionary renders as its encoded `k=v&k=v` string
+          * a trailing ';' is present iff any Response.Cookies were written
+        """
+        parts = []
+        resp_names = self._resp_cookie_names()
+        for n in reversed(resp_names):
+            c = self.__vbs_index_get__(n)
+            parts.append("%s=%s" % (n, c._raw_value()))
+        req_names = [n for n in self._m.keys()
+                     if str(n).lower() not in {str(x).lower() for x in resp_names}]
+        for n in reversed(req_names):
+            c = self.__vbs_index_get__(n)
+            parts.append("%s=%s" % (n, c._raw_value()))
+        if not parts:
+            return ""
+        out = ";".join(parts)
+        # IIS appends a trailing ';' when the response contributed cookies.
+        if resp_names:
+            out += ";"
+        return out
+
     def Exists(self, name) -> bool:
         if str(name).lower() in self._kmap:
             return True
@@ -606,9 +717,15 @@ class CookiesCollection:
         if lk in self._kmap:
             n = self._kmap[lk]
         vals = self._m.get(n) or []
+        # IIS keeps the FIRST value when the header repeats a cookie name.
         v = vals[0] if vals else ""
         keys = _try_parse_cookie_keys(v)
-        return CookieIn(n, v, keys=keys)
+        if keys:
+            # IIS enumerates cookie sub-keys in reverse header order.
+            keys = list(reversed(keys))
+            return CookieIn(n, v, keys=keys)
+        # A plain cookie's value is URL-decoded by IIS ("a%20b" -> "a b").
+        return CookieIn(n, _unquote_plus(v), keys=[])
 
 
 def _try_parse_cookie_keys(v: str):
@@ -653,13 +770,19 @@ def _parse_cookie_header(cookie_header: str) -> dict:
         if not p:
             continue
         if '=' not in p:
-            continue
-        k, v = p.split('=', 1)
-        k = k.strip()
-        v = v.strip()
+            # IIS still registers a valueless segment ("...; bare; ...") as a
+            # cookie whose value is empty, and it counts towards Cookies.Count.
+            k, v = p, ''
+        else:
+            k, v = p.split('=', 1)
+        # Literal whitespace is illegal inside a cookie name/value; IIS drops
+        # every such character rather than preserving it ("a b" reads as "ab",
+        # while the percent-encoded "a%20b" still decodes to "a b").
+        k = _WS_RE.sub('', k)
+        v = _WS_RE.sub('', v)
         # Decode percent-encoding in cookie name to avoid duplicates like asp%5Fpy vs asp_py.
         try:
-            k = urllib.parse.unquote(k)
+            k = urllib.parse.unquote_plus(k)
         except Exception:
             pass
         if k not in out:

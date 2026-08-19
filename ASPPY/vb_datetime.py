@@ -168,6 +168,11 @@ def DateAdd(interval, number, date):
 
 
 def DateDiff(interval, date1, date2, firstdayofweek=vbSunday, firstweekofyear=vbFirstJan1):
+    # DateDiff returns Long on IIS (TypeName "Long") even for 0.
+    from .vb_runtime import VBLong
+    return VBLong(_datediff_raw(interval, date1, date2, firstdayofweek, firstweekofyear))
+
+def _datediff_raw(interval, date1, date2, firstdayofweek=vbSunday, firstweekofyear=vbFirstJan1):
     if _is_null(date1) or _is_null(date2):
         return VBNull
     itv = str(interval).lower()

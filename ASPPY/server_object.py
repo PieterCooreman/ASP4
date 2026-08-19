@@ -973,6 +973,18 @@ class Server:
             from .msxml import DOMDocument
 
             return DOMDocument(docroot=self._docroot)
+        # The free-threaded DOM is the same object model, just a different
+        # threading model - irrelevant here, and IIS reports TypeName
+        # "DOMDocument" for these too (verified on IIS 10). Legacy code uses
+        # them for cached/Application-scoped XML, e.g. PowerEasy's
+        # Server.CreateObject("Microsoft.FreeThreadedXMLDOM").
+        if pid in ("microsoft.freethreadedxmldom",
+                   "msxml2.freethreadeddomdocument",
+                   "msxml2.freethreadeddomdocument.3.0",
+                   "msxml2.freethreadeddomdocument.6.0"):
+            from .msxml import DOMDocument
+
+            return DOMDocument(docroot=self._docroot)
         if pid in ("cdo.message", "cdosys.message"):
             from .cdo import CDOMessage
 

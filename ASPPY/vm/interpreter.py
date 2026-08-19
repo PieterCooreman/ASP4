@@ -1285,6 +1285,21 @@ class VBInterpreter:
                 raise_runtime('SUBSCRIPT_OUT_OF_RANGE',
                     f"{_call_varname2}({', '.join(str(a) for a in args)}){_ub_str2}")
         if callable(callee):
+            if isinstance(callee, _Sentinel):
+                # Calling Empty/Null/Nothing: name the culprit, otherwise the
+                # bare "Expected function, got VBEmpty" gives no clue which
+                # identifier failed to resolve.
+                _n = None
+                try:
+                    if isinstance(expr.callee, Ident):
+                        _n = expr.callee.name
+                    elif isinstance(expr.callee, Member):
+                        _n = '.' + str(expr.callee.name)
+                except Exception:
+                    _n = None
+                raise_runtime('TYPE_MISMATCH',
+                              f"Expected function, got {callee.name}"
+                              + (f": {_n}" if _n else ""))
             return callee(*args)
         # Provide a helpful message; this bubbles into aspLite's Err.Description.
         callee_hint = type(callee).__name__
@@ -1817,6 +1832,30 @@ class VBInterpreter:
                 raise_runtime('WRONG_NUM_ARGS',
                               "Wrong number of arguments or invalid property assignment")
             if isinstance(tgt, Ident):
+                # `name = scalar` where `name` currently holds an object that
+                # exposes a WRITABLE default property is a PROPERTY-PUT on that
+                # object, not a rebinding of the name. Verified on IIS 10 with
+                # the intrinsic Err object, whose default property is Number:
+                #   Err.Raise 6 : Err = 0
+                #   -> TypeName(Err) is still "Object" and Err.Number is 0
+                # (Description/Source keep their values, so it really is a
+                # property-put and not Err.Clear.) Objects whose default
+                # property is read-only or takes an argument do NOT behave this
+                # way - there the name is rebound to the scalar - so this is
+                # gated on the default property actually being settable.
+                cur = None
+                try:
+                    cur = self._get_var_quiet(tgt.name)
+                except Exception:
+                    cur = None
+                if cur is not None and not isinstance(cur, _Sentinel):
+                    dname = getattr(cur.__class__, '__vbs_default_put__', None)
+                    if dname:
+                        try:
+                            setattr(cur, dname, val)
+                            return
+                        except Exception:
+                            pass
                 self._set_ident(tgt.name, val, is_set=False)  # parser ensures upper
                 return
             if isinstance(tgt, Member):
@@ -2384,9 +2423,30 @@ class VBInterpreter:
             return v
 
         if self.option_explicit:
-            raise VBScriptRuntimeError(f"Variable is undefined: '{up}'")
+            raise_runtime('VAR_UNDEFINED', up)
         # VBScript default: undeclared vars default to Empty.
         return VBEmpty
+
+    def _get_var_quiet(self, up: str):
+        """Current value bound to `up`, or None if it is not bound.
+
+        Never raises and never invokes anything - used by the assignment path
+        to look at what a name holds before overwriting it.
+        """
+        try:
+            if self._locals_stack and up in self._locals_stack[-1]:
+                v = self._locals_stack[-1][up]
+                return v.get() if isinstance(v, _ByRef) else v
+            if self._this_stack:
+                inst = self._this_stack[-1]
+                if isinstance(inst, VBClassInstance) and up in inst._fields:
+                    return inst._fields.get(up)
+            if up in self.env:
+                v = self.env[up]
+                return v.get() if isinstance(v, _ByRef) else v
+        except Exception:
+            return None
+        return None
 
     def _get_var_raw(self, up: str):
         """Like _get_var, but do not auto-invoke zero-arg class functions.
@@ -2407,7 +2467,7 @@ class VBInterpreter:
             return v.get() if isinstance(v, _ByRef) else v
 
         if self.option_explicit:
-            raise VBScriptRuntimeError(f"Variable is undefined: '{up}'")
+            raise_runtime('VAR_UNDEFINED', up)
         return VBEmpty
 
 
@@ -2678,7 +2738,7 @@ class VBInterpreter:
                 self.env[up] = value
             return
         if self.option_explicit:
-            raise VBScriptRuntimeError(f"Variable is undefined: '{up}'")
+            raise_runtime('VAR_UNDEFINED', up)
 
         # New var: create in current scope.
         if self._locals_stack:
@@ -3405,6 +3465,12 @@ def _try_truthy(v):
             return float(s) != 0.0
         except ValueError:
             raise_runtime('TYPE_MISMATCH')
+    # An object in a boolean context is judged by its default property, so
+    # `If Err Then` means `If Err.Number <> 0` like on IIS - not "is an object".
+    from ..vb_runtime import vbs_default_value
+    _dv = vbs_default_value(v)
+    if _dv is not v:
+        return _try_truthy(_dv)
     return bool(v)
 
 

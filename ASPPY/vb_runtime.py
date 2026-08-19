@@ -9,10 +9,18 @@ import re as _re
 import threading as _threading
 from decimal import Decimal as _Decimal
 
-try:
-    _locale.setlocale(_locale.LC_NUMERIC, '')
-except Exception:
-    pass
+# NOTE: do NOT call locale.setlocale(LC_NUMERIC, '') here.
+#
+# All VBScript-visible number/date formatting is driven by this runtime's own
+# LCID tables in ASPPY.vb_locale (see _decimal_sep below), so the process-wide
+# C locale is never consulted for correctness. Setting it, however, breaks
+# other libraries: pyodbc reads the C decimal separator once, at import time,
+# and builds its Decimal parser from it. On a machine whose regional format
+# uses ',' (e.g. Dutch/German/French Windows) that made every Currency/Decimal
+# column raise "sub() missing 1 required positional argument: 'string'" the
+# moment a row was fetched, so any page touching such a column died with
+# ASP 0115 / 80004005.
+_ = _locale  # kept imported for the helpers below
 
 
 _fmt_tls = _threading.local()
@@ -84,6 +92,14 @@ class VBLong(int):
     __slots__ = ()
 
 
+class VBByte(int):
+    """Marker type for VBScript Byte (VarType 17, TypeName "Byte").
+
+    CByte() and AscB() report "Byte" on IIS, where magnitude alone would make
+    ASPPY infer "Integer". Subclasses int so arithmetic keeps working."""
+    __slots__ = ()
+
+
 class VBScriptRuntimeError(Exception):
     pass
 
@@ -102,6 +118,24 @@ class VBScriptCOMError(VBScriptRuntimeError):
         self.source = str(source or "")
 
 
+def vbs_default_value(value):
+    """Read a host object's DEFAULT property, the way VBScript does.
+
+    VBScript never uses an object reference where a value is expected: it calls
+    the object's default property first (Err -> Err.Number, ADODB.Field ->
+    .Value, Request.Cookies -> its raw string). Objects that declare
+    __vbs_default__ opt into that here; everything else is returned unchanged
+    so callers keep their existing behaviour.
+    """
+    dname = getattr(value.__class__, '__vbs_default__', None)
+    if dname:
+        try:
+            return getattr(value, dname)
+        except Exception:
+            return value
+    return value
+
+
 def vbs_cstr(value) -> str:
     """Best-effort VBScript-like CStr.
 
@@ -114,6 +148,11 @@ def vbs_cstr(value) -> str:
         return ""
     if isinstance(value, str):
         return value
+    # An object in a string context renders its default property, so
+    # CStr(Err) is "0" on IIS rather than a type name or a Python repr.
+    _dv = vbs_default_value(value)
+    if _dv is not value:
+        return vbs_cstr(_dv)
     if isinstance(value, (bytes, bytearray)):
         # Treat binary strings as latin-1 to preserve 0-255 values.
         try:
