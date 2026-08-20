@@ -97,6 +97,9 @@ class Parser:
         self._peeked = None
         self._with_counter = 0
         self._with_target_stack = []
+        # >0 while parsing a Sub/Function/Property body. VBScript only accepts
+        # Public/Private declarations at script or class level.
+        self._proc_depth = 0
 
     def _raise_c(self, key, extra=None):
         e = VBScriptCompilationError(key, extra)
@@ -314,28 +317,16 @@ class Parser:
 
         # CONST a = 1, b = 2
         if self.tok.kind == "CONST":
-            self._eat("CONST")
-            items = []
-            while True:
-                if self.tok.kind != "IDENT":
-                    self._raise_c('EXPECTED_IDENTIFIER', "Expected identifier after Const")
-                name = self.tok.value.upper()
-                self._require_not_reserved_ident(name, "Const")
-                self._eat("IDENT")
-                if self.tok.kind != "EQ":
-                    self._raise_c('EXPECTED_ASSIGN', "Expected '=' in Const")
-                self._eat("EQ")
-                expr = self._parse_expr()
-                items.append((name, expr))
-                if self.tok.kind == "COMMA":
-                    self._eat("COMMA")
-                    continue
-                break
-            return ConstStmt(items)
+            return self._parse_const()
 
-        # Optional PUBLIC/PRIVATE before SUB/FUNCTION/PROPERTY (top-level)
-        if self.tok.kind in ("PUBLIC", "PRIVATE") and self._peek().kind in ("SUB", "FUNCTION", "PROPERTY"):
+        # Optional PUBLIC/PRIVATE before SUB/FUNCTION/PROPERTY/CONST (top-level)
+        if self.tok.kind in ("PUBLIC", "PRIVATE") and self._peek().kind in ("SUB", "FUNCTION", "PROPERTY", "CONST"):
             vis = self.tok.kind
+            if self._peek().kind == "CONST" and self._proc_depth:
+                # Inside a procedure only a bare `Const` is legal; VBScript
+                # reports a syntax error on the Public/Private keyword itself.
+                self._raise_c('SYNTAX_ERROR',
+                              f"'{vis.title()}' is not allowed inside a procedure")
             self._eat(self.tok.kind)
             if self.tok.kind == "SUB":
                 return self._parse_sub_def()
@@ -343,6 +334,8 @@ class Parser:
                 return self._parse_func_def()
             if self.tok.kind == "PROPERTY":
                 return self._parse_property_def(default_visibility=vis)
+            if self.tok.kind == "CONST":
+                return self._parse_const(visibility=vis)
 
         # PUBLIC/PRIVATE variable declarations (top-level)
         if self.tok.kind in ("PUBLIC", "PRIVATE"):
@@ -1146,6 +1139,27 @@ class Parser:
             stmts.append(stmt)
         return stmts
 
+    def _parse_const(self, visibility: str = "PUBLIC"):
+        # [PUBLIC|PRIVATE] CONST a = 1, b = 2
+        self._eat("CONST")
+        items = []
+        while True:
+            if self.tok.kind != "IDENT":
+                self._raise_c('EXPECTED_IDENTIFIER', "Expected identifier after Const")
+            name = self.tok.value.upper()
+            self._require_not_reserved_ident(name, "Const")
+            self._eat("IDENT")
+            if self.tok.kind != "EQ":
+                self._raise_c('EXPECTED_ASSIGN', "Expected '=' in Const")
+            self._eat("EQ")
+            expr = self._parse_expr()
+            items.append((name, expr))
+            if self.tok.kind == "COMMA":
+                self._eat("COMMA")
+                continue
+            break
+        return ConstStmt(items, visibility=str(visibility).upper())
+
     def _parse_dim(self):
         # DIM a, b(2)
         self._eat("DIM")
@@ -1592,19 +1606,23 @@ class Parser:
 
     def _parse_proc_body_until_end(self, end_kind: str):
         body = []
-        while True:
-            self._skip_seps()
-            if self.tok.kind == "EOF":
-                raise ParseError(f"Expected END {end_kind}")
-            if self.tok.kind == "END" and self._peek().kind == end_kind:
-                break
-            start_pos = self.tok.pos
-            stmt = self._parse_stmt(with_target=None)
-            try:
-                setattr(stmt, "_pos", start_pos)
-            except Exception:
-                pass
-            body.append(stmt)
+        self._proc_depth += 1
+        try:
+            while True:
+                self._skip_seps()
+                if self.tok.kind == "EOF":
+                    raise ParseError(f"Expected END {end_kind}")
+                if self.tok.kind == "END" and self._peek().kind == end_kind:
+                    break
+                start_pos = self.tok.pos
+                stmt = self._parse_stmt(with_target=None)
+                try:
+                    setattr(stmt, "_pos", start_pos)
+                except Exception:
+                    pass
+                body.append(stmt)
+        finally:
+            self._proc_depth -= 1
         self._eat("END")
         self._eat(end_kind)
         return body

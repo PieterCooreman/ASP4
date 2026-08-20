@@ -282,9 +282,12 @@ class RandomizeStmt(Stmt):
 
 
 class ConstStmt(Stmt):
-    def __init__(self, items):
+    def __init__(self, items, visibility: str = "PUBLIC"):
         # items: list[tuple[str, Expr]]
         self.items = items
+        # PUBLIC/PRIVATE. Only meaningful for class members; at script level
+        # VBScript treats both the same (script-global constant).
+        self.visibility = visibility
 
 
 class EndIfStmt(Stmt):

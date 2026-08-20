@@ -71,7 +71,13 @@ RUNTIME_ERRORS = {
     # ADO / Database specific
     'ADO_ARGS_WRONG_TYPE': ErrorDef(3001, '800A0BB9', "Arguments are of the wrong type, are out of acceptable range, or are in conflict with one another"),
     'ADO_BOF_EOF': ErrorDef(3021, '800A0BCD', "Either BOF or EOF is True, or the current record has been deleted. Requested operation requires a current record."),
-    'ADO_OBJECT_CLOSED': ErrorDef(3704, '800A0E7A', "Operation is not allowed when the object is closed"),
+    # ADO error N maps to HRESULT 800A0000+N, so 3704 is 800A0E78 (not 0E7A,
+    # which is 3706 - the "Provider cannot be found" code below).
+    'ADO_OBJECT_CLOSED': ErrorDef(3704, '800A0E78', "Operation is not allowed when the object is closed"),
+    # Raised before ADO ever reaches a provider, so - unlike provider errors -
+    # this one is NOT recorded in Connection.Errors (verified against IIS).
+    'ADO_PROVIDER_NOT_FOUND': ErrorDef(3706, '800A0E7A', "Provider cannot be found. It may not be properly installed."),
+    'ADO_ITEM_NOT_FOUND': ErrorDef(3265, '800A0CC1', "Item cannot be found in the collection corresponding to the requested name or ordinal"),
     'ADO_UNSPECIFIED': ErrorDef(-2147467259, '80004005', "Unspecified error"),
 }
 

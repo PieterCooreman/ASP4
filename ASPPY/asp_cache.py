@@ -9,8 +9,8 @@ from collections import OrderedDict
 
 _cache_lock = threading.RLock()
 
-# Configurable via environment variable (default 500)
-_MAX_CACHE_SIZE = int(os.environ.get('ASP_PY_CACHE_SIZE', '500'))
+# Configurable via environment variable (default 1000)
+_MAX_CACHE_SIZE = int(os.environ.get('ASP_PY_CACHE_SIZE', '1000'))
 
 # LRU caches using OrderedDict (most-recently-used at end)
 _cache: OrderedDict = OrderedDict()           # path -> (mtime_ns, nodes)

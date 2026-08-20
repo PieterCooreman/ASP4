@@ -70,7 +70,7 @@ from collections import OrderedDict as _OrderedDict
 
 _granular_ast_lock = _threading.RLock()
 _granular_ast_cache: _OrderedDict = _OrderedDict()
-_GRANULAR_CACHE_MAX = int(os.environ.get('ASP_PY_CACHE_SIZE', '500'))
+_GRANULAR_CACHE_MAX = int(os.environ.get('ASP_PY_CACHE_SIZE', '1000'))
 
 
 #: Attributes inside an ASP page directive: NAME=value / NAME="value".

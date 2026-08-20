@@ -151,7 +151,7 @@ _SQLITE_TYPE_MAP = {
 # Connection string parsing / database path resolution
 # ---------------------------------------------------------------------------
 
-from .vb_errors import raise_runtime
+from .vb_errors import RUNTIME_ERRORS, VBScriptError, raise_runtime
 
 
 @dataclass
@@ -424,7 +424,7 @@ class _ADOProviderAdapter:
 
     def open(self, conn: 'ADOConnection', info: ParsedConnectionString):
         raise_runtime(
-            'ADO_UNSPECIFIED',
+            'ADO_PROVIDER_NOT_FOUND',
             f"Connection provider not available in this ASPPY runtime: {info.provider_kind}",
         )
 
@@ -493,7 +493,7 @@ class _UnavailableProviderAdapter(_ADOProviderAdapter):
 
     def open(self, conn: 'ADOConnection', info: ParsedConnectionString):
         raise_runtime(
-            'ADO_UNSPECIFIED',
+            'ADO_PROVIDER_NOT_FOUND',
             (
                 f"Connection provider not available in this ASPPY runtime: {self.kind}. "
                 "Built-in support is currently SQLite, Access, Excel, and ODBC (pyodbc) only. "
@@ -1531,7 +1531,17 @@ class ADORecordset:
             self._detect_pk(conn, sql)
         except Exception as e:
             src = self._original_sql
-            raise_runtime('ADO_UNSPECIFIED', f"Open error: {e}\nSQL: {sql}\nOriginalSQL: {src}")
+            # Provider error: also recorded on the connection that ran it, the
+            # same way Connection.Execute failures are.
+            try:
+                raise_runtime('ADO_UNSPECIFIED',
+                              f"Open error: {e}\nSQL: {sql}\nOriginalSQL: {src}")
+            except Exception as raised:
+                try:
+                    conn._record_provider_error(raised)
+                except Exception:
+                    pass
+                raise
 
     def _detect_pk(self, conn: 'ADOConnection', sql: str):
         """Try to detect which table and pk column this RS is based on."""
@@ -2223,6 +2233,110 @@ def close_pooled_connections():
                 pass
 
 
+class ADOError:
+    """A single entry of `Connection.Errors` (TypeName "Error").
+
+    ADO fills this collection from errors reported by the *data provider*.
+    ASPPY has no OLE DB layer, so `Number`/`Description` carry whatever the
+    backing driver produced, normalised through the same ErrorDef table the
+    Err object uses - i.e. `Errors(0).Number` always equals the `Err.Number`
+    the same failure raises, which is the invariant scripts depend on.
+    """
+
+    def __vbs_typename__(self):
+        return 'Error'
+
+    def __init__(self, number: int = 0, description: str = '', source: str = '',
+                 sql_state: str = '', native_error: int = 0):
+        self.Number = int(number)
+        self.Description = vbs_cstr(description)
+        self.Source = vbs_cstr(source)
+        self.SQLState = vbs_cstr(sql_state)
+        self.NativeError = int(native_error)
+        self.HelpFile = ''
+        self.HelpContext = 0
+
+    def __str__(self):
+        return self.Description
+
+
+class ADOErrors:
+    """`Connection.Errors` (TypeName "Errors").
+
+    Lifetime rules verified against IIS:
+      * a new provider error replaces the whole collection (ADO clears it
+        first, then appends the errors of that one failure);
+      * a *successful* operation leaves the collection untouched, so entries
+        survive until the next provider error or an explicit `Clear`;
+      * ADO's own errors (3704 "object is closed", 3706 "provider cannot be
+        found") never reach a provider and so are not recorded here.
+    """
+
+    __vbs_default__ = None  # indexed access only: Errors(i)
+
+    def __vbs_typename__(self):
+        return 'Errors'
+
+    def __init__(self):
+        self._items: list[ADOError] = []
+
+    def Clear(self):
+        self._items.clear()
+
+    def Refresh(self):
+        # No provider to re-query; the collection is already current.
+        return
+
+    def Item(self, index) -> ADOError:
+        try:
+            i = int(index)
+        except (TypeError, ValueError):
+            raise_runtime('ADO_ITEM_NOT_FOUND')
+        if i < 0 or i >= len(self._items):
+            raise_runtime('ADO_ITEM_NOT_FOUND')
+        return self._items[i]
+
+    def __vbs_index_get__(self, key):
+        return self.Item(key)
+
+    @property
+    def Count(self) -> int:
+        return len(self._items)
+
+    def __iter__(self):
+        return iter(list(self._items))
+
+    def _replace(self, errors: list[ADOError]):
+        self._items = list(errors)
+
+
+def _ado_error_from_exception(exc: BaseException) -> ADOError:
+    """Build the `Errors` entry for a failure, keeping Number/Description in
+    step with what the Err object reports for the very same exception."""
+    if isinstance(exc, VBScriptError) and exc.error_def is not None:
+        return ADOError(number=exc.error_def.number,
+                        description=exc.description,
+                        source=_ADO_ERROR_SOURCE)
+    return ADOError(number=RUNTIME_ERRORS['ADO_UNSPECIFIED'].number,
+                    description=str(exc),
+                    source=_ADO_ERROR_SOURCE)
+
+
+# ADO reports the OLE DB provider as the error source. ASPPY substitutes its
+# own provider layer, so name that instead of pretending to be an OLE DB DLL.
+_ADO_ERROR_SOURCE = 'ASPPY Database Provider'
+
+# ADO-level errors: raised by ADO itself rather than surfaced from a provider,
+# so they leave Connection.Errors untouched (verified against IIS).
+_ADO_NON_PROVIDER_ERRORS = frozenset({
+    RUNTIME_ERRORS['ADO_OBJECT_CLOSED'].number,      # 3704
+    RUNTIME_ERRORS['ADO_PROVIDER_NOT_FOUND'].number,  # 3706
+    RUNTIME_ERRORS['ADO_ARGS_WRONG_TYPE'].number,     # 3001
+    RUNTIME_ERRORS['ADO_BOF_EOF'].number,             # 3021
+    RUNTIME_ERRORS['ADO_ITEM_NOT_FOUND'].number,      # 3265
+})
+
+
 class ADOConnection:
     """Classic ADO Connection shim backed by SQLite."""
 
@@ -2260,9 +2374,35 @@ class ADOConnection:
         self._db_path: str = ''
         self._in_transaction: bool = False
         self._auto_escape: bool = False  # SQL injection auto-protection (disabled by default)
+        # Provider errors of the most recent failing operation. See ADOErrors.
+        self._errors = ADOErrors()
+
+    def _record_provider_error(self, exc: BaseException):
+        """Record a *provider* failure in `Errors`, replacing its contents.
+
+        ADO's own errors - "provider cannot be found" (3706), "operation is not
+        allowed when the object is closed" (3704) - are raised before/without a
+        provider round-trip and leave the collection untouched on IIS, so they
+        are filtered out here.
+        """
+        if isinstance(exc, VBScriptError) and exc.error_def is not None:
+            if exc.error_def.number in _ADO_NON_PROVIDER_ERRORS:
+                return
+        self._errors._replace([_ado_error_from_exception(exc)])
 
     def Open(self, connection_string: str = '', user_id: str = '',
              password: str = '', options: int = -1):
+        try:
+            self._open_impl(connection_string, user_id, password, options)
+        except Exception as e:
+            # A failed Open is a provider failure on IIS: it both raises and
+            # fills Connection.Errors, which is how `On Error Resume Next`
+            # scripts detect it (`if conn.Errors.Count > 0 then ...`).
+            self._record_provider_error(e)
+            raise
+
+    def _open_impl(self, connection_string: str = '', user_id: str = '',
+                   password: str = '', options: int = -1):
         # Re-opening an already-open connection would orphan the current handle
         # (and with pooling, lose it for good), so hand it back first.
         if self._conn is not None:
@@ -2271,7 +2411,12 @@ class ADOConnection:
             self.ConnectionString = vbs_cstr(connection_string)
         cs = self.ConnectionString.strip()
         if not cs:
-            raise_runtime('ADO_ARGS_WRONG_TYPE', "No connection string")
+            # IIS hands an empty/provider-less string to the default provider
+            # (MSDASQL), which fails looking for a data source name. ASPPY has
+            # no default provider to delegate to, but the observable contract
+            # is the same: Open fails and the failure lands in Errors.
+            raise_runtime('ADO_UNSPECIFIED',
+                          "Data source name not found and no default driver specified")
 
         # Parse AutoEscapeSQL option from connection string
         auto_escape_match = re.search(r'(?i)\bAutoEscapeSQL\s*=\s*(\w+)', cs)
@@ -2294,6 +2439,29 @@ class ADOConnection:
         adapter_kind = 'odbc' if _should_route_to_odbc(info) else self._provider_kind
         adapter = _get_provider_adapter(adapter_kind)
         adapter.open(self, info)
+        self._populate_properties(info)
+
+    def _populate_properties(self, info: ParsedConnectionString):
+        """Fill `Properties` from the driver ASPPY actually connected through.
+
+        Best-effort: a driver that cannot answer `SQLGetInfo` just leaves the
+        collection empty rather than failing an otherwise good connection.
+        """
+        try:
+            db = self._conn
+            if db is None:
+                return
+            data_source = self._db_path or info.data_source or ''
+            if self._provider_kind == 'sqlite':
+                pairs = _sqlite_connection_properties(data_source)
+            elif hasattr(db, 'getinfo'):
+                pairs = _odbc_connection_properties(db, info, data_source)
+            else:
+                return
+            self.Properties._set(pairs)
+        except Exception:
+            # Properties are descriptive only; never fail Open over them.
+            pass
 
     def Close(self):
         if self._conn is not None:
@@ -2313,6 +2481,8 @@ class ADOConnection:
         self._is_open = False
         self._in_transaction = False
         self.State = adStateClosed
+        # No live provider left to describe.
+        self.Properties = ADOProperties()
         try:
             conns = _get_open_conns()
             if self in conns:
@@ -2373,7 +2543,13 @@ class ADOConnection:
                 db.rollback()
             except Exception:
                 pass
-            raise_runtime('ADO_UNSPECIFIED', f"Execute error: {e}")
+            # A statement rejected by the backing engine is a provider error:
+            # IIS records it in Connection.Errors as well as raising it.
+            try:
+                raise_runtime('ADO_UNSPECIFIED', f"Execute error: {e}")
+            except Exception as raised:
+                self._record_provider_error(raised)
+                raise
 
     def BeginTrans(self):
         if not self._is_open:
@@ -2592,47 +2768,159 @@ class ADOConnection:
 
     @property
     def Errors(self):
-        return _EmptyCollection()
+        return self._errors
 
     def __str__(self):
         return 'Connection'
 
 
-class _EmptyCollection:
-    @property
-    def Count(self):
-        return 0
+class ADOProperty:
+    """One entry of a `Properties` collection (TypeName "Property").
 
-    def __iter__(self):
-        return iter([])
+    `Value` is the default member, so `conn.Properties("DBMS Name")` reads as
+    the value while `conn.Properties(0).Name` still works.
+    """
+
+    __vbs_default__ = 'Value'
+
+    def __vbs_typename__(self):
+        return 'Property'
+
+    def __init__(self, name: str, value: Any, type_: int = adVariant,
+                 attributes: int = 0):
+        self.Name = vbs_cstr(name)
+        self.Value = value
+        self.Type = int(type_)
+        self.Attributes = int(attributes)
+
+    def __str__(self):
+        return vbs_cstr(self.Value)
 
 
 class ADOProperties:
     """Provider-specific `Properties` collection.
 
-    ASPPY has no OLE DB provider to enumerate, so this collection is always
-    empty. That is exactly what IIS reports for an object with no live
-    connection (verified: `Command.Properties.Count` = 0 and
-    `TypeName(cmd.Properties)` = "Properties" on IIS for a Command with no
-    ActiveConnection). A *connected* Jet command reports roughly 88 provider
-    properties there, which ASPPY cannot reproduce - but returning an empty
-    collection lets scripts run instead of raising error 438.
+    IIS exposes the OLE DB provider's property set here (94 entries for a live
+    Jet 4.0 connection). ASPPY has no OLE DB layer, so instead of inventing
+    that list it publishes the subset it can *actually* establish - the
+    provider/DBMS identity and data-source description - by asking the backing
+    driver (ODBC `SQLGetInfo`, sqlite3 version constants) at Open time.
+
+    Values therefore describe the engine ASPPY really connected through, which
+    is the point of the properties scripts read: `Properties("DBMS Name")` is
+    "ACCESS" for the ODBC Access driver ASPPY uses, exactly as it is on IIS
+    when the connection string names that same ODBC driver (IIS reports
+    "MS Jet" only because it went through the Jet *OLE DB* provider).
+
+    An unconnected object has no provider to describe, so the collection is
+    empty - matching IIS for a Command with no ActiveConnection.
     """
 
     def __vbs_typename__(self):
         return 'Properties'
 
+    def __init__(self, props: Optional[list[ADOProperty]] = None):
+        self._props: list[ADOProperty] = list(props or [])
+        self._by_name: dict[str, int] = {}
+        self._reindex()
+
+    def _reindex(self):
+        self._by_name = {p.Name.lower(): i for i, p in enumerate(self._props)}
+
+    def _set(self, pairs):
+        """Replace the collection from an ordered (name, value) sequence."""
+        self._props = [ADOProperty(n, v) for (n, v) in pairs]
+        self._reindex()
+
     @property
-    def Count(self):
-        return 0
+    def Count(self) -> int:
+        return len(self._props)
 
     def __iter__(self):
-        return iter([])
+        return iter(list(self._props))
 
-    def Item(self, key):
-        raise_runtime('ADO_UNSPECIFIED',
-                      "Item cannot be found in the collection corresponding to "
-                      "the requested name or ordinal")
+    def Item(self, key) -> ADOProperty:
+        # Numeric keys are ordinals; everything else is a case-insensitive name.
+        if isinstance(key, bool):
+            raise_runtime('ADO_ITEM_NOT_FOUND')
+        if isinstance(key, (int, float)) and float(key) == int(key):
+            i = int(key)
+            if 0 <= i < len(self._props):
+                return self._props[i]
+            raise_runtime('ADO_ITEM_NOT_FOUND')
+        idx = self._by_name.get(vbs_cstr(key).strip().lower())
+        if idx is None:
+            raise_runtime('ADO_ITEM_NOT_FOUND')
+        return self._props[idx]
+
+    def __vbs_index_get__(self, key):
+        return self.Item(key)
+
+    def Refresh(self):
+        # Populated by ADOConnection at Open time; nothing to re-query.
+        return
+
+
+def _odbc_connection_properties(db: Any, info: ParsedConnectionString,
+                                data_source: str) -> list[tuple[str, Any]]:
+    """OLE DB-style properties read back from a live ODBC connection.
+
+    Names match the OLE DB property names IIS exposes so scripts written
+    against `Properties("DBMS Name")` keep working; values come from
+    `SQLGetInfo` rather than being hard-coded per provider.
+    """
+    pyodbc = _ensure_pyodbc()
+    # (OLE DB property name, SQLGetInfo type code)
+    wanted = [
+        ('DBMS Name', pyodbc.SQL_DBMS_NAME),
+        ('DBMS Version', pyodbc.SQL_DBMS_VER),
+        ('Provider Name', pyodbc.SQL_DRIVER_NAME),
+        ('Provider Version', pyodbc.SQL_DRIVER_VER),
+        ('Data Source Name', pyodbc.SQL_DATA_SOURCE_NAME),
+        ('User Name', pyodbc.SQL_USER_NAME),
+        ('Current Catalog', pyodbc.SQL_DATABASE_NAME),
+        ('Read-Only Data Source', pyodbc.SQL_DATA_SOURCE_READ_ONLY),
+    ]
+    out: list[tuple[str, Any]] = []
+    for name, code in wanted:
+        try:
+            val = db.getinfo(code)
+        except Exception:
+            continue
+        if name == 'Read-Only Data Source':
+            val = vbs_cstr(val).strip().upper() == 'Y'
+        elif name == 'Data Source Name' and not vbs_cstr(val).strip():
+            # DSN-less connections report no DSN; IIS shows the data source
+            # itself there, so fall back to that rather than an empty string.
+            val = data_source
+        out.append((name, val))
+    # Values that come from the connection string rather than the driver.
+    out.append(('Provider Friendly Name',
+                _pick_attr(info.attrs, 'driver', 'provider')))
+    out.append(('Data Source', data_source))
+    out.append(('Extended Properties', _pick_attr(info.attrs, 'extended properties')))
+    out.append(('User ID', _pick_attr(info.attrs, 'user id', 'uid')))
+    return out
+
+
+def _sqlite_connection_properties(data_source: str) -> list[tuple[str, Any]]:
+    version = ''
+    try:
+        version = str(_ensure_sqlite3().sqlite_version)
+    except Exception:
+        pass
+    return [
+        ('DBMS Name', 'SQLite'),
+        ('DBMS Version', version),
+        ('Provider Name', 'sqlite3'),
+        ('Provider Version', version),
+        ('Provider Friendly Name', 'Python sqlite3 (ASPPY built-in)'),
+        ('Data Source Name', data_source),
+        ('Data Source', data_source),
+        ('Current Catalog', 'main'),
+        ('User Name', ''),
+        ('Read-Only Data Source', False),
+    ]
 
 
 # ---------------------------------------------------------------------------
