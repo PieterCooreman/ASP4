@@ -70,7 +70,7 @@ class ParseError(Exception):
 
 
 _RESERVED_DIM_NAMES = {
-    'AND', 'CALL', 'CASE', 'CLASS', 'CONST', 'DEFAULT', 'DIM', 'DO',
+    'AND', 'CALL', 'CASE', 'CLASS', 'CONST', 'DIM', 'DO',
     'EACH', 'ELSE', 'ELSEIF', 'EMPTY', 'END', 'ERASE', 'ERR', 'EXIT',
     'EXPLICIT', 'FALSE', 'FOR', 'FUNCTION', 'GET', 'GOTO', 'IF', 'IN',
     'IS', 'LET', 'LOOP', 'ME', 'MOD', 'NEW', 'NEXT', 'NOT', 'NOTHING',
@@ -78,6 +78,17 @@ _RESERVED_DIM_NAMES = {
     'PUBLIC', 'REDIM', 'REM', 'RESUME', 'SELECT', 'SET', 'STEP', 'STOP',
     'SUB', 'THEN', 'TO', 'TRUE', 'UNTIL', 'WHILE', 'WEND', 'WITH', 'XOR',
 }
+
+
+# Token kinds ASPPY's lexer promotes to keywords even though VBScript does not
+# reserve them.  `Default` is only meaningful in `Public Default Sub/Function/
+# Property` inside a Class block; everywhere else IIS accepts it as an ordinary
+# name, and the expression parser here already does (see _parse_term). Listing
+# it here lets declarations accept it too, so real-world code such as
+# `Function GetJsonInt(body, key, default)` compiles instead of failing with a
+# bare "Expected parameter name".
+_SOFT_KEYWORD_IDENT_KINDS = ("DEFAULT",)
+_IDENT_TOKEN_KINDS = ("IDENT",) + _SOFT_KEYWORD_IDENT_KINDS
 
 
 # Zero-argument VBScript functions that may be written without parentheses.
@@ -106,6 +117,27 @@ class Parser:
         # Attach position info directly to the exception instance
         e.vbs_pos = self.tok.pos
         raise e
+
+    def _stamp_pos(self, exc):
+        """Give an exception a source position if it does not have one yet."""
+        if getattr(exc, 'vbs_pos', None) is None:
+            try:
+                exc.vbs_pos = self.tok.pos
+            except Exception:
+                pass
+        return exc
+
+    def _tok_desc(self):
+        """Render the current token for an error message."""
+        kind = self.tok.kind
+        if kind == "EOF":
+            return "end of file"
+        if kind == "NEWLINE":
+            return "end of line"
+        if kind == "COLON":
+            return "':'"
+        val = self.tok.value
+        return f"'{val}'" if val else kind
 
     def _new_with_name(self) -> str:
         self._with_counter += 1
@@ -149,6 +181,16 @@ class Parser:
         else:
             self.tok = self.lexer.next_token()
 
+    def _at_ident(self) -> bool:
+        """True when the current token may be used as a declared name."""
+        return self.tok.kind in _IDENT_TOKEN_KINDS
+
+    def _eat_ident_name(self) -> str:
+        """Consume an identifier-like token and return its upper-cased name."""
+        name = self.tok.value.upper()
+        self._eat(self.tok.kind)
+        return name
+
     def _require_not_reserved_ident(self, name: str, context: str):
         if name.upper() in _RESERVED_DIM_NAMES:
             self._raise_c('SYNTAX_ERROR', f"Invalid {context} identifier: {name}")
@@ -191,6 +233,15 @@ class Parser:
                 except Exception:
                     pass
                 stmts.append(stmt)
+        except ParseError as e:
+            # Legacy ParseErrors carry no source position. Without one,
+            # _attach_location falls back to "line 1" plus the first non-blank
+            # line of the generated VBScript, which points the developer at a
+            # completely unrelated statement (typically Option Explicit or the
+            # injected Response.CodePage line). Stamp the offending token's
+            # position so the error page shows the real line and column.
+            self._stamp_pos(e)
+            raise
         except LexerError as e:
             if "Unterminated string" in str(e):
                 self._raise_c('UNTERMINATED_STRING')
@@ -209,6 +260,9 @@ class Parser:
         """Parse a single expression (used for ASP shorthand: <%= ... %>)."""
         try:
             expr = self._parse_expr()
+        except ParseError as e:
+            self._stamp_pos(e)
+            raise
         except LexerError as e:
             self._raise_c('INVALID_CHARACTER', str(e))
         if self.tok.kind != "EOF":
@@ -1144,11 +1198,11 @@ class Parser:
         self._eat("CONST")
         items = []
         while True:
-            if self.tok.kind != "IDENT":
+            if not self._at_ident():
                 self._raise_c('EXPECTED_IDENTIFIER', "Expected identifier after Const")
             name = self.tok.value.upper()
             self._require_not_reserved_ident(name, "Const")
-            self._eat("IDENT")
+            self._eat_ident_name()
             if self.tok.kind != "EQ":
                 self._raise_c('EXPECTED_ASSIGN', "Expected '=' in Const")
             self._eat("EQ")
@@ -1165,11 +1219,12 @@ class Parser:
         self._eat("DIM")
         decls = []
         while True:
-            if self.tok.kind != "IDENT":
-                raise ParseError("Expected identifier after Dim")
+            if not self._at_ident():
+                raise ParseError(
+                    f"Expected identifier after Dim, found {self._tok_desc()}")
             name = self.tok.value.upper()
             self._require_not_reserved_ident(name, "Dim")
-            self._eat("IDENT")
+            self._eat_ident_name()
             bounds = None
             if self.tok.kind == "LPAREN":
                 self._eat("LPAREN")
@@ -1196,10 +1251,10 @@ class Parser:
         if self.tok.kind == "PRESERVE":
             self._eat("PRESERVE")
             preserve = True
-        if self.tok.kind != "IDENT":
-            raise ParseError("Expected identifier after ReDim")
-        name = self.tok.value.upper()
-        self._eat("IDENT")
+        if not self._at_ident():
+            raise ParseError(
+                f"Expected identifier after ReDim, found {self._tok_desc()}")
+        name = self._eat_ident_name()
         if self.tok.kind != "LPAREN":
             raise ParseError("Expected '(' in ReDim")
         self._eat("LPAREN")
@@ -1216,10 +1271,10 @@ class Parser:
 
     def _parse_erase(self):
         self._eat("ERASE")
-        if self.tok.kind != "IDENT":
-            raise ParseError("Expected identifier after Erase")
-        name = self.tok.value.upper()
-        self._eat("IDENT")
+        if not self._at_ident():
+            raise ParseError(
+                f"Expected identifier after Erase, found {self._tok_desc()}")
+        name = self._eat_ident_name()
         return EraseStmt(name)
 
     def _parse_expr(self):
@@ -1591,10 +1646,10 @@ class Parser:
                 self._eat("BYREF")
                 byval = False
 
-            if self.tok.kind != "IDENT":
-                raise ParseError("Expected parameter name")
-            nm = self.tok.value.upper()
-            self._eat("IDENT")
+            if not self._at_ident():
+                raise ParseError(
+                    f"Expected parameter name, found {self._tok_desc()}")
+            nm = self._eat_ident_name()
             params.append(ParamDecl(nm, byval=byval))
             if self.tok.kind == "COMMA":
                 self._eat("COMMA")

@@ -653,6 +653,21 @@ def build_vbscript_from_nodes(nodes) -> str:
         for idx, line in enumerate(out_lines):
             stripped = line.strip().lower()
             if stripped.startswith('option explicit'):
+                # An out_lines entry is a whole <% %> block, so the directives
+                # have to land inside it - on the line right after
+                # Option Explicit - rather than after the entire block.
+                # Appending them at the end of the block would delay
+                # Response.CodePage until the page had already produced output,
+                # and would shift every compile-error line number by one.
+                block_lines = line.split('\n')
+                first_code = next(
+                    (j for j, bl in enumerate(block_lines) if bl.strip()), 0)
+                # Splitting and re-joining on '\n' is lossless, so the line
+                # count of the generated source is unchanged.
+                out_lines[idx:idx + 1] = [
+                    '\n'.join(block_lines[:first_code + 1]),
+                    '\n'.join(block_lines[first_code + 1:]),
+                ]
                 insert_at = idx + 1
                 break
             if stripped:

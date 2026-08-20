@@ -542,8 +542,28 @@ class VBInterpreter:
         self.env['CREATEOBJECT'] = lambda progid: self.ctx.Server.CreateObject(progid)
         self.env['EVAL'] = self._eval_from_string
 
+    @staticmethod
+    def _parse_nested_source(code, *, expression: bool = False):
+        """Parse the string handed to Eval / Execute / ExecuteGlobal.
+
+        A syntax error inside that string carries a position relative to the
+        string itself, which is meaningless when resolved against the page
+        source. Drop it so the error is reported at the Eval/Execute statement,
+        which is the line the developer can actually see.
+        """
+        p = Parser(str(code))
+        try:
+            return p.parse_expression() if expression else p.parse_program()
+        except Exception as e:
+            try:
+                if getattr(e, 'vbs_pos', None) is not None:
+                    e.vbs_pos = None
+            except Exception:
+                pass
+            raise
+
     def _eval_from_string(self, s):
-        expr = Parser(str(s)).parse_expression()
+        expr = self._parse_nested_source(s, expression=True)
         return self.eval_expr(expr)
 
     def eval_expr(self, expr):
@@ -2277,7 +2297,7 @@ class VBInterpreter:
 
             self.option_explicit = False
             self.on_error_resume_next = False
-            prog = Parser(str(code)).parse_program()
+            prog = self._parse_nested_source(code)
             for s in prog:
                 if isinstance(s, OptionExplicitStmt):
                     self.exec_stmt(s)
