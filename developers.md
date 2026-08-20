@@ -437,6 +437,74 @@ Initialization rule:
 - Put setup in a dedicated script, admin-only route, or clearly isolated bootstrap helper that is not triggered on every request
 - If setup must run conditionally, make that condition explicit and limited
 
+## CRITICAL: Reading a JSON Request Body
+
+`Request.BinaryRead(n)` returns a **Byte array**, exactly as it does on IIS - not a string. Assigning it straight to a variable and treating it as text mangles every non-ASCII character, silently.
+
+Always transcode through `ADODB.Stream`:
+
+```asp
+Function ReadJsonBody()
+    Dim total, raw, stm
+    total = CLng(Request.TotalBytes)
+    If total = 0 Then
+        ReadJsonBody = ""
+        Exit Function
+    End If
+
+    raw = Request.BinaryRead(total)
+
+    Set stm = Server.CreateObject("ADODB.Stream")
+    stm.Type = 1                ' adTypeBinary
+    stm.Open
+    stm.Write raw
+    stm.Position = 0
+    stm.Type = 2                ' adTypeText
+    stm.Charset = "utf-8"
+    ReadJsonBody = stm.ReadText
+    stm.Close
+    Set stm = Nothing
+End Function
+```
+
+`Request.Form` is only populated for `application/x-www-form-urlencoded` and `multipart/form-data`. A `fetch()` that posts `Content-Type: application/json` must be read with the function above.
+
+## CRITICAL: Building a JSON Array
+
+`Scripting.Dictionary` always encodes as a JSON **object**, even when every key is a number:
+
+```asp
+' WRONG - produces {"0":{...},"1":{...}}, not an array
+Dim arr : Set arr = Server.CreateObject("Scripting.Dictionary")
+arr.Add 0, item1
+arr.Add 1, item2
+Response.Write ASPPY.JSON.Encode(arr)
+```
+
+Use a real VBScript array. `ASPPY.JSON.Encode` maps a VBScript array to a JSON array and a `Scripting.Dictionary` to a JSON object, so the two nest exactly as expected:
+
+```asp
+' RIGHT - produces [{"name":"Google"},{"name":"GitHub"}]
+Dim rows(), n
+n = -1
+Do While Not rs.EOF
+    n = n + 1
+    ReDim Preserve rows(n)
+    Dim row : Set row = Server.CreateObject("Scripting.Dictionary")
+    row.Add "name", rs("name") & ""
+    Set rows(n) = row
+    rs.MoveNext
+Loop
+If n = -1 Then ReDim rows(-1)      ' empty result set => []
+
+Dim payload : Set payload = Server.CreateObject("Scripting.Dictionary")
+payload.Add "sites", rows          ' nested JSON array inside a JSON object
+payload.Add "total", n + 1
+Response.Write ASPPY.JSON.Encode(payload)
+```
+
+The frontend then needs no normalizer.
+
 ## Frontend Framework Rule
 
 - The developer must explicitly choose one frontend framework before building UI
