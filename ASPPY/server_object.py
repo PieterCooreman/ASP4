@@ -822,6 +822,13 @@ class ScriptingDictionary:
         if k in self._d:
             from .vb_errors import raise_runtime
             raise_runtime('KEY_ALREADY_EXISTS')
+        # Scripting.Dictionary stores a VariantCopy of the item, and
+        # VariantCopy deep-copies a SAFEARRAY. So `d.Add "k", arr` snapshots
+        # the array, exactly like `d("k") = arr` does; later ReDim/writes on
+        # the caller's array must not be visible through the dictionary.
+        from .vm.values import VBArray
+        if isinstance(item, VBArray):
+            item = item.clone()
         self._d[k] = (key, item)
 
     def Exists(self, key):
