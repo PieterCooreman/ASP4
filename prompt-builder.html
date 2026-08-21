@@ -241,7 +241,7 @@ function generate(){
     };
 
     prompt["hard_rules"] = [
-        "Build inside www",
+		"Build the project inside the www folder that is a folder you are currently running from — do NOT search for or use any other www folder elsewhere on the system (e.g. a global C:\\ASPPY\\www install).",        
         "Do not modify ASPPY\\*.py",
         "Do not modify www_starter\\*.*",
         "Use ASPPY only, do not add IIS requirements",
@@ -340,7 +340,8 @@ function generate(){
         "Do not create tables or run migrations on every request, use a dedicated /setup route",
         "Do not mix ASP server-side storage with browser localStorage for the same feature",
         "Validate numeric IDs with IsNumeric() and CInt() before using them",
-        "HTML-encode user output with Html() or Server.HTMLEncode()"
+        "HTML-encode user output with Html() or Server.HTMLEncode()",
+		"`IIf()` isn't a built-in VBScript function (it's VBA/VB only), so ASP.py correctly throws \"Variable is undefined: 'IIF'\" \u2014 use `If...Then...Else` instead, or define your own `IIf()` helper."
     ];
 
     prompt["development_workflow"] = [
