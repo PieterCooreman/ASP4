@@ -580,7 +580,8 @@ function generate() {
     "Do not create tables on every request, use a dedicated /setup action",
     "Validate numeric IDs with IsNumeric() and CInt()",
     "Always set Response.ContentType = 'application/json' before writing JSON output",
-    "Ensure all JSON responses are properly closed (no trailing commas)"
+    "Ensure all JSON responses are properly closed (no trailing commas)",
+	"`IIf()` isn't a built-in VBScript function (it's VBA/VB only), so ASP.py correctly throws \"Variable is undefined: 'IIF'\" \u2014 use `If...Then...Else` instead, or define your own `IIf()` helper."
   ];
 
   prompt["development_workflow"] = [
