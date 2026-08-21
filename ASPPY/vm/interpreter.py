@@ -1879,6 +1879,8 @@ class VBInterpreter:
                 self._set_ident(tgt.name, val, is_set=False)  # parser ensures upper
                 return
             if isinstance(tgt, Member):
+                # Arrays are value types: store a snapshot, not an alias.
+                val = _copy_on_let(val)
                 obj = self.eval_expr(tgt.obj)
                 if isinstance(obj, _ByRef):
                     obj = obj.get()
@@ -1896,6 +1898,8 @@ class VBInterpreter:
                 setattr(obj, tgt.name, val)
                 return
             if isinstance(tgt, Index):
+                # Arrays are value types: store a snapshot, not an alias.
+                val = _copy_on_let(val)
                 if isinstance(tgt.obj, Member):
                     base = self.eval_expr(tgt.obj.obj)
                     if isinstance(base, _ByRef):
@@ -2912,7 +2916,8 @@ class VBInterpreter:
                     frame[pnm] = arg_items[i]
                 else:
                     if p.byval:
-                        frame[pnm] = self.eval_expr(arg_items[i])
+                        # ByVal array argument: the callee gets its own copy.
+                        frame[pnm] = _copy_on_let(self.eval_expr(arg_items[i]))
                     else:
                         if isinstance(arg_items[i], Ident):
                             try:
@@ -3102,7 +3107,8 @@ class VBInterpreter:
             pnm = p.name # parser ensures upper
             if i < len(arg_exprs):
                 if p.byval:
-                    frame[pnm] = self.eval_expr(arg_exprs[i])
+                    # ByVal array argument: the callee gets its own copy.
+                    frame[pnm] = _copy_on_let(self.eval_expr(arg_exprs[i]))
                 else:
                     # If argument is an identifier that resolves to a procedure,
                     # treat it as an expression (VBScript passes the result).
@@ -3348,6 +3354,25 @@ def _intdiv_subtype(left, right, result):
     if _is_int_subtype(left) and _is_int_subtype(right) and -32768 <= n <= 32767:
         return n
     return _VBLong(n)
+
+
+def _copy_on_let(value):
+    """VBScript arrays are VALUE types, so a Let assignment copies them.
+
+    On IIS every non-Set assignment of an array Variant performs a
+    VariantCopy, which deep-copies the SAFEARRAY:
+
+        a = Array(1,2) : b = a : b(0) = 9   ' a(0) is still 1
+        holder(0) = arr                     ' snapshot, not an alias
+        obj.Field  = arr                    ' snapshot, not an alias
+        Sub S(ByVal arr) ... End Sub        ' callee gets its own copy
+
+    Only ByRef parameter binding aliases the caller's array. Without this
+    copy, code that builds one working array in a loop and parks it in a
+    slot each round ends up with N references to the SAME array (every
+    slot showing the last iteration's data).
+    """
+    return value.clone() if isinstance(value, VBArray) else value
 
 
 def _is_vb_object(v):
