@@ -58,6 +58,7 @@ from .ast_nodes import (
     DimStmt,
     ReDimStmt,
     EraseStmt,
+    Block,
 )
 from .lexer import Lexer, LexerError
 
@@ -246,7 +247,63 @@ class Parser:
             if "Unterminated string" in str(e):
                 self._raise_c('UNTERMINATED_STRING')
             self._raise_c('INVALID_CHARACTER', str(e))
+        self._check_name_redefined(stmts)
         return stmts
+
+    # ------------------------------------------------------------------
+    # IIS parity: VBScript compiles a script unit before running anything
+    # and raises "Name redefined" (800A0411) when the same name is Dim'd
+    # twice in one scope - even when the second Dim sits in a branch that
+    # never executes. Each Sub/Function/Property body is its own scope, so
+    # re-Dim'ing a page-level name inside a procedure remains legal.
+    def _check_name_redefined(self, stmts):
+        self._check_scope_redefined(stmts, set())
+
+    def _raise_redefined(self, node):
+        e = VBScriptCompilationError('NAME_REDEFINED')
+        e.vbs_pos = getattr(node, '_pos', None)
+        raise e
+
+    def _check_scope_redefined(self, stmts, seen):
+        for s in stmts or []:
+            if isinstance(s, DimStmt):
+                for d in s.decls:
+                    if d.name in seen:
+                        self._raise_redefined(
+                            d if getattr(d, '_pos', None) is not None else s)
+                    seen.add(d.name)
+            elif isinstance(s, Block):
+                self._check_scope_redefined(s.stmts, seen)
+            elif isinstance(s, IfStmt):
+                self._check_scope_redefined(s.then_block, seen)
+                for (_c, b) in (s.elseif_parts or []):
+                    self._check_scope_redefined(b, seen)
+                self._check_scope_redefined(s.else_block, seen)
+            elif isinstance(s, (WhileStmt, DoWhileStmt, DoLoopStmt, ForStmt, ForEachStmt)):
+                self._check_scope_redefined(s.body, seen)
+            elif isinstance(s, SelectCaseStmt):
+                for cc in (s.cases or []):
+                    self._check_scope_redefined(cc.body, seen)
+                self._check_scope_redefined(s.else_block, seen)
+            elif isinstance(s, (SubDef, FuncDef, PropertyDef)):
+                self._check_proc_redefined(s)
+            elif isinstance(s, ClassDef):
+                for m in (s.members or []):
+                    if isinstance(m, (SubDef, FuncDef, PropertyDef)):
+                        self._check_proc_redefined(m)
+
+    def _check_proc_redefined(self, proc):
+        # Parameters live in the procedure's scope: Dim'ing a parameter name
+        # (or repeating a parameter) is "Name redefined" on IIS too.
+        seen = set()
+        for p in (proc.params or []):
+            nm = getattr(p, 'name', None)
+            if not nm:
+                continue
+            if nm in seen:
+                self._raise_redefined(proc)
+            seen.add(nm)
+        self._check_scope_redefined(proc.body, seen)
 
     def _skip_seps(self):
         while self.tok.kind in ("NEWLINE", "COLON"):
@@ -403,6 +460,7 @@ class Parser:
                     if self.tok.kind != "IDENT":
                         self._raise_c('EXPECTED_IDENTIFIER', "Expected identifier after Public/Private")
                     name = self.tok.value.upper()
+                    name_pos = self.tok.pos
                     self._eat("IDENT")
                     bounds = None
                     if self.tok.kind == "LPAREN":
@@ -416,7 +474,9 @@ class Parser:
                                 self._eat("COMMA")
                                 bounds.append(self._parse_expr())
                             self._eat("RPAREN")
-                    decls.append(DimDecl(name, bounds))
+                    decl = DimDecl(name, bounds)
+                    decl._pos = name_pos
+                    decls.append(decl)
                     if self.tok.kind == "COMMA":
                         self._eat("COMMA")
                         continue
@@ -1223,6 +1283,7 @@ class Parser:
                 raise ParseError(
                     f"Expected identifier after Dim, found {self._tok_desc()}")
             name = self.tok.value.upper()
+            name_pos = self.tok.pos
             self._require_not_reserved_ident(name, "Dim")
             self._eat_ident_name()
             bounds = None
@@ -1238,7 +1299,9 @@ class Parser:
                         self._eat("COMMA")
                         bounds.append(self._parse_expr())
                     self._eat("RPAREN")
-            decls.append(DimDecl(name, bounds))
+            decl = DimDecl(name, bounds)
+            decl._pos = name_pos
+            decls.append(decl)
             if self.tok.kind == "COMMA":
                 self._eat("COMMA")
                 continue

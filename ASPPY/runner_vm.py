@@ -35,6 +35,7 @@ from .ast_nodes import ClassDef, SubDef, FuncDef, OptionExplicitStmt
 from .vm.context import ExecutionContext
 from .server_object import ServerTransferException, make_asp_error
 from .asp_include import IncludeError
+from .vb_errors import VBScriptCompilationError
 import os
 from .vm.interpreter import VBInterpreter, _UserProc
 from .vm.values import VBNothing, VBEmpty, VBNull
@@ -387,6 +388,13 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
     # the distinction matters.
     hoisted: set = set()
 
+    # IIS parity: every script block and include of a page belongs to ONE
+    # compilation unit, so a Dim repeating a name declared in an earlier
+    # block/include is a compile-time "Name redefined" (800A0411). Duplicates
+    # WITHIN a block are caught by the parser; this set catches cross-block
+    # ones. Tracked per request because the decl lists are cached per node.
+    page_dim_seen: set = set()
+
     def collect(n_list, cur_virt_path, stack=()):
         for n in n_list:
             if isinstance(n, IncludeNode):
@@ -430,6 +438,21 @@ def exec_file_granular(phys_path: str, docroot: str, virt_path: str, interp: VBI
                     n._cached_collect = (has_option_explicit, dim_decls, proc_defs)
 
                 has_opt_exp, cached_dims, cached_procs = n._cached_collect
+
+                # Cross-block "Name redefined" check (see page_dim_seen above).
+                # Synthetic With-statement temps (__asp_py_with_N) are numbered
+                # per parser instance and may legitimately repeat across
+                # blocks - skip them.
+                for d in cached_dims:
+                    nm = getattr(d, 'name', '')
+                    if not nm or nm.upper().startswith('__ASP_PY_WITH_'):
+                        continue
+                    if nm in page_dim_seen:
+                        e = VBScriptCompilationError('NAME_REDEFINED')
+                        setattr(e, 'vbs_pos', getattr(d, '_pos', None))
+                        _attach_location(e, interp, n.start_line, n.start_col, n.code, cur_virt_path)
+                        raise e
+                    page_dim_seen.add(nm)
 
                 if has_opt_exp:
                     interp.option_explicit = True
