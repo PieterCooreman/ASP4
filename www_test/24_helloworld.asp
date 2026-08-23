@@ -220,7 +220,9 @@
 
 <%
    ' Building it letter-by-letter via ASCII math instead of Chr() chains
-   Dim s, i, codes
+   ' (s is already Dim'd in an earlier block; re-Dim'ing it here would be a
+   ' compile-time "Name redefined" on IIS, since all blocks share one unit)
+   Dim i, codes
    codes = Array(72,101,108,108,111,32,87,111,114,108,100)
    s = ""
    For i = 0 To UBound(codes)
