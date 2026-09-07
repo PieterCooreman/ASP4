@@ -12,6 +12,6 @@ in nothing but this docstring, so tools that only need ``__version__`` (build
 backends, ``pip show``, packaging metadata) do not pay for the whole runtime.
 """
 
-__version__ = "0.1.1"
+__version__ = "1.0"
 
 __all__ = ["__version__"]
