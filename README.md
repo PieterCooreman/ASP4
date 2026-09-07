@@ -8,6 +8,26 @@ And ASPPY is not just a framework on paper - it powers **real, live websites in 
 
 ---
 
+## Quick Start
+
+Install a recent version of Python (>=3.9) via https://www.python.org/downloads/
+
+Open a CMD window or use Powershell:
+
+```bash
+pip install asppy[all] --upgrade
+```
+
+Put your `.asp` files in a folder - say `www` - and serve it:
+
+```bash
+asppy 0.0.0.0 8080 www
+```
+
+Point your browser at `http://localhost:8080` and your `.asp` pages are live.
+
+---
+
 ## Why ASPPY?
 
 Classic ASP applications represent decades of business logic. Rewriting them is expensive and risky. ASPPY lets you **keep your existing `.asp` files** and serve them through a lightweight Python HTTP server - no COM, no Windows dependency, no IIS license. Linux typically runs Python 10–30% faster than Windows, increasing the performance advantage of modern frameworks like ASPPY over Classic ASP/VBScript on IIS.
