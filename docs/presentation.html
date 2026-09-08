@@ -1,1 +1,1086 @@
 
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASPPY - Classic ASP/VBScript Runtime for Python</title>
+    <meta name="description" content="ASPPY is a lightweight Python runtime that executes legacy Classic ASP (VBScript) pages on Windows, Linux and macOS - no IIS required. Under 900 KB, zero dependencies, built for the AI era.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ffb224'/%3E%3Cpath d='M9 11l7 5-7 5' stroke='%230a0e14' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='18' y1='22' x2='24' y2='22' stroke='%230a0e14' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#0a0e14;
+            --bg-2:#0d131b;
+            --surface:#111925;
+            --surface-2:#16202e;
+            --border:rgba(148,163,184,.16);
+            --text:#d7e0ea;
+            --heading:#f2f6fa;
+            --muted:#93a5b8;
+            --accent:#ffb224;
+            --accent-strong:#ffc95c;
+            --accent-soft:rgba(255,178,36,.12);
+            --green:#4ade80;
+            --blue:#60a5fa;
+        }
+        html{scroll-behavior:smooth;scroll-padding-top:92px;}
+        body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',system-ui,-apple-system,sans-serif;font-size:1rem;line-height:1.65;}
+        h1,h2,h3,h4,.navbar-brand{color:var(--heading);letter-spacing:-.02em;}
+        code,pre,.mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;}
+        ::selection{background:rgba(255,178,36,.35);color:#fff;}
+        section[id]{scroll-margin-top:92px;}
+
+        .skip-link{position:absolute;left:-9999px;top:0;z-index:2000;background:var(--accent);color:#0a0e14;padding:.6rem 1.1rem;border-radius:0 0 .6rem 0;font-weight:600;text-decoration:none;}
+        .skip-link:focus{left:0;color:#0a0e14;}
+
+        /* ---------- Navbar ---------- */
+        #mainNav{background:rgba(10,14,20,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:background .3s ease,border-color .3s ease,box-shadow .3s ease;}
+        #mainNav.scrolled{background:rgba(9,12,18,.94);border-bottom-color:var(--border);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+        .navbar-brand{font-weight:700;font-size:1.25rem;display:flex;align-items:center;gap:.6rem;color:var(--heading)!important;}
+        .nav-link{color:var(--muted);font-weight:500;margin-inline:.15rem;transition:color .2s ease;}
+        .nav-link:hover,.nav-link:focus{color:var(--heading);}
+        @media (min-width:992px){.navbar .nav-link{margin-inline:.35rem;padding-inline:.75rem;}}
+
+        /* ---------- Buttons & chips ---------- */
+        .btn-accent{background:var(--accent);border:1px solid var(--accent);color:#0a0e14;font-weight:600;border-radius:.7rem;padding:.65rem 1.35rem;transition:all .2s ease;}
+        .btn-accent:hover,.btn-accent:focus{background:var(--accent-strong);border-color:var(--accent-strong);color:#0a0e14;transform:translateY(-1px);}
+        .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--heading);font-weight:600;border-radius:.7rem;padding:.65rem 1.35rem;transition:all .2s ease;}
+        .btn-ghost:hover,.btn-ghost:focus{border-color:var(--accent);color:var(--accent-strong);background:var(--accent-soft);}
+        .install-chip{display:inline-flex;align-items:center;gap:.75rem;background:var(--surface);border:1px solid var(--border);border-radius:.8rem;padding:.55rem 1rem;font-size:.92rem;}
+        .install-chip code{color:var(--accent-strong);}
+
+        /* ---------- Hero ---------- */
+        .hero{position:relative;overflow:hidden;padding:9.5rem 0 4.5rem;background:
+            radial-gradient(900px 480px at 82% -10%, rgba(255,178,36,.14), transparent 60%),
+            radial-gradient(700px 420px at -10% 30%, rgba(96,165,250,.08), transparent 60%),
+            var(--bg);}
+        .hero::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(148,163,184,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.05) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 30%,transparent 75%);pointer-events:none;}
+        .hero > .container{position:relative;z-index:1;}
+        @media (max-width:991px){.hero{padding-top:7rem;}}
+        .hero-pill{display:inline-flex;align-items:center;gap:.55rem;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:.82rem;font-weight:600;border-radius:999px;padding:.4rem 1rem;}
+        .dot-live{width:.55rem;height:.55rem;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(74,222,128,.18);}
+        .hero h1{font-size:clamp(2.3rem,5vw,3.6rem);line-height:1.12;font-weight:700;}
+        .text-accent{color:var(--accent-strong);}
+        .lead-muted{color:var(--muted);font-size:1.12rem;max-width:34rem;}
+
+        /* ---------- Terminal ---------- */
+        .terminal{background:#0b1017;border:1px solid var(--border);border-radius:1rem;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.5);}
+        .terminal-head{display:flex;align-items:center;gap:.45rem;padding:.7rem 1.1rem;background:#0e141d;border-bottom:1px solid var(--border);}
+        .t-dot{width:.72rem;height:.72rem;border-radius:50%;}
+        .terminal-title{margin-left:auto;margin-right:auto;font-size:.78rem;color:var(--muted);font-family:'JetBrains Mono',monospace;}
+        .terminal-body{padding:1.3rem 1.4rem;font-family:'JetBrains Mono',monospace;font-size:.9rem;line-height:1.85;min-height:230px;}
+        .tl-line{white-space:pre-wrap;word-break:break-word;}
+        .tl-prompt{color:var(--green);font-weight:600;margin-right:.45rem;}
+        .tl-out{color:var(--muted);}
+        .tl-ok{color:var(--green);font-weight:700;}
+        .tl-hl{color:var(--heading);font-weight:600;}
+        .tl-gap{height:.7rem;}
+        .tl-caret{display:inline-block;width:.55em;height:1.05em;background:var(--accent);margin-left:2px;vertical-align:text-bottom;animation:blink 1s steps(1) infinite;}
+        @keyframes blink{50%{opacity:0;}}
+        .tl-in{animation:tlIn .3s ease both;}
+        @keyframes tlIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+        /* ---------- Code blocks ---------- */
+        .codeblock{background:#0b1017;border:1px solid var(--border);border-radius:.9rem;overflow:hidden;}
+        .codeblock-head{display:flex;align-items:center;padding:.55rem 1rem;background:#0e141d;border-bottom:1px solid var(--border);}
+        .cb-file{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--muted);}
+        .codeblock pre{margin:0;padding:1.15rem 1.25rem;overflow-x:auto;font-size:.9rem;line-height:1.8;}
+        .c-prompt{color:var(--green);font-weight:600;margin-right:.45rem;}
+        .c-cmd{color:var(--heading);font-weight:600;}
+        .c-com{color:#5b6b7e;}
+        .copy-btn{display:inline-flex;align-items:center;gap:.4rem;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:.5rem;padding:.28rem .65rem;font-size:.76rem;font-weight:600;transition:all .2s ease;margin-left:auto;}
+        .copy-btn:hover{border-color:var(--accent);color:var(--accent-strong);}
+        .copy-btn.copied{border-color:rgba(74,222,128,.5);color:var(--green);}
+
+        /* ---------- Sections ---------- */
+        .section-pad{padding-block:5rem;}
+        @media (max-width:767px){.section-pad{padding-block:3.5rem;}}
+        .section-alt{background:var(--bg-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+        .eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-strong);}
+        .sec-head h2{font-size:clamp(1.75rem,3.4vw,2.5rem);font-weight:700;margin-top:.5rem;}
+        .sec-sub{color:var(--muted);max-width:46rem;}
+
+        /* ---------- Cards ---------- */
+        .feature-card,.step-card,.pb-card,.eco-card,.site-card,.tool-card{background:var(--surface);border:1px solid var(--border);border-radius:1.1rem;transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease;}
+        .feature-card:hover,.step-card:hover,.pb-card:hover,.eco-card:hover,.site-card:hover{transform:translateY(-4px);border-color:rgba(255,178,36,.45);box-shadow:0 18px 40px rgba(0,0,0,.4);}
+        .icon-chip{width:48px;height:48px;border-radius:.8rem;background:var(--accent-soft);color:var(--accent-strong);display:grid;place-items:center;font-size:1.35rem;}
+        .feature-card h3,.step-card h3,.pb-card h3,.eco-card h3,.site-card h3{font-size:1.08rem;font-weight:600;}
+        .card-text-muted{color:var(--muted);font-size:.94rem;margin-bottom:0;}
+
+        /* ---------- Steps ---------- */
+        .step-num{font-family:'JetBrains Mono',monospace;font-size:2.2rem;font-weight:700;color:rgba(148,163,184,.25);line-height:1;}
+
+        /* ---------- Why / checklist ---------- */
+        .check-list{list-style:none;padding:0;margin:0;}
+        .check-list li{display:flex;gap:.7rem;align-items:flex-start;padding:.55rem 0;color:var(--text);}
+        .check-list i{color:var(--accent-strong);font-size:1.15rem;line-height:1.5;}
+        .highlight-card{background:linear-gradient(160deg,rgba(255,178,36,.1),transparent 55%),var(--surface);border:1px solid rgba(255,178,36,.3);border-radius:1.1rem;}
+
+        /* ---------- AI panel ---------- */
+        .ai-panel{position:relative;background:linear-gradient(180deg,rgba(255,178,36,.07),transparent 45%),var(--bg-2);border:1px solid rgba(255,178,36,.28);border-radius:1.5rem;padding:3rem;}
+        @media (max-width:767px){.ai-panel{padding:1.75rem;}}
+
+        /* ---------- Showcase ---------- */
+        .site-card{overflow:hidden;display:flex;flex-direction:column;}
+        .site-img-wrap{height:200px;overflow:hidden;background:var(--surface-2);}
+        .site-img-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease;}
+        .site-card:hover .site-img-wrap img{transform:scale(1.04);}
+        .tag-chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-strong);background:var(--accent-soft);border:1px solid rgba(255,178,36,.3);padding:.22rem .6rem;border-radius:999px;}
+        .site-url{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--blue);}
+
+        /* ---------- Tables ---------- */
+        .table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:1rem;}
+        .spec-table{width:100%;border-collapse:collapse;font-size:.94rem;min-width:560px;}
+        .spec-table th{text-align:left;color:var(--muted);font-weight:600;padding:.8rem 1.1rem;border-bottom:1px solid var(--border);font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;}
+        .spec-table td{padding:.85rem 1.1rem;border-bottom:1px solid rgba(148,163,184,.09);vertical-align:top;color:var(--text);}
+        .spec-table tr:last-child td{border-bottom:0;}
+        .spec-table code{color:var(--accent-strong);font-size:.85rem;background:rgba(255,178,36,.08);padding:.15rem .45rem;border-radius:.4rem;white-space:nowrap;}
+
+        /* ---------- Badges & chips ---------- */
+        .cov{display:inline-flex;align-items:center;gap:.4rem;font-size:.76rem;font-weight:700;padding:.3rem .75rem;border-radius:999px;white-space:nowrap;}
+        .cov-nc{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.32);}
+        .cov-sup{background:rgba(96,165,250,.1);color:var(--blue);border:1px solid rgba(96,165,250,.32);}
+        .cov-part{background:var(--accent-soft);color:var(--accent-strong);border:1px solid rgba(255,178,36,.32);}
+        .chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:.78rem;padding:.32rem .7rem;border-radius:.55rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);margin:.2rem;}
+        .plat-chip{display:inline-flex;align-items:center;gap:.45rem;font-weight:600;color:var(--heading);background:var(--surface);border:1px solid var(--border);padding:.45rem 1rem;border-radius:.7rem;}
+
+        /* ---------- Ecosystem ---------- */
+        .eco-card{display:flex;flex-direction:column;text-decoration:none;height:100%;}
+        .eco-card h3{color:var(--heading);}
+        .eco-arrow{margin-top:auto;color:var(--muted);transition:transform .25s ease,color .25s ease;}
+        .eco-card:hover .eco-arrow{transform:translate(4px,-4px);color:var(--accent-strong);}
+
+        /* ---------- CTA ---------- */
+        .cta-panel{background:radial-gradient(700px 300px at 50% -20%,rgba(255,178,36,.16),transparent 70%),var(--surface);border:1px solid rgba(255,178,36,.3);border-radius:1.5rem;}
+
+        /* ---------- Footer ---------- */
+        footer{background:#070b10;border-top:1px solid var(--border);}
+        .footer-link{color:var(--muted);text-decoration:none;font-size:.92rem;transition:color .2s ease;display:inline-block;margin-bottom:.45rem;}
+        .footer-link:hover{color:var(--accent-strong);}
+        .fine-print{font-size:.78rem;color:#64748b;line-height:1.7;}
+
+        /* ---------- Modals ---------- */
+        .modal-content{background:#0f151d;border:1px solid var(--border);color:var(--text);border-radius:1rem;}
+        .modal-header,.modal-footer{border-color:rgba(148,163,184,.12);}
+        .modal-title{font-size:1.15rem;font-weight:700;color:var(--heading);}
+
+        /* ---------- Reveal animation ---------- */
+        [data-reveal]{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease;}
+        [data-reveal].is-visible{opacity:1;transform:none;}
+        @media (prefers-reduced-motion:reduce){
+            html{scroll-behavior:auto;}
+            [data-reveal]{opacity:1;transform:none;transition:none;}
+            .tl-caret{animation:none;}
+            *{transition-duration:.01ms!important;animation-duration:.01ms!important;}
+        }
+    </style>
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="ASPPY - Classic ASP/VBScript Runtime for Python">
+    <meta property="og:description" content="ASPPY is a lightweight Python runtime that executes legacy Classic ASP (VBScript) pages on Windows, Linux and macOS - no IIS required. Under 900 KB, zero dependencies, built for the AI era.">
+    <meta property="og:url" content="https://autonome.quickersite.com/sites/at16o8eg4ag4yhtc/">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ============ NAVBAR ============ -->
+<nav id="mainNav" class="navbar navbar-expand-lg fixed-top" aria-label="Main navigation">
+    <div class="container">
+        <a class="navbar-brand" href="#top" aria-label="ASPPY home">
+            <svg width="30" height="30" viewBox="0 0 32 32" role="img" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#ffb224"/><path d="M9 11l7 5-7 5" stroke="#0a0e14" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="18" y1="22" x2="24" y2="22" stroke="#0a0e14" stroke-width="3.2" stroke-linecap="round"/></svg>
+            ASPPY
+        </a>
+        <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navCollapse" aria-controls="navCollapse" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-list fs-1 text-white"></i>
+        </button>
+        <div class="collapse navbar-collapse" id="navCollapse">
+            <ul class="navbar-nav ms-auto align-items-lg-center">
+                <li class="nav-item"><a class="nav-link" href="#quickstart">Quick start</a></li>
+                <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+                <li class="nav-item"><a class="nav-link" href="#ai-era">AI era</a></li>
+                <li class="nav-item"><a class="nav-link" href="#showcase">Showcase</a></li>
+                <li class="nav-item"><a class="nav-link" href="#commands">Commands</a></li>
+                <li class="nav-item"><a class="nav-link" href="#support">Support</a></li>
+                <li class="nav-item ms-lg-3 mt-2 mt-lg-0">
+                    <a class="btn btn-accent btn-sm d-inline-flex align-items-center gap-2" href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">
+                        <i class="bi bi-github" aria-hidden="true"></i> GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+    <div class="container">
+        <div class="row g-5 align-items-center">
+            <div class="col-lg-6">
+                <span class="hero-pill mb-4"><span class="dot-live" aria-hidden="true"></span> ASPPY 1.0 · MIT License · Python ≥ 3.9</span>
+                <h1 class="mb-3">Run Classic ASP on modern Python - <span class="text-accent">no IIS required.</span></h1>
+                <p class="lead-muted mb-4">ASPPY is a lightweight Python runtime that executes your existing <code>.asp</code> / VBScript pages on Windows, Linux and macOS. Full object model, broad built-in coverage, zero third-party dependencies - most legacy ASP applications just work.</p>
+                <div class="d-flex flex-wrap gap-3 mb-4">
+                    <a href="#quickstart" class="btn btn-accent"><i class="bi bi-rocket-takeoff me-2" aria-hidden="true"></i>Quick start</a>
+                    <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="btn btn-ghost"><i class="bi bi-github me-2" aria-hidden="true"></i>View on GitHub</a>
+                </div>
+                <div class="install-chip">
+                    <code>pip install asppy[all] --upgrade</code>
+                    <button type="button" class="copy-btn" data-copy="pip install asppy[all] --upgrade" aria-label="Copy pip install command to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="terminal" role="img" aria-label="Terminal showing: pip install asppy, then serving a folder of ASP pages on localhost port 8080">
+                    <div class="terminal-head">
+                        <span class="t-dot" style="background:#ff5f57;" aria-hidden="true"></span>
+                        <span class="t-dot" style="background:#febc2e;" aria-hidden="true"></span>
+                        <span class="t-dot" style="background:#28c840;" aria-hidden="true"></span>
+                        <span class="terminal-title">bash - asppy</span>
+                    </div>
+                    <div class="terminal-body" id="heroTermBody"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mt-5 pt-4 border-top" style="border-color:var(--border)!" aria-label="Key facts about ASPPY">
+            <div class="col-6 col-lg-3 text-center text-lg-start">
+                <div class="fs-4 fw-bold" style="color:var(--heading);">&lt; 900 KB</div>
+                <div class="small mt-1" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;">Human-readable runtime</div>
+            </div>
+            <div class="col-6 col-lg-3 text-center text-lg-start">
+                <div class="fs-4 fw-bold" style="color:var(--heading);">60 locales</div>
+                <div class="small mt-1" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;">Verified against IIS</div>
+            </div>
+            <div class="col-6 col-lg-3 text-center text-lg-start">
+                <div class="fs-4 fw-bold" style="color:var(--heading);">3 platforms</div>
+                <div class="small mt-1" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;">Windows · Linux · macOS</div>
+            </div>
+            <div class="col-6 col-lg-3 text-center text-lg-start">
+                <div class="fs-4 fw-bold" style="color:var(--heading);">0 dependencies</div>
+                <div class="small mt-1" style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;">Pure Python standard library</div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- ============ QUICK START ============ -->
+<section id="quickstart" class="section-pad">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Quick start</span>
+            <h2>Up and running in three steps</h2>
+            <p class="sec-sub mt-3">No build step, no configuration files, no restarts. Install Python, install ASPPY, serve your folder.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-4" data-reveal>
+                <div class="step-card h-100 p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <span class="icon-chip"><i class="bi bi-download" aria-hidden="true"></i></span>
+                        <span class="step-num" aria-hidden="true">01</span>
+                    </div>
+                    <h3 class="mb-2">Install Python</h3>
+                    <p class="card-text-muted">Python 3.9 or newer on any OS - Windows, Linux or macOS. ASPPY is a Python application, so Python is required on every machine that runs it, including your production server.</p>
+                    <a class="footer-link mt-2" href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org/downloads <i class="bi bi-box-arrow-up-right ms-1" aria-hidden="true"></i></a>
+                </div>
+            </div>
+            <div class="col-md-4" data-reveal style="transition-delay:.08s;">
+                <div class="step-card h-100 p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <span class="icon-chip"><i class="bi bi-terminal" aria-hidden="true"></i></span>
+                        <span class="step-num" aria-hidden="true">02</span>
+                    </div>
+                    <h3 class="mb-2">Install ASPPY</h3>
+                    <p class="card-text-muted mb-3">One command from PyPI. The core runtime has zero third-party dependencies - it runs on nothing but the Python standard library, and SQLite works out of the box.</p>
+                    <div class="install-chip w-100 justify-content-between">
+                        <code style="font-size:.82rem;">pip install asppy[all] --upgrade</code>
+                        <button type="button" class="copy-btn" data-copy='pip install "asppy[all]" --upgrade' aria-label="Copy pip install command to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4" data-reveal style="transition-delay:.16s;">
+                <div class="step-card h-100 p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <span class="icon-chip"><i class="bi bi-rocket-takeoff" aria-hidden="true"></i></span>
+                        <span class="step-num" aria-hidden="true">03</span>
+                    </div>
+                    <h3 class="mb-2">Serve your .asp folder</h3>
+                    <p class="card-text-muted mb-3">Put your <code>.asp</code> files in a folder - say <code>www</code> - and serve it. Point your browser at <code>http://localhost:8080</code> and your pages are live.</p>
+                    <div class="install-chip w-100 justify-content-between">
+                        <code style="font-size:.82rem;">asppy 0.0.0.0 8080 www</code>
+                        <button type="button" class="copy-btn" data-copy="asppy 0.0.0.0 8080 www" aria-label="Copy serve command to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ WHY ASPPY ============ -->
+<section id="why" class="section-pad section-alt">
+    <div class="container">
+        <div class="row g-5 align-items-center">
+            <div class="col-lg-6" data-reveal>
+                <span class="eyebrow">Why ASPPY?</span>
+                <h2 class="mt-2 mb-3" style="font-size:clamp(1.75rem,3.4vw,2.5rem);font-weight:700;">Decades of business logic, zero rewrites</h2>
+                <p class="mb-3" style="color:var(--muted);">Classic ASP applications represent decades of hard-won business logic. Rewriting them is expensive and risky. ASPPY lets you keep your existing <code>.asp</code> files exactly as they are and serve them through a lightweight Python HTTP server.</p>
+                <ul class="check-list">
+                    <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>No COM, no Windows dependency, no IIS license - the same codebase runs on Linux, macOS or Windows.</span></li>
+                    <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>The full Classic ASP object model: <code>Request</code>, <code>Response</code>, <code>Session</code>, <code>Application</code>, <code>Server</code>.</span></li>
+                    <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>Broad VBScript built-in coverage - strings, dates, math, arrays, RegExp and more.</span></li>
+                    <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>Deployment is a file copy. Edit an <code>.asp</code> file, hit refresh, it's live.</span></li>
+                </ul>
+            </div>
+            <div class="col-lg-6" data-reveal style="transition-delay:.1s;">
+                <div class="highlight-card p-4 p-md-5 h-100">
+                    <h3 class="mb-3"><i class="bi bi-speedometer2 me-2 text-accent" aria-hidden="true"></i>Performance comparable to IIS</h3>
+                    <p class="card-text-muted mb-4">Real-world throughput on par with Classic ASP under IIS - and on Linux, where Python typically runs 10–30% faster than on Windows, ASPPY pulls ahead. Without the Windows Server license.</p>
+                    <div class="row g-3 text-center">
+                        <div class="col-6">
+                            <div class="p-3 rounded-3" style="background:var(--surface-2);border:1px solid var(--border);">
+                                <div class="fs-5 fw-bold" style="color:var(--heading);">+10–30%</div>
+                                <div class="small mt-1" style="color:var(--muted);">faster on Linux vs Windows</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 rounded-3" style="background:var(--surface-2);border:1px solid var(--border);">
+                                <div class="fs-5 fw-bold" style="color:var(--heading);">€ single-digit</div>
+                                <div class="small mt-1" style="color:var(--muted);">monthly hosting on a nano VPS</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section id="features" class="section-pad">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Features</span>
+            <h2>Radically simple. By design.</h2>
+            <p class="sec-sub mt-3">While other frameworks pile on tooling, ASPPY strips it away. That's what sets it apart.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-6 col-xl-3" data-reveal>
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">No build step. Ever.</h3>
+                    <p class="card-text-muted">No npm install, no bundlers, no transpilers, no setup scripts, no dependency hell. You edit an .asp file, you hit refresh, it's live. Deployment is a file copy.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.06s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-file-earmark-code" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">&lt; 900 KB, human-readable</h3>
+                    <p class="card-text-muted">Not MBs - KB. About 40 plain Python files plus one generated locale table (~195 KB zipped). No black box, no vendor magic: read all of it, it fits in your head.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.12s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-cpu-fill" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">Compiled, not interpreted</h3>
+                    <p class="card-text-muted">ASPPY runs on Python, which compiles code to bytecode before execution. Your ASP pages aren't re-scanned as raw text on every hit.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.18s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-arrow-repeat" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">Cached &amp; auto-invalidating</h3>
+                    <p class="card-text-muted">Each page is parsed and compiled once, then served from an in-memory cache. Edit any file - includes too - and ASPPY recompiles automatically. No restart, no cache-busting.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal>
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">IIS-class performance</h3>
+                    <p class="card-text-muted">Real-world throughput on par with Classic ASP under IIS - and ahead of it on Linux, without the Windows Server license.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.06s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">No giant executables</h3>
+                    <p class="card-text-muted">No multi-hundred-MB installers, no self-contained EXE blobs, no Docker images to babysit. Python + a folder of source files - that's the whole deployment story.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.12s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-server" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">Runs on a nano VPS</h3>
+                    <p class="card-text-muted">512 MB RAM and 1 vCPU is enough to serve production traffic. No JVM warm-up, no node_modules eating your disk - hosting costs measured in single-digit euros per month.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.18s;">
+                <div class="feature-card h-100 p-4">
+                    <span class="icon-chip mb-3"><i class="bi bi-stars" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">Built for the AI era</h3>
+                    <p class="card-text-muted">A readable codebase small enough that any modern LLM can understand in minutes. The perfect match for vibe coding - see below.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ AI ERA ============ -->
+<section id="ai-era" class="section-pad section-alt">
+    <div class="container">
+        <div class="ai-panel" data-reveal>
+            <span class="eyebrow">Vibe coding</span>
+            <h2 class="mt-2 mb-3" style="font-size:clamp(1.75rem,3.4vw,2.5rem);font-weight:700;">Built for the AI era - the perfect match</h2>
+            <p class="sec-sub mb-4">ASPPY is newer than every model's training cut-off, so no LLM knows anything about it out of the box - and installing a package cannot change that. Knowledge only reaches a model as text in its context window. So the docs travel inside the package, and one command hands them over. <strong style="color:var(--heading);">Skip this step and the model will invent an API that doesn't exist.</strong> It's the single highest-leverage thing you can do.</p>
+
+            <div class="row g-4 align-items-stretch">
+                <div class="col-lg-7">
+                    <div class="codeblock h-100">
+                        <div class="codeblock-head"><span class="cb-file">terminal - feeding your AI agent</span>
+                            <button type="button" class="copy-btn" aria-label="Copy asppy-guide commands to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                        </div>
+                        <pre><code><span class="c-prompt">$</span> <span class="c-cmd">asppy-guide</span>                 <span class="c-com"># prints developers.md - conventions, object model, gotchas</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy-guide --list</span>          <span class="c-com"># every bundled document</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy-guide --open prompt-builder</span>  <span class="c-com"># opens a prompt builder in your browser</span></code></pre>
+                    </div>
+                </div>
+                <div class="col-lg-5 d-flex flex-column gap-3">
+                    <div class="tool-card p-4 flex-grow-1">
+                        <h3 class="mb-2"><i class="bi bi-terminal me-2 text-accent" aria-hidden="true"></i>Agentic tools</h3>
+                        <p class="card-text-muted mb-0">Claude Code, OpenCode, Codex, Cursor, Copilot: run <code>asppy-guide</code> and give the agent its output before asking for any ASP. Everything is on disk after <code>pip install</code> - nothing to download.</p>
+                    </div>
+                    <div class="tool-card p-4 flex-grow-1">
+                        <h3 class="mb-2"><i class="bi bi-chat-square-text me-2 text-accent" aria-hidden="true"></i>Chat assistants</h3>
+                        <p class="card-text-muted mb-0">Gemini or ChatGPT in a browser can't read your disk. Pipe the brief into your clipboard with <code>asppy-guide | clip</code> and paste it - or use a prompt builder to generate a complete ready-to-send prompt.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-1">
+                <div class="col-md-6" data-reveal>
+                    <a class="pb-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://github.com/PieterCooreman/ASPPY/blob/main/prompt-builder.html" target="_blank" rel="noopener">
+                        <span class="icon-chip mb-3"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+                        <h3 class="mb-2">MVC Prompt Builder</h3>
+                        <p class="card-text-muted">Generates the perfect prompt for classic MVC-style ASPPY apps - routing, SQLite, views and layout already wired into the brief.</p>
+                        <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                    </a>
+                </div>
+                <div class="col-md-6" data-reveal style="transition-delay:.08s;">
+                    <a class="pb-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://github.com/PieterCooreman/ASPPY/blob/main/prompt-builder-SPA.html" target="_blank" rel="noopener">
+                        <span class="icon-chip mb-3"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i></span>
+                        <h3 class="mb-2">SPA Prompt Builder (React + ASPPY)</h3>
+                        <p class="card-text-muted">Generates the perfect prompt for single-page apps with a React front-end and an ASPPY back-end.</p>
+                        <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="alert mt-4 mb-0 rounded-3 small" style="background:var(--accent-soft);border:1px solid rgba(255,178,36,.35);color:var(--heading);" role="note">
+                <i class="bi bi-lightning-charge-fill me-2 text-accent" aria-hidden="true"></i>
+                Point your AI agent at <code style="color:var(--accent-strong);">developers.md</code> before any development - it cuts development time and cost by <strong>30–40%</strong> and significantly improves code quality, even when using free AI coding agents. Legacy modernization, rapid prototyping, full production apps: what used to take weeks of budget now happens in an afternoon.
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SHOWCASE ============ -->
+<section id="showcase" class="section-pad">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Showcase</span>
+            <h2>Built with ASPPY - real websites, real users</h2>
+            <p class="sec-sub mt-3">ASPPY isn't a proof of concept. It runs production websites in the wild - from SaaS products to healthcare tooling to e-learning - built, deployed and used by real people every day.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-6 col-xl-3" data-reveal>
+                <article class="site-card h-100">
+                    <div class="site-img-wrap"><img src="https://picsum.photos/seed/lifeadmin-saas-dashboard/800/520" alt="Screenshot placeholder of the LifeAdmin team and personal organization SaaS dashboard" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/800x520?text=LifeAdmin';"></div>
+                    <div class="p-4 d-flex flex-column flex-grow-1">
+                        <span class="tag-chip mb-3 align-self-start">SaaS</span>
+                        <h3 class="mb-1">LifeAdmin</h3>
+                        <div class="site-url mb-2">lifeadmin.be</div>
+                        <p class="card-text-muted">A multilingual SaaS platform for organizing life and work: shared workspaces, task management, project tracking and real-time collaboration - all served by ASPPY.</p>
+                    </div>
+                </article>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.07s;">
+                <article class="site-card h-100">
+                    <div class="site-img-wrap"><img src="https://picsum.photos/seed/flowdent-dental-practice/800/520" alt="Screenshot placeholder of the FlowDent dental practice management suite" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/800x520?text=FlowDent';"></div>
+                    <div class="p-4 d-flex flex-column flex-grow-1">
+                        <span class="tag-chip mb-3 align-self-start">Healthcare</span>
+                        <h3 class="mb-1">FlowDent</h3>
+                        <div class="site-url mb-2">flowdent.be</div>
+                        <p class="card-text-muted">A complete, GDPR-compliant management suite for dental practices: waiting lists, inventory, digital signatures and tasks - trilingual with 8+ modules, running on ASPPY.</p>
+                    </div>
+                </article>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.14s;">
+                <article class="site-card h-100">
+                    <div class="site-img-wrap"><img src="https://picsum.photos/seed/nomenclature-database-search/800/520" alt="Screenshot placeholder of the FlowDent Nomenclature RIZIV code browser with search and filters" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/800x520?text=Nomenclature';"></div>
+                    <div class="p-4 d-flex flex-column flex-grow-1">
+                        <span class="tag-chip mb-3 align-self-start">Data</span>
+                        <h3 class="mb-1">FlowDent Nomenclature</h3>
+                        <div class="site-url mb-2">nomenclatuur.flowdent.be</div>
+                        <p class="card-text-muted">A searchable database of 31,000+ Belgian RIZIV/INAMI nomenclature codes with filters, tariffs and cumulation rules - data-heavy pages served fast by ASPPY.</p>
+                    </div>
+                </article>
+            </div>
+            <div class="col-md-6 col-xl-3" data-reveal style="transition-delay:.21s;">
+                <article class="site-card h-100">
+                    <div class="site-img-wrap"><img src="https://picsum.photos/seed/learn-asppy-elearning-course/800/520" alt="Screenshot placeholder of the Learn ASPPY e-learning platform course page" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/800x520?text=Learn+ASPPY';"></div>
+                    <div class="p-4 d-flex flex-column flex-grow-1">
+                        <span class="tag-chip mb-3 align-self-start">E-learning</span>
+                        <h3 class="mb-1">Learn ASPPY</h3>
+                        <div class="site-url mb-2">learnasppy.quickersite.com</div>
+                        <p class="card-text-muted">A full e-learning platform - courses, lessons, enrollments and user accounts - built with Classic ASP and SQLite on ASPPY. And it teaches you ASPPY itself.</p>
+                    </div>
+                </article>
+            </div>
+        </div>
+        <p class="text-center mt-5 mb-0" style="color:var(--muted);">Running your own site on ASPPY? <a href="https://github.com/PieterCooreman/ASPPY/issues" target="_blank" rel="noopener" style="color:var(--accent-strong);text-decoration:none;font-weight:600;">Open an issue or PR</a> to get it featured here.</p>
+    </div>
+</section>
+
+<!-- ============ INSTALLATION ============ -->
+<section id="install" class="section-pad section-alt">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Installation</span>
+            <h2>One command from PyPI</h2>
+            <p class="sec-sub mt-3">Prerequisite: Python 3.9 or higher on any machine that runs ASPPY - including your production hosting server.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-5" data-reveal>
+                <div class="codeblock mb-4 h-auto">
+                    <div class="codeblock-head"><span class="cb-file">terminal</span>
+                        <button type="button" class="copy-btn" aria-label="Copy pip install command to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                    </div>
+                    <pre><code><span class="c-com"># core runtime - zero third-party dependencies</span>
+<span class="c-cmd">pip install asppy</span></code></pre>
+                </div>
+                <div class="codeblock h-auto">
+                    <div class="codeblock-head"><span class="cb-file">terminal - from source</span>
+                        <button type="button" class="copy-btn" aria-label="Copy install-from-source commands to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                    </div>
+                    <pre><code>git clone https://github.com/PieterCooreman/ASPPY.git
+cd ASPPY
+pip install -e ".[all]"</code></pre>
+                </div>
+            </div>
+            <div class="col-lg-7" data-reveal style="transition-delay:.1s;">
+                <h3 class="mb-3">Optional extras</h3>
+                <p class="card-text-muted mb-4">Some features reach for a third-party library. Each one is imported lazily and only by the feature that needs it, so you install just what your application actually uses. Skip an extra and the matching feature raises a clear error naming the package to install - nothing else breaks.</p>
+                <div class="table-wrap">
+                    <table class="spec-table">
+                        <thead><tr><th scope="col">Extra</th><th scope="col">Command</th><th scope="col">Enables</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>pdf</code></td><td><code>pip install "asppy[pdf]"</code></td><td>PDF generation (fpdf2)</td></tr>
+                            <tr><td><code>image</code></td><td><code>pip install "asppy[image]"</code></td><td>Image resize / crop / filter / watermark (pillow)</td></tr>
+                            <tr><td><code>crypto</code></td><td><code>pip install "asppy[crypto]"</code></td><td>bcrypt password hashing (bcrypt)</td></tr>
+                            <tr><td><code>odbc</code></td><td><code>pip install "asppy[odbc]"</code></td><td>ADODB via ODBC: Access, Excel, SQL Server, PostgreSQL, MySQL (pyodbc)</td></tr>
+                            <tr><td><code>xml</code></td><td><code>pip install "asppy[xml]"</code></td><td>MSXML full XPath 1.0, XSLT and CDATA (lxml, certifi)</td></tr>
+                            <tr><td><code>all</code></td><td><code>pip install "asppy[all]"</code></td><td>All of the above</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ COMMANDS ============ -->
+<section id="commands" class="section-pad">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">CLI</span>
+            <h2>The five commands</h2>
+            <p class="sec-sub mt-3">Everything you need to create, serve, render and health-check an ASPPY application.</p>
+        </div>
+        <div class="table-wrap mb-4" data-reveal>
+            <table class="spec-table">
+                <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+                <tbody>
+                    <tr><td><code>asppy-new myapp</code></td><td>Create a new app from the MVC starter template - routing, SQLite, views and layout already wired up. Start here.</td></tr>
+                    <tr><td><code>asppy [host] [port] [docroot]</code></td><td>Serve a folder of .asp pages over HTTP. Defaults: <span class="mono">0.0.0.0 8080 web</span>. Pass <span class="mono">::</span> as host for IPv6.</td></tr>
+                    <tr><td><code>asppy-render PAGE.asp</code></td><td>Render one page to stdout or a file - no socket, no browser. Great for diffing output and CI.</td></tr>
+                    <tr><td><code>asppy-check FOLDER</code></td><td>Recursively render every .asp page in a folder and report the ones that fail, with file and line number.</td></tr>
+                    <tr><td><code>asppy-guide</code></td><td>Print the developer/agent brief. <span class="mono">--list</span> shows every bundled document; <span class="mono">--open</span> opens a prompt builder in your browser.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="row g-4 align-items-start">
+            <div class="col-lg-7" data-reveal>
+                <div class="codeblock h-auto">
+                    <div class="codeblock-head"><span class="cb-file">terminal - zero to running app</span>
+                        <button type="button" class="copy-btn" aria-label="Copy zero-to-app commands to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                    </div>
+                    <pre><code><span class="c-prompt">$</span> <span class="c-cmd">asppy-new myapp</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy 127.0.0.1 8080 myapp</span>
+
+<span class="c-com"># render a single page, with a query string and response headers</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy-render www/default.asp --query "id=42" --show-headers</span>
+
+<span class="c-com"># health-check the whole app - exit code 1 if anything fails (CI friendly)</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy-check www</span></code></pre>
+                </div>
+            </div>
+            <div class="col-lg-5" data-reveal style="transition-delay:.1s;">
+                <h3 class="mb-3">Also works as a module</h3>
+                <p class="card-text-muted mb-3">Handy in .bat files, systemd units and Docker CMD lines:</p>
+                <div class="codeblock h-auto">
+                    <div class="codeblock-head"><span class="cb-file">terminal - python -m</span>
+                        <button type="button" class="copy-btn" aria-label="Copy module invocation examples to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                    </div>
+                    <pre><code>python -m ASPPY 0.0.0.0 8080 www
+python -m ASPPY.server 0.0.0.0 8080 www
+python -m ASPPY.cli www/default.asp
+python -m ASPPY.check www</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SUPPORT ============ -->
+<section id="support" class="section-pad section-alt">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Compatibility</span>
+            <h2>What's supported</h2>
+            <p class="sec-sub mt-3">Practical app-level compatibility, not byte-for-byte IIS parity. If you're migrating a critical application, run your own regression tests against ASPPY alongside IIS before cutting over.</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-8" data-reveal>
+                <div class="table-wrap h-auto">
+                    <table class="spec-table">
+                        <thead><tr><th scope="col">Area</th><th scope="col">Coverage</th></tr></thead>
+                        <tbody>
+                            <tr><td>VBScript built-ins (strings, dates, math, arrays)</td><td><span class="cov cov-nc"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Near-complete</span></td></tr>
+                            <tr><td>Request / Response / Session / Application / Server</td><td><span class="cov cov-nc"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>Near-complete</span></td></tr>
+                            <tr><td>Scripting.Dictionary / Scripting.FileSystemObject</td><td><span class="cov cov-sup"><i class="bi bi-check2" aria-hidden="true"></i>Supported</span></td></tr>
+                            <tr><td>ADODB.Connection / Recordset / Command / Stream</td><td><span class="cov cov-part"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Partial</span></td></tr>
+                            <tr><td>Database backends - SQLite, Access, Excel (read-only), ODBC, PostgreSQL</td><td><span class="cov cov-sup"><i class="bi bi-check2" aria-hidden="true"></i>Supported</span></td></tr>
+                            <tr><td>VBScript.RegExp</td><td><span class="cov cov-sup"><i class="bi bi-check2" aria-hidden="true"></i>Supported</span></td></tr>
+                            <tr><td>MSXML HTTP &amp; DOM (security-sandboxed)</td><td><span class="cov cov-part"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Partial</span></td></tr>
+                            <tr><td>CDO.Message (SMTP) · POP3 / IMAP</td><td><span class="cov cov-part"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Partial</span></td></tr>
+                            <tr><td>Global.asa events</td><td><span class="cov cov-sup"><i class="bi bi-check2" aria-hidden="true"></i>Supported</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-4 d-flex flex-column gap-3" data-reveal style="transition-delay:.1s;">
+                <div class="tool-card p-4">
+                    <h3 class="mb-2"><i class="bi bi-plus-circle me-2 text-accent" aria-hidden="true"></i>Beyond classic ASP</h3>
+                    <p class="card-text-muted mb-0">ASPPY ships extended helpers accessible from VBScript via the global <code>ASPPY</code> object: JSON encode/decode, ZIP, PDF generation, image processing and bcrypt password hashing.</p>
+                </div>
+                <div class="tool-card p-4">
+                    <h3 class="mb-3"><i class="bi bi-globe2 me-2 text-accent" aria-hidden="true"></i>Platform support</h3>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="plat-chip"><i class="bi bi-windows" aria-hidden="true"></i> Windows</span>
+                        <span class="plat-chip"><i class="bi bi-terminal" aria-hidden="true"></i> Linux</span>
+                        <span class="plat-chip"><i class="bi bi-apple" aria-hidden="true"></i> macOS</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ LOCALIZATION & ENCODING ============ -->
+<section id="encoding" class="section-pad">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Localization &amp; encoding</span>
+            <h2>Locale-aware by default - UTF-8 everywhere</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-6" data-reveal>
+                <div class="feature-card p-4 h-100">
+                    <span class="icon-chip mb-3"><i class="bi bi-translate" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">60 locales, verified against IIS</h3>
+                    <p class="card-text-muted mb-3">ASPPY implements the Classic ASP locale model - <code>Session.LCID</code>, <code>Response.LCID</code>, <code>&lt;%@ LCID %&gt;</code>, <code>GetLocale/SetLocale</code>. Formatting, parsing and collation are all locale-aware: FormatNumber/FormatCurrency/FormatPercent, FormatDateTime, MonthName/WeekdayName, CDbl/CDate/IsNumeric/IsDate, Weekday and StrComp with vbTextCompare.</p>
+                    <div class="mb-3" aria-label="Sample supported locales">
+                        <span class="chip">en-US</span><span class="chip">nl-BE</span><span class="chip">fr-FR</span><span class="chip">de-DE</span><span class="chip">es-ES</span><span class="chip">it-IT</span><span class="chip">pt-PT</span><span class="chip">ja-JP</span><span class="chip">zh-CN</span><span class="chip">+51 more</span>
+                    </div>
+                    <ul class="check-list small" style="color:var(--muted);">
+                        <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span>Default locale is 1033 (en-US) when nothing is set - deterministic across hosts.</span></li>
+                        <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span><code>CStr(date)</code> stays ISO until a locale is selected, so apps that concatenate dates into SQL keep working.</span></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-6" data-reveal style="transition-delay:.1s;">
+                <div class="feature-card p-4 h-100">
+                    <span class="icon-chip mb-3"><i class="bi bi-type-check" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">UTF-8 by default - an intentional break from IIS</h3>
+                    <p class="card-text-muted mb-3">IIS defaults to the host's ANSI codepage (1252, 932…). ASPPY instead defaults to UTF-8 everywhere: Linux and macOS have no meaningful "system ANSI codepage", every modern consumer assumes UTF-8, and VBScript strings are Unicode internally - UTF-8 is the only encoding that round-trips them losslessly. Legacy windows-1252 files need no conversion; ASPPY detects and decodes them automatically.</p>
+                    <div class="table-wrap mb-3">
+                        <table class="spec-table" style="min-width:420px;">
+                            <thead><tr><th scope="col">Surface</th><th scope="col">ASPPY</th><th scope="col">IIS</th></tr></thead>
+                            <tbody>
+                                <tr><td class="mono" style="font-size:.8rem;">Session/Response.CodePage</td><td>65001 (UTF-8)</td><td>system ANSI (e.g. 1252)</td></tr>
+                                <tr><td class="mono" style="font-size:.8rem;">Response.Charset</td><td>utf-8</td><td>unset - header omits charset</td></tr>
+                                <tr><td class="mono" style="font-size:.8rem;">.asp source files</td><td>UTF-8, BOM-tolerant, cp1252 fallback</td><td>BOM, else @CODEPAGE, else metabase</td></tr>
+                                <tr><td class="mono" style="font-size:.8rem;">Request.Form / QueryString</td><td>decoded as UTF-8</td><td>per Session.CodePage</td></tr>
+                                <tr><td class="mono" style="font-size:.8rem;">Server.URLEncode</td><td>percent-encoded UTF-8</td><td>per current codepage</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="card-text-muted small mb-0">Only intervene where a non-browser consumer expects legacy bytes (CSV for Excel, banking/EDI files): set <code>Response.Charset = "windows-1252"</code> on those responses.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ ECOSYSTEM ============ -->
+<section id="ecosystem" class="section-pad section-alt">
+    <div class="container">
+        <div class="sec-head text-center mx-auto mb-5" style="max-width:640px;" data-reveal>
+            <span class="eyebrow">Ecosystem</span>
+            <h2>The ASPPY ecosystem</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-6 col-xl-4" data-reveal>
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://pietercooreman.github.io/ASPPY/" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-book" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">ASPPY Docs</h3>
+                    <p class="card-text-muted">The full documentation site - object model, built-ins, locale specifications and migration notes.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+            <div class="col-md-6 col-xl-4" data-reveal style="transition-delay:.06s;">
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://github.com/PieterCooreman/ASPPY/blob/main/prompt-builder.html" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">MVC Prompt Builder</h3>
+                    <p class="card-text-muted">Generate the perfect prompt for classic MVC-style ASPPY apps when using vibe coding tools.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+            <div class="col-md-6 col-xl-4" data-reveal style="transition-delay:.12s;">
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://github.com/PieterCooreman/ASPPY/blob/main/prompt-builder-SPA.html" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">SPA Prompt Builder</h3>
+                    <p class="card-text-muted">Generate the perfect prompt for single-page apps with a React front-end and an ASPPY back-end.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+            <div class="col-md-6 col-xl-4" data-reveal style="transition-delay:.18s;">
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://pietercooreman.github.io/ASPPY/ASPPY_The_Vibe_Coders_Guide.html" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-ebook" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">The Vibe Coder's Guide</h3>
+                    <p class="card-text-muted">An ebook for both vibe coding tools and developers - how to get the best out of LLMs writing ASP/VBScript.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+            <div class="col-md-6 col-xl-4" data-reveal style="transition-delay:.24s;">
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://learnasppy.quickersite.com/" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-mortarboard" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">Learn ASPPY</h3>
+                    <p class="card-text-muted">A very basic e-learning site for beginning developers - courses, lessons and enrollments on ASPPY itself.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+            <div class="col-md-6 col-xl-4" data-reveal style="transition-delay:.3s;">
+                <a class="eco-card p-4 h-100 text-decoration-none d-flex flex-column" href="https://pietercooreman.github.io/ASP-Runner/" target="_blank" rel="noopener">
+                    <span class="icon-chip mb-3"><i class="bi bi-browser" aria-hidden="true"></i></span>
+                    <h3 class="mb-2">ASP-Runner</h3>
+                    <p class="card-text-muted">Run ASP/VBScript code right in the browser via WebAssembly - powered by ASPPY.</p>
+                    <span class="eco-arrow"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section id="get-started" class="section-pad">
+    <div class="container">
+        <div class="cta-panel p-4 p-md-5 text-center" data-reveal>
+            <span class="eyebrow">Get started</span>
+            <h2 class="mt-2 mb-3" style="font-size:clamp(1.75rem,3.4vw,2.5rem);font-weight:700;">Zero to running app</h2>
+            <p class="sec-sub mx-auto mb-4">From a bare <code>pip install</code>, in under a minute:</p>
+            <div class="codeblock mx-auto mb-4" style="max-width:560px;text-align:left;">
+                <div class="codeblock-head"><span class="cb-file">terminal</span>
+                    <button type="button" class="copy-btn" aria-label="Copy get started commands to clipboard"><i class="bi bi-clipboard" aria-hidden="true"></i><span class="copy-label">Copy</span></button>
+                </div>
+                <pre><code><span class="c-prompt">$</span> <span class="c-cmd">asppy-new myapp</span>
+<span class="c-prompt">$</span> <span class="c-cmd">asppy 127.0.0.1 8080 myapp</span></code></pre>
+            </div>
+            <div class="d-flex flex-wrap justify-content-center gap-3">
+                <a href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener" class="btn btn-accent"><i class="bi bi-github me-2" aria-hidden="true"></i>Get ASPPY on GitHub</a>
+                <a href="https://pietercooreman.github.io/ASPPY/" target="_blank" rel="noopener" class="btn btn-ghost">Read the docs <i class="bi bi-box-arrow-up-right ms-1" aria-hidden="true"></i></a>
+            </div>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="pt-5 pb-4 mt-2">
+    <div class="container">
+        <div class="row g-4 pb-4 border-bottom" style="border-color:var(--border)!" >
+            <div class="col-lg-5">
+                <a class="navbar-brand mb-3" href="#top" aria-label="ASPPY home">
+                    <svg width="28" height="28" viewBox="0 0 32 32" role="img" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#ffb224"/><path d="M9 11l7 5-7 5" stroke="#0a0e14" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="18" y1="22" x2="24" y2="22" stroke="#0a0e14" stroke-width="3.2" stroke-linecap="round"/></svg>
+                    ASPPY
+                </a>
+                <p class="card-text-muted small mb-3">Classic ASP/VBScript runtime for Python. No IIS required - Windows, Linux and macOS.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="plat-chip" style="font-size:.8rem;padding:.35rem .8rem;"><i class="bi bi-windows" aria-hidden="true"></i> Windows</span>
+                    <span class="plat-chip" style="font-size:.8rem;padding:.35rem .8rem;"><i class="bi bi-terminal" aria-hidden="true"></i> Linux</span>
+                    <span class="plat-chip" style="font-size:.8rem;padding:.35rem .8rem;"><i class="bi bi-apple" aria-hidden="true"></i> macOS</span>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2 offset-lg-1">
+                <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1rem;">Explore</h3>
+                <a class="footer-link" href="#quickstart">Quick start</a><br>
+                <a class="footer-link" href="#features">Features</a><br>
+                <a class="footer-link" href="#ai-era">AI era</a><br>
+                <a class="footer-link" href="#showcase">Showcase</a><br>
+                <a class="footer-link" href="#commands">Commands</a>
+            </div>
+            <div class="col-6 col-lg-2">
+                <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1rem;">Resources</h3>
+                <a class="footer-link" href="https://github.com/PieterCooreman/ASPPY" target="_blank" rel="noopener">GitHub repo</a><br>
+                <a class="footer-link" href="https://pietercooreman.github.io/ASPPY/" target="_blank" rel="noopener">Documentation</a><br>
+                <a class="footer-link" href="https://learnasppy.quickersite.com/" target="_blank" rel="noopener">Learn ASPPY</a><br>
+                <a class="footer-link" href="https://pietercooreman.github.io/ASP-Runner/" target="_blank" rel="noopener">ASP-Runner (WASM)</a>
+            </div>
+            <div class="col-lg-2">
+                <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1rem;">Legal</h3>
+                <a href="#" class="footer-link" data-bs-toggle="modal" data-bs-target="#privacyModal">Privacy statement</a><br>
+                <a href="#" class="footer-link" data-bs-toggle="modal" data-bs-target="#cookieModal">Cookies / Cookie settings</a><br>
+                <a href="#" class="footer-link" data-bs-toggle="modal" data-bs-target="#legalModal">Legal notice &amp; license</a>
+            </div>
+        </div>
+        <p class="fine-print mt-4 mb-0">© <span id="year">2026</span> ASPPY · Released under the MIT License. ASPPY is an independent software project and is not affiliated, associated, authorized or endorsed by Microsoft Corporation in any way. "Microsoft", "Active Server Pages", "ASP" and "VBScript" are registered trademarks of Microsoft Corporation, used here purely for descriptive purposes.</p>
+    </div>
+</footer>
+
+<!-- ============ COOKIE MODAL ============ -->
+<div class="modal fade" id="cookieModal" tabindex="-1" aria-labelledby="cookieModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="cookieModalLabel"><i class="bi bi-shield-lock me-2 text-accent" aria-hidden="true"></i>Cookies</h2>
+                <button type="button" class="btn-close" id="cookieClose" data-bs-dismiss="modal" aria-label="Close cookie notice"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="mb-3">This website uses only the minimum necessary storage. Here is exactly what:</p>
+                <ul class="list-unstyled mb-3" style="color:var(--muted);">
+                    <li class="mb-2"><strong style="color:var(--heading);">cookieConsent (functional / localStorage)</strong> - stores your choice from this notice in your browser's localStorage so we don't ask you again. It is not an HTTP cookie and is never sent to a server.</li>
+                    <li class="mb-2"><strong style="color:var(--heading);">No tracking or marketing cookies</strong> - no analytics, no ad technology, no fingerprinting of any kind.</li>
+                    <li><strong style="color:var(--heading);">Third-party static assets</strong> - Bootstrap (jsDelivr CDN) and Google Fonts deliver static files only and set no cookies.</li>
+                </ul>
+                <p class="mb-0" style="color:var(--muted);">You can change your choice at any time via the "Cookies / Cookie settings" link in the footer, or by clearing your browser's site data.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost btn-sm" id="cookieReject">Reject</button>
+                <button type="button" class="btn btn-accent btn-sm" id="cookieAccept">Accept</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ PRIVACY MODAL ============ -->
+<div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="privacyModalLabel"><i class="bi bi-shield-check me-2 text-accent" aria-hidden="true"></i>Privacy statement</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close privacy statement"></button>
+            </div>
+            <div class="modal-body small">
+                <p><strong>Data controller:</strong> ASPPY - an independent open-source project developed by Pieter Cooreman.</p>
+                <p><strong>What we collect:</strong> this website contains no forms and performs no tracking. The only data stored is your cookie preference (<code>cookieConsent</code>) in your own browser's localStorage. If you contact us via the GitHub repository, that interaction is handled under GitHub's own privacy policy.</p>
+                <p><strong>Purpose &amp; legal basis:</strong> functional operation of the website (legitimate interest) and storing your cookie preference (consent).</p>
+                <p><strong>Retention:</strong> your stored preference remains in your browser until you change it via the Cookies link or clear your site data. No server-side personal data is retained.</p>
+                <p><strong>Your rights:</strong> you may access, correct or delete any locally stored data at any time by clearing this site's data in your browser settings. For anything else, open an issue on our GitHub repository.</p>
+                <p class="mb-0" style="color:var(--muted);"><strong>Contact:</strong> <a href="https://github.com/PieterCooreman/ASPPY/issues" target="_blank" rel="noopener">github.com/PieterCooreman/ASPPY → Issues</a></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ LEGAL MODAL ============ -->
+<div class="modal fade" id="legalModal" tabindex="-1" aria-labelledby="legalModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="legalModalLabel"><i class="bi bi-file-earmark-ruled me-2 text-accent" aria-hidden="true"></i>Legal notice &amp; license</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close legal notice"></button>
+            </div>
+            <div class="modal-body small">
+                <p><strong>License:</strong> ASPPY is released under the MIT License. See the LICENSE file in the repository for full terms.</p>
+                <h3 style="font-size:.95rem;margin-bottom:.5rem;">Disclaimer of affiliation</h3>
+                <p class="mb-2">ASPPY is an independent software project developed by Pieter Cooreman. ASPPY is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Microsoft Corporation, or any of its subsidiaries or affiliates. The official Microsoft website can be found at <a href="https://www.microsoft.com" target="_blank" rel="noopener">microsoft.com</a>.</p>
+                <p class="mb-0">The names "Microsoft", "Active Server Pages", "ASP" and "VBScript", as well as related names, marks, emblems and images, are registered trademarks of Microsoft Corporation. Their use within this project is purely for descriptive, identification and reference purposes to indicate technical compatibility, and does not imply any association with, or endorsement by, the trademark holder.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+
+    /* ---------- Cookie consent (shows only once) ---------- */
+    try {
+        if (!localStorage.getItem('cookieConsent')) {
+            var cm = document.getElementById('cookieModal');
+            if (cm && window.bootstrap) new bootstrap.Modal(cm).show();
+        }
+    } catch (e) {}
+
+    function saveConsent(v) { try { localStorage.setItem('cookieConsent', v); } catch (e) {} }
+    function hideCookie() {
+        var m = document.getElementById('cookieModal');
+        if (m && window.bootstrap) { var inst = bootstrap.Modal.getInstance(m); if (inst) inst.hide(); else new bootstrap.Modal(m).hide(); }
+    }
+    var acc = document.getElementById('cookieAccept');
+    if (acc) acc.addEventListener('click', function () { saveConsent('accepted'); hideCookie(); });
+    var rej = document.getElementById('cookieReject');
+    if (rej) rej.addEventListener('click', function () { saveConsent('rejected'); hideCookie(); });
+    var cls = document.getElementById('cookieClose');
+    if (cls) cls.addEventListener('click', function () { saveConsent('dismissed'); });
+
+    /* ---------- Navbar scroll state ---------- */
+    var nav = document.getElementById('mainNav');
+    function onScroll() { if (nav) nav.classList.toggle('scrolled', window.scrollY > 10); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    /* Close mobile nav after clicking a link */
+    document.querySelectorAll('#navCollapse .nav-link').forEach(function (a) {
+        a.addEventListener('click', function () {
+            var el = document.getElementById('navCollapse');
+            if (el && el.classList.contains('show') && window.bootstrap) {
+                bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).hide();
+            }
+        });
+    });
+
+    /* ---------- Copy to clipboard ---------- */
+    function copyText(t) {
+        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+        return new Promise(function (res, rej) {
+            var ta = document.createElement('textarea');
+            ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy') ? res() : rej(new Error('copy failed')); }
+            catch (e) { rej(e); } finally { ta.remove(); }
+        });
+    }
+    document.querySelectorAll('.copy-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var text = btn.getAttribute('data-copy');
+            if (!text) {
+                var block = btn.closest('.codeblock, .install-chip');
+                var codeEl = block ? block.querySelector('pre code') : null;
+                if (codeEl) text = codeEl.textContent.replace(/\s+$/g, '');
+            }
+            if (!text) return;
+            copyText(text).then(function () {
+                btn.classList.add('copied');
+                var icon = btn.querySelector('i');
+                var label = btn.querySelector('.copy-label');
+                if (icon) icon.className = 'bi bi-check2';
+                if (label) label.textContent = 'Copied!';
+                setTimeout(function () {
+                    btn.classList.remove('copied');
+                    if (icon) icon.className = 'bi bi-clipboard';
+                    if (label) label.textContent = 'Copy';
+                }, 1600);
+            }).catch(function () {});
+        });
+    });
+
+    /* ---------- Hero terminal typing animation ---------- */
+    var termBody = document.getElementById('heroTermBody');
+    if (termBody) {
+        var lines = [
+            { t: 'cmd', s: 'pip install asppy[all] --upgrade' },
+            { t: 'out', h: '<span class="tl-ok">✓</span> Successfully installed asppy-1.0.0' },
+            { t: 'gap' },
+            { t: 'cmd', s: 'asppy 0.0.0.0 8080 www' },
+            { t: 'out', h: 'ASPPY v1.0 - <span class="tl-hl">42 pages</span> compiled &amp; cached in 38 ms' },
+            { t: 'out', h: '<span class="tl-ok">→</span> Live at http://localhost:8080' }
+        ];
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function makeLine(l) {
+            if (l.t === 'gap') { var d = document.createElement('div'); d.className = 'tl-gap'; return d; }
+            var el = document.createElement('div');
+            el.className = 'tl-line' + (l.t === 'out' ? ' tl-out' : '');
+            if (l.t === 'cmd') el.innerHTML = '<span class="tl-prompt">$</span><span class="tl-cmd"></span>';
+            else el.innerHTML = l.h;
+            return el;
+        }
+
+        if (reduced) {
+            lines.forEach(function (l) { termBody.appendChild(makeLine(l)); });
+        } else {
+            var caret = document.createElement('span');
+            caret.className = 'tl-caret';
+            var i = 0;
+            function next() {
+                if (i >= lines.length) return;
+                var l = lines[i];
+                var el = makeLine(l);
+                termBody.appendChild(el);
+                if (l.t === 'cmd') {
+                    var target = el.querySelector('.tl-cmd');
+                    target.appendChild(caret);
+                    var c = 0;
+                    (function tick() {
+                        if (c < l.s.length) {
+                            target.insertBefore(document.createTextNode(l.s[c]), caret);
+                            c++;
+                            setTimeout(tick, 16 + Math.random() * 38);
+                        } else { i++; setTimeout(next, 340); }
+                    })();
+                } else if (l.t === 'gap') {
+                    i++; setTimeout(next, 80);
+                } else {
+                    el.classList.add('tl-in');
+                    el.appendChild(caret);
+                    i++; setTimeout(next, 460);
+                }
+            }
+            setTimeout(next, 500);
+        }
+    }
+
+    /* ---------- Scroll reveal ---------- */
+    var revealEls = document.querySelectorAll('[data-reveal]');
+    var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if ('IntersectionObserver' in window && !reducedMotion) {
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (en) {
+                if (en.isIntersecting) { en.target.classList.add('is-visible'); io.unobserve(en.target); }
+            });
+        }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+        revealEls.forEach(function (el) { io.observe(el); });
+    } else {
+        revealEls.forEach(function (el) { el.classList.add('is-visible'); });
+    }
+
+    /* ---------- Footer year ---------- */
+    var y = document.getElementById('year');
+    if (y) y.textContent = new Date().getFullYear();
+});
+</script>
+</body>
+</html>
